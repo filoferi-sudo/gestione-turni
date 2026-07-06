@@ -1,4 +1,8 @@
-const BASE_URL = '/api';
+// In locale (proxy Vite) e nel deploy a progetto singolo basta il path relativo.
+// Se frontend e backend sono deployati come progetti Vercel separati, imposta
+// VITE_API_BASE_URL con l'URL completo del backend (es. https://tuo-backend.vercel.app).
+const API_ORIGIN = import.meta.env.VITE_API_BASE_URL || '';
+const BASE_URL = `${API_ORIGIN}/api`;
 
 async function request(path, { method = 'GET', body, token } = {}) {
   const headers = { 'Content-Type': 'application/json' };

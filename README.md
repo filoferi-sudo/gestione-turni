@@ -7,12 +7,19 @@ Stack: React + Vite (frontend), Node.js + Express (backend), PostgreSQL (databas
 
 ## Struttura del progetto
 
+Frontend e backend sono due progetti indipendenti, deployabili separatamente (anche su Vercel
+come due progetti distinti): questo evita qualunque ambiguità di rilevamento framework in un
+monorepo condiviso.
+
 ```
 turni-app/
-  backend/    API Express (src/app.js = app, src/server.js = avvio locale)
-  frontend/   React + Vite
-  api/        entry point serverless per Vercel (wrappa backend/src/app.js)
-  vercel.json configurazione di build/deploy per Vercel
+  backend/
+    src/app.js       app Express (route, middleware)
+    src/server.js    avvio locale (node src/server.js)
+    api/[...path].js entry point serverless per Vercel (wrappa src/app.js)
+  frontend/
+    src/             React + Vite
+    vercel.json      rewrite SPA per il routing lato client
 ```
 
 ## Setup locale
@@ -54,32 +61,55 @@ Da qui il dirigente può creare responsabili, dipendenti e turni: non esiste alt
 
 ## Deploy su Vercel
 
-Il progetto è già strutturato per il deploy su Vercel senza configurazioni aggiuntive:
-frontend come sito statico, backend come funzione serverless sotto `/api`.
+Si deployano **due progetti Vercel separati** dallo stesso repository GitHub, ognuno con la
+propria "Root Directory". Zero configurazioni manuali di build: Vercel rileva da solo Vite per
+il frontend, e le funzioni serverless per il backend grazie alla cartella `api/`.
 
-1. **Database**: crea un Postgres hosted (Neon, Supabase, Railway o Vercel Postgres funzionano tutti).
-   Copia la connection string.
-2. **Prepara il database** (una tantum, dalla tua macchina, puntando al DB di produzione):
-   ```bash
-   cd backend
-   DATABASE_URL="<connection-string-produzione>" DATABASE_SSL=true npm run setup
-   ```
-3. **Importa il repository su GitHub** e collega il repo su [vercel.com/new](https://vercel.com/new).
-4. **Variabili d'ambiente** su Vercel (Project Settings → Environment Variables):
-   - `DATABASE_URL` — connection string del passo 1
-   - `DATABASE_SSL` = `true`
-   - `JWT_SECRET` — stringa lunga e casuale (es. `openssl rand -hex 32`), diversa da quella di sviluppo
-5. **Deploy**: Vercel builda automaticamente (`vercel.json` è già configurato con build command e output directory).
+### 1. Database (una tantum)
 
-Al termine del deploy avrai un URL pubblico funzionante (es. `https://tuo-progetto.vercel.app`),
-con frontend e API sullo stesso dominio (le chiamate `/api/...` del frontend funzionano senza altre modifiche).
+Crea un Postgres hosted (Neon, Supabase, Railway o Vercel Postgres vanno tutti bene), poi prepara
+lo schema puntando alla connection string di produzione dalla tua macchina:
+
+```bash
+cd backend
+DATABASE_URL="<connection-string-produzione>" DATABASE_SSL=true npm run setup
+```
+
+### 2. Backend → primo progetto Vercel
+
+Su [vercel.com/new](https://vercel.com/new), importa il repository e imposta:
+
+- **Root Directory**: `backend`
+- **Framework Preset**: Other (nessun build necessario: è solo API)
+- **Environment Variables**:
+  - `DATABASE_URL` — connection string del passo 1
+  - `DATABASE_SSL` = `true`
+  - `JWT_SECRET` — stringa lunga e casuale (es. `openssl rand -hex 32`), diversa da quella di sviluppo
+  - `CORS_ORIGIN` — puoi lasciarla vuota per ora, la imposti dopo aver creato il progetto frontend
+
+Deploy → otterrai un URL tipo `https://tuo-backend.vercel.app` (verifica con `/api/health`).
+
+### 3. Frontend → secondo progetto Vercel
+
+Importa di nuovo lo stesso repository come **nuovo progetto** Vercel e imposta:
+
+- **Root Directory**: `frontend`
+- **Framework Preset**: Vite (rilevato automaticamente)
+- **Environment Variables**:
+  - `VITE_API_BASE_URL` = l'URL del backend del passo precedente (es. `https://tuo-backend.vercel.app`, senza slash finale)
+
+Deploy → otterrai l'URL pubblico dell'app, es. `https://tuo-frontend.vercel.app`.
+
+### 4. Ultimo passo: chiudi il cerchio del CORS
+
+Torna sul progetto **backend** su Vercel e imposta `CORS_ORIGIN` all'URL del frontend appena
+ottenuto (es. `https://tuo-frontend.vercel.app`), poi fai un redeploy del backend.
 
 ### Alternative
 
 Il backend è un normale server Express (`backend/src/server.js`) e funziona senza modifiche
-anche su piattaforme con hosting Node persistente (Render, Railway, Fly.io, VPS...); in quel
-caso il frontend può essere deployato separatamente su Vercel/Netlify configurando l'URL del
-backend nel proxy o in una variabile d'ambiente del frontend.
+anche su piattaforme con hosting Node persistente (Render, Railway, Fly.io, VPS...): basta
+`npm install && npm start` con le stesse variabili d'ambiente.
 
 ## Sicurezza
 

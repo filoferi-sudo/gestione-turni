@@ -11,7 +11,10 @@ const statsRoutes = require('./routes/stats');
 
 const app = express();
 
-app.use(cors());
+// Frontend e backend sono deployati come progetti Vercel separati (origin diversi):
+// di default CORS è aperto per non richiedere configurazione; CORS_ORIGIN permette di restringerlo.
+const corsOrigin = process.env.CORS_ORIGIN;
+app.use(cors(corsOrigin ? { origin: corsOrigin } : undefined));
 app.use(express.json());
 
 app.use('/api/auth', authRoutes);
