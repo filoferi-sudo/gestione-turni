@@ -1,23 +1,45 @@
-// In locale (proxy Vite) e nel deploy a progetto singolo basta il path relativo.
-// Se frontend e backend sono deployati come progetti Vercel separati, imposta
-// VITE_API_BASE_URL con l'URL completo del backend (es. https://tuo-backend.vercel.app).
-const API_ORIGIN = import.meta.env.VITE_API_BASE_URL || '';
-const BASE_URL = `${API_ORIGIN}/api`;
+// Unica variabile d'ambiente per l'URL del backend: deve puntare all'origine pubblica
+// dell'API (es. https://tuo-backend.vercel.app), SENZA slash finale e SENZA /api.
+// In locale può restare vuota: il proxy di Vite (vedi vite.config.js) inoltra /api a localhost.
+const API_URL = import.meta.env.VITE_API_URL || '';
+const BASE_URL = `${API_URL}/api`;
+
+if (import.meta.env.PROD && !API_URL) {
+  // In produzione un valore mancante fa ricadere le richieste su /api relativo al dominio
+  // del frontend, dove non esiste alcun backend: da qui nascono i "network error" silenziosi.
+  console.warn(
+    '[api] VITE_API_URL non è impostata: le richieste useranno un path relativo che in produzione ' +
+      'non raggiunge alcun backend. Imposta VITE_API_URL nelle variabili d\'ambiente del progetto Vercel.'
+  );
+}
+
+console.log(`[api] Backend configurato su: ${API_URL || '(path relativo, solo dev)'}`);
 
 async function request(path, { method = 'GET', body, token } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const url = `${BASE_URL}${path}`;
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (networkErr) {
+    // fetch lancia solo per errori di rete/CORS/DNS, non per risposte 4xx/5xx
+    console.error(`[api] Richiesta fallita (rete/CORS): ${method} ${url}`, networkErr);
+    throw new Error(
+      `Impossibile contattare il backend (${url}). Verifica VITE_API_URL e la configurazione CORS del backend.`
+    );
+  }
 
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new Error(data.error || 'Errore di rete');
+    console.error(`[api] Risposta di errore: ${method} ${url} → ${res.status}`, data);
+    throw new Error(data.error || `Errore del server (${res.status})`);
   }
 
   return data;

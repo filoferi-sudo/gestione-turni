@@ -96,14 +96,25 @@ Importa di nuovo lo stesso repository come **nuovo progetto** Vercel e imposta:
 - **Root Directory**: `frontend`
 - **Framework Preset**: Vite (rilevato automaticamente)
 - **Environment Variables**:
-  - `VITE_API_BASE_URL` = l'URL del backend del passo precedente (es. `https://tuo-backend.vercel.app`, senza slash finale)
+  - `VITE_API_URL` = l'URL del backend del passo precedente (es. `https://tuo-backend.vercel.app`, senza slash finale)
 
 Deploy → otterrai l'URL pubblico dell'app, es. `https://tuo-frontend.vercel.app`.
+
+> **Importante**: Vite inietta `VITE_API_URL` nel bundle **durante la build**, non a runtime.
+> Se la aggiungi o la modifichi dopo il primo deploy, salvarla nelle impostazioni del progetto
+> non basta: serve un **redeploy** (Deployments → ⋯ → Redeploy) perché abbia effetto.
 
 ### 4. Ultimo passo: chiudi il cerchio del CORS
 
 Torna sul progetto **backend** su Vercel e imposta `CORS_ORIGIN` all'URL del frontend appena
 ottenuto (es. `https://tuo-frontend.vercel.app`), poi fai un redeploy del backend.
+
+### Debug in produzione
+
+Il client API logga in console del browser l'URL del backend risolto a ogni caricamento
+(`[api] Backend configurato su: ...`) e ogni errore di rete o risposta non-2xx con URL e status
+coinvolti. Se il login fallisce, apri la console del browser sul sito deployato: il primo posto
+dove guardare.
 
 ### Alternative
 
