@@ -79,7 +79,7 @@ async function claimShift(req, res) {
 function validateTypeFields({ type, date, recurrenceRule }) {
   if (type === 'mobile' || type === 'volante') {
     if (!isValidDateString(date)) {
-      return { error: 'La data è obbligatoria (YYYY-MM-DD) per turni mobili e volanti' };
+      return { error: 'La data è obbligatoria (YYYY-MM-DD) per turni singoli e volanti' };
     }
     return { finalDate: date, finalRecurrenceRule: null };
   }
@@ -101,7 +101,7 @@ async function createShift(req, res) {
   }
 
   if (type !== 'volante' && !userId) {
-    return res.status(400).json({ error: 'userId è obbligatorio per turni fissi e mobili' });
+    return res.status(400).json({ error: 'userId è obbligatorio per turni fissi e singoli' });
   }
 
   if (!isWithinDailyWindow(startTime, endTime)) {
@@ -193,7 +193,7 @@ async function deleteShift(req, res) {
 }
 
 // DELETE /api/shifts/:id/self - cancellazione richiesta dal dipendente titolare del turno.
-// Qualunque sia il tipo di turno (fisso, mobile, volante) la cancellazione richiede sempre
+// Qualunque sia il tipo di turno (fisso, singolo, volante) la cancellazione richiede sempre
 // l'approvazione del responsabile/dirigente: non esiste più cancellazione automatica.
 // Per i turni fissi ricorrenti va indicata anche la data dell'occorrenza da cancellare
 // (il turno stesso è condiviso da tutte le occorrenze della serie).

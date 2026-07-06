@@ -138,7 +138,7 @@ export default function CalendarPage({ mode }) {
           <i className="legend-dot legend-fixed" /> Turno fisso
         </span>
         <span>
-          <i className="legend-dot legend-mobile" /> Turno mobile
+          <i className="legend-dot legend-mobile" /> Turno singolo
         </span>
         <span>
           <i className="legend-dot legend-volante" /> Turno volante

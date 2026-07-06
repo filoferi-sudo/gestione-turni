@@ -62,7 +62,7 @@ export default function HoursStats() {
                         {s.shifts.map((shift) => (
                           <li key={shift.id}>
                             {shift.date} · {shift.startTime}-{shift.endTime} ·{' '}
-                            {shift.type === 'fixed' ? 'fisso' : shift.type === 'volante' ? 'volante' : 'mobile'}
+                            {shift.type === 'fixed' ? 'fisso' : shift.type === 'volante' ? 'volante' : 'singolo'}
                             {shift.note ? ` · ${shift.note}` : ''}
                           </li>
                         ))}

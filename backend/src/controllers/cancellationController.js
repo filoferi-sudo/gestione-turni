@@ -72,7 +72,7 @@ async function fetchPendingRequestOr404(id, res) {
 }
 
 // POST /api/cancellation-requests/:id/approve (responsabile o dirigente)
-// Turni mobile/volante: l'unica occorrenza esistente viene eliminata.
+// Turni singolo/volante: l'unica occorrenza esistente viene eliminata.
 // Turni fissi ricorrenti: la serie non viene toccata, si esclude solo la data richiesta
 // (altrimenti si cancellerebbero tutte le occorrenze passate e future del turno).
 async function approveRequest(req, res) {

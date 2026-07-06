@@ -22,7 +22,7 @@ function isValidDateString(value) {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-// Espande tutti i turni (mobile, volante assegnati/non assegnati, fixed ricorrenti) in istanze
+// Espande tutti i turni (singolo, volante assegnati/non assegnati, fixed ricorrenti) in istanze
 // concrete nell'intervallo [start, end]. Se targetUserId è indicato, filtra solo i turni di quel
 // dipendente (i turni volanti non ancora accettati, con user_id NULL, vengono così esclusi).
 // Se targetUserId è null vengono restituiti i turni di tutti gli utenti (vista amministratore),

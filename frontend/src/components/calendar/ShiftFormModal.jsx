@@ -43,7 +43,7 @@ function parseInitialShift(shift) {
 }
 
 // shift: turno esistente da modificare (null per la creazione)
-// defaultDate: data preselezionata quando si crea un nuovo turno mobile
+// defaultDate: data preselezionata quando si crea un nuovo turno singolo
 export default function ShiftFormModal({ shift, users, defaultUserId, defaultDate, onSave, onDelete, onClose }) {
   const [form, setForm] = useState(parseInitialShift(shift));
   const [error, setError] = useState('');
@@ -124,7 +124,7 @@ export default function ShiftFormModal({ shift, users, defaultUserId, defaultDat
             className={form.type === 'mobile' ? 'active' : ''}
             onClick={() => update('type', 'mobile')}
           >
-            Mobile
+            Singolo
           </button>
           <button
             type="button"
