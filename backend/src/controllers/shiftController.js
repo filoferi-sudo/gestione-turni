@@ -1,10 +1,9 @@
 const pool = require('../config/db');
 const { isWithinDailyWindow } = require('../utils/timeWindow');
-const { parseRecurrenceRule } = require('../utils/recurrence');
+const { parseRecurrenceRule, occursOn } = require('../utils/recurrence');
 const { getExpandedShifts, toDateOnly, isValidDateString, toSafeShift } = require('../services/shiftExpansion');
 
 const SHIFT_TYPES = ['fixed', 'mobile', 'volante'];
-const SELF_CANCEL_MIN_DAYS = 5;
 
 // GET /api/calendar?start=YYYY-MM-DD&end=YYYY-MM-DD&userId=<solo admin/dirigente>
 // L'utente standard vede sempre e solo il proprio calendario; responsabile/dirigente vedono tutto o filtrano per userId.
@@ -193,18 +192,14 @@ async function deleteShift(req, res) {
   return res.status(204).send();
 }
 
-function daysUntil(dateStr) {
-  const now = new Date();
-  const todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const target = new Date(y, m - 1, d);
-  return Math.round((target - todayLocal) / 86400000);
-}
-
 // DELETE /api/shifts/:id/self - cancellazione richiesta dal dipendente titolare del turno.
-// Se mancano almeno 5 giorni viene eliminato subito, altrimenti si apre una richiesta di approvazione.
+// Qualunque sia il tipo di turno (fisso, mobile, volante) la cancellazione richiede sempre
+// l'approvazione del responsabile/dirigente: non esiste più cancellazione automatica.
+// Per i turni fissi ricorrenti va indicata anche la data dell'occorrenza da cancellare
+// (il turno stesso è condiviso da tutte le occorrenze della serie).
 async function deleteShiftSelf(req, res) {
   const { id } = req.params;
+  const { date } = req.body;
 
   const { rows } = await pool.query('SELECT * FROM shifts WHERE id = $1', [id]);
   const shift = rows[0];
@@ -215,19 +210,21 @@ async function deleteShiftSelf(req, res) {
   if (shift.user_id !== req.user.id) {
     return res.status(403).json({ error: 'Non puoi cancellare un turno non tuo' });
   }
-  if (shift.type === 'fixed') {
-    return res.status(400).json({ error: 'I turni fissi ricorrenti possono essere rimossi solo dal responsabile' });
-  }
 
-  const shiftDate = toDateOnly(shift.date);
-  if (daysUntil(shiftDate) >= SELF_CANCEL_MIN_DAYS) {
-    await pool.query('DELETE FROM shifts WHERE id = $1', [id]);
-    return res.json({ deleted: true });
+  let shiftDate;
+  if (shift.type === 'fixed') {
+    const anchorDate = toDateOnly(shift.date);
+    if (!isValidDateString(date) || !occursOn(shift.recurrence_rule, date, anchorDate)) {
+      return res.status(400).json({ error: 'Data occorrenza non valida per questo turno ricorrente' });
+    }
+    shiftDate = date;
+  } else {
+    shiftDate = toDateOnly(shift.date);
   }
 
   const { rows: pendingRows } = await pool.query(
-    `SELECT * FROM cancellation_requests WHERE shift_id = $1 AND status = 'pending'`,
-    [id]
+    `SELECT * FROM cancellation_requests WHERE shift_id = $1 AND shift_date = $2 AND status = 'pending'`,
+    [id, shiftDate]
   );
   if (pendingRows.length > 0) {
     return res.status(409).json({ error: 'Esiste già una richiesta di cancellazione in attesa per questo turno' });
@@ -238,7 +235,7 @@ async function deleteShiftSelf(req, res) {
        (shift_id, requested_by, shift_date, shift_start_time, shift_end_time, shift_note, status)
      VALUES ($1, $2, $3, $4, $5, $6, 'pending')
      RETURNING *`,
-    [id, req.user.id, shift.date, shift.start_time, shift.end_time, shift.note]
+    [id, req.user.id, shiftDate, shift.start_time, shift.end_time, shift.note]
   );
 
   const request = requestRows[0];

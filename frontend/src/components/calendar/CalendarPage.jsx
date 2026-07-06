@@ -79,22 +79,14 @@ export default function CalendarPage({ mode }) {
 
   async function handleUserShiftClick(shift) {
     setActionNotice('');
-    if (shift.type === 'fixed') {
-      setActionNotice('I turni fissi ricorrenti possono essere rimossi solo dal responsabile.');
-      return;
-    }
     if (
       !window.confirm(`Richiedere la cancellazione del turno del ${shift.date} (${shift.startTime}-${shift.endTime})?`)
     ) {
       return;
     }
     try {
-      const result = await api.deleteShiftSelf(shift.shiftId, token);
-      setActionNotice(
-        result.deleted
-          ? 'Turno cancellato con successo.'
-          : 'Richiesta di cancellazione inviata: in attesa di approvazione del responsabile.'
-      );
+      await api.deleteShiftSelf(shift.shiftId, token, shift.type === 'fixed' ? shift.date : undefined);
+      setActionNotice('Richiesta di cancellazione inviata: in attesa di approvazione del responsabile o del dirigente.');
       loadCalendar();
     } catch (err) {
       setActionNotice(err.message);
@@ -153,7 +145,10 @@ export default function CalendarPage({ mode }) {
         </span>
       </div>
       {!isAdmin && (
-        <p className="hint">Clicca su un turno mobile o volante per richiederne la cancellazione.</p>
+        <p className="hint">
+          Clicca su un turno per richiederne la cancellazione: la richiesta dovrà essere approvata dal responsabile o
+          dal dirigente.
+        </p>
       )}
 
       {error && <div className="error">{error}</div>}

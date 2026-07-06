@@ -72,6 +72,9 @@ async function fetchPendingRequestOr404(id, res) {
 }
 
 // POST /api/cancellation-requests/:id/approve (responsabile o dirigente)
+// Turni mobile/volante: l'unica occorrenza esistente viene eliminata.
+// Turni fissi ricorrenti: la serie non viene toccata, si esclude solo la data richiesta
+// (altrimenti si cancellerebbero tutte le occorrenze passate e future del turno).
 async function approveRequest(req, res) {
   const { id } = req.params;
   const request = await fetchPendingRequestOr404(id, res);
@@ -86,7 +89,18 @@ async function approveRequest(req, res) {
   );
 
   if (request.shift_id) {
-    await pool.query('DELETE FROM shifts WHERE id = $1', [request.shift_id]);
+    const { rows: shiftRows } = await pool.query('SELECT type FROM shifts WHERE id = $1', [request.shift_id]);
+    const shift = shiftRows[0];
+
+    if (shift && shift.type === 'fixed') {
+      await pool.query(
+        `INSERT INTO shift_exceptions (shift_id, excluded_date) VALUES ($1, $2)
+         ON CONFLICT (shift_id, excluded_date) DO NOTHING`,
+        [request.shift_id, request.shift_date]
+      );
+    } else {
+      await pool.query('DELETE FROM shifts WHERE id = $1', [request.shift_id]);
+    }
   }
 
   return res.json({ request: toSafeRequest(rows[0]) });

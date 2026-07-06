@@ -60,7 +60,8 @@ export const api = {
   createShift: (payload, token) => request('/shifts', { method: 'POST', body: payload, token }),
   updateShift: (id, payload, token) => request(`/shifts/${id}`, { method: 'PUT', body: payload, token }),
   deleteShift: (id, token) => request(`/shifts/${id}`, { method: 'DELETE', token }),
-  deleteShiftSelf: (id, token) => request(`/shifts/${id}/self`, { method: 'DELETE', token }),
+  deleteShiftSelf: (id, token, date) =>
+    request(`/shifts/${id}/self`, { method: 'DELETE', token, body: date ? { date } : undefined }),
   listAvailableShifts: (token) => request('/shifts/available', { token }),
   claimShift: (id, token) => request(`/shifts/${id}/claim`, { method: 'POST', token }),
 

@@ -37,19 +37,31 @@ CREATE TABLE IF NOT EXISTS shifts (
 CREATE INDEX IF NOT EXISTS idx_shifts_user_id ON shifts(user_id);
 CREATE INDEX IF NOT EXISTS idx_shifts_date ON shifts(date);
 
--- Richieste di cancellazione turno (quando mancano meno di 5 giorni all'inizio).
+-- Eccezioni per turni fissi ricorrenti: singole occorrenze escluse dalla ricorrenza
+-- (create quando una richiesta di cancellazione per quella data viene approvata, così
+-- il resto della serie ricorrente resta intatto).
+CREATE TABLE IF NOT EXISTS shift_exceptions (
+  id             SERIAL PRIMARY KEY,
+  shift_id       INTEGER NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
+  excluded_date  DATE NOT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (shift_id, excluded_date)
+);
+
+-- Richieste di cancellazione turno: ogni cancellazione richiesta da un dipendente deve
+-- sempre essere approvata dal responsabile/dirigente, qualunque sia il tipo di turno.
 -- I dati del turno sono duplicati al momento della richiesta: restano leggibili anche
 -- dopo che il turno viene eliminato in seguito ad approvazione.
 CREATE TABLE IF NOT EXISTS cancellation_requests (
   id                SERIAL PRIMARY KEY,
   shift_id          INTEGER REFERENCES shifts(id) ON DELETE SET NULL,
-  requested_by      INTEGER NOT NULL REFERENCES users(id),
+  requested_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
   shift_date        DATE NOT NULL,
   shift_start_time  TIME NOT NULL,
   shift_end_time    TIME NOT NULL,
   shift_note        TEXT,
   status            VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-  decided_by        INTEGER REFERENCES users(id),
+  decided_by        INTEGER REFERENCES users(id) ON DELETE SET NULL,
   decided_at        TIMESTAMPTZ,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -72,3 +84,13 @@ ALTER TABLE shifts ADD CONSTRAINT shifts_check CHECK (
   OR
   (type = 'volante' AND date IS NOT NULL AND recurrence_rule IS NULL)
 );
+
+-- Permette di eliminare un utente anche se ha richieste di cancellazione turno
+-- associate (come richiedente o come chi ha deciso): la riga resta ma perde il riferimento.
+ALTER TABLE cancellation_requests ALTER COLUMN requested_by DROP NOT NULL;
+ALTER TABLE cancellation_requests DROP CONSTRAINT IF EXISTS cancellation_requests_requested_by_fkey;
+ALTER TABLE cancellation_requests ADD CONSTRAINT cancellation_requests_requested_by_fkey
+  FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE cancellation_requests DROP CONSTRAINT IF EXISTS cancellation_requests_decided_by_fkey;
+ALTER TABLE cancellation_requests ADD CONSTRAINT cancellation_requests_decided_by_fkey
+  FOREIGN KEY (decided_by) REFERENCES users(id) ON DELETE SET NULL;

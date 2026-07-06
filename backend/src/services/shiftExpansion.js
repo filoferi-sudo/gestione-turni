@@ -51,6 +51,19 @@ async function getExpandedShifts({ start, end, targetUserId }) {
     targetUserId ? [targetUserId] : []
   );
 
+  const fixedIds = fixedRows.map((row) => row.id);
+  const excludedDatesByShift = {};
+  if (fixedIds.length > 0) {
+    const { rows: exceptionRows } = await pool.query(
+      'SELECT shift_id, excluded_date FROM shift_exceptions WHERE shift_id = ANY($1::int[])',
+      [fixedIds]
+    );
+    for (const row of exceptionRows) {
+      const set = excludedDatesByShift[row.shift_id] || (excludedDatesByShift[row.shift_id] = new Set());
+      set.add(toDateOnly(row.excluded_date));
+    }
+  }
+
   const instanceShifts = instanceRows.map((row) => ({
     id: `${row.type}-${row.id}`,
     shiftId: row.id,
@@ -67,7 +80,9 @@ async function getExpandedShifts({ start, end, targetUserId }) {
   const fixedShifts = [];
   for (const row of fixedRows) {
     const occurrenceDates = expandRecurrenceDates(row.recurrence_rule, toDateOnly(row.date), start, end);
+    const excludedDates = excludedDatesByShift[row.id];
     for (const occurrenceDate of occurrenceDates) {
+      if (excludedDates && excludedDates.has(occurrenceDate)) continue;
       fixedShifts.push({
         id: `fixed-${row.id}-${occurrenceDate}`,
         shiftId: row.id,
