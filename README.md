@@ -16,7 +16,9 @@ turni-app/
   backend/
     src/app.js       app Express (route, middleware)
     src/server.js    avvio locale (node src/server.js)
-    api/[...path].js entry point serverless per Vercel (wrappa src/app.js)
+    api/index.js     entry point serverless per Vercel (wrappa src/app.js)
+    vercel.json      rewrite esplicito: /api/* -> /api (necessario perché Vercel
+                     instradi correttamente anche i path con più segmenti)
   frontend/
     src/             React + Vite
     vercel.json      rewrite SPA per il routing lato client
