@@ -6,26 +6,31 @@ import CourseBlock from './CourseBlock';
 // coursesByDate: { [date]: Course[] }
 // onDropOnDay: (date, course) => void — chiamata quando un corso viene rilasciato su una colonna
 // giorno diversa dalla propria (spostamento via drag & drop). Omesso in modalità sola lettura.
+// I corsi fissi ricorrenti non sono trascinabili (l'occorrenza non è una riga a sé: spostarla
+// richiederebbe la stessa logica di eccezioni usata per i turni, non prevista per i corsi):
+// per cambiarne giorno/orario si passa dal modulo di modifica, che agisce sull'intera serie.
 export default function CoursesGrid({ days, coursesByDate, onCourseClick, onDropOnDay }) {
   const hourMarks = getHourMarks();
-  const draggable = Boolean(onDropOnDay);
+  const canDrop = Boolean(onDropOnDay);
 
   function handleDragStart(e, course) {
-    e.dataTransfer.setData('text/plain', String(course.id));
+    e.dataTransfer.setData('text/plain', String(course.courseId));
     e.dataTransfer.effectAllowed = 'move';
   }
 
   function handleDragOver(e) {
-    if (!draggable) return;
+    if (!canDrop) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   }
 
-  function handleDrop(e, day, dayCourses) {
-    if (!draggable) return;
+  function handleDrop(e, day) {
+    if (!canDrop) return;
     e.preventDefault();
     const courseId = Number(e.dataTransfer.getData('text/plain'));
-    const course = dayCourses.find((c) => c.id === courseId) || Object.values(coursesByDate).flat().find((c) => c.id === courseId);
+    const course = Object.values(coursesByDate)
+      .flat()
+      .find((c) => c.courseId === courseId);
     if (course && course.date !== day.date) onDropOnDay(day.date, course);
   }
 
@@ -54,7 +59,7 @@ export default function CoursesGrid({ days, coursesByDate, onCourseClick, onDrop
             className="calendar-day-col"
             style={{ height: GRID_HEIGHT }}
             onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, day, dayCourses)}
+            onDrop={(e) => handleDrop(e, day)}
           >
             {hourMarks.map((mark) => (
               <div key={mark.minutes} className="calendar-hour-line" style={{ top: minutesToTop(mark.minutes) }} />
@@ -63,7 +68,7 @@ export default function CoursesGrid({ days, coursesByDate, onCourseClick, onDrop
               <CourseBlock
                 key={course.id}
                 course={course}
-                draggable={draggable}
+                draggable={canDrop && course.type !== 'fixed'}
                 onDragStart={handleDragStart}
                 onClick={onCourseClick}
               />

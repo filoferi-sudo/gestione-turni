@@ -1,11 +1,18 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import CalendarPage from '../components/calendar/CalendarPage';
+import TabbedCalendar from '../components/calendar/TabbedCalendar';
 import UserManagementSection from '../components/management/UserManagementSection';
 import HoursStats from '../components/stats/HoursStats';
 import VolanteShiftsPanel from '../components/shifts/VolanteShiftsPanel';
 import CancellationRequestsPanel from '../components/cancellation/CancellationRequestsPanel';
 import CoursesCalendar from '../components/courses/CoursesCalendar';
+import CoursesAvailablePanel from '../components/courses/CoursesAvailablePanel';
+
+const CALENDAR_VIEWS = [
+  { key: 'turni', label: 'Turni Bagnini', render: () => <CalendarPage mode="admin" /> },
+  { key: 'corsi', label: 'Corsi Istruttori', render: () => <CoursesCalendar mode="manage" /> },
+];
 
 export default function DirigenteDashboard() {
   const { user, logout } = useAuth();
@@ -31,8 +38,8 @@ export default function DirigenteDashboard() {
         <h1>Ciao, {user.username}</h1>
 
         <section className="card">
-          <h2>Calendario turni</h2>
-          <CalendarPage mode="admin" />
+          <h2>Calendario</h2>
+          <TabbedCalendar views={CALENDAR_VIEWS} />
         </section>
 
         <UserManagementSection
@@ -53,12 +60,9 @@ export default function DirigenteDashboard() {
 
         <VolanteShiftsPanel mode="manage" />
 
-        <CancellationRequestsPanel />
+        <CoursesAvailablePanel mode="manage" />
 
-        <section className="card">
-          <h2>Gestione corsi</h2>
-          <CoursesCalendar mode="manage" />
-        </section>
+        <CancellationRequestsPanel />
       </main>
     </div>
   );

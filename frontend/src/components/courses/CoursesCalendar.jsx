@@ -7,12 +7,15 @@ import CourseFormModal from './CourseFormModal';
 
 // mode: 'manage' (responsabile/dirigente: crea/modifica/elimina/sposta) | 'view' (istruttore:
 // sola lettura, vede tutti i corsi della giornata/settimana, non solo i propri).
+// Stessa struttura/interazione di CalendarPage (turni), per un'esperienza identica tra le due
+// gestioni: stesso layout toolbar, stessa legenda, stesso modulo di modifica.
 export default function CoursesCalendar({ mode }) {
   const { token } = useAuth();
   const isManage = mode === 'manage';
 
-  const [viewType, setViewType] = useState('day');
+  const [viewType, setViewType] = useState('week');
   const [referenceDate, setReferenceDate] = useState(new Date());
+  const [selectedInstructorId, setSelectedInstructorId] = useState('');
   const [courses, setCourses] = useState([]);
   const [instructors, setInstructors] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +40,7 @@ export default function CoursesCalendar({ mode }) {
   function loadCourses() {
     setLoading(true);
     api
-      .listCourses(token, { start, end })
+      .listCourses(token, { start, end, instructorId: isManage ? selectedInstructorId || undefined : undefined })
       .then(({ courses }) => setCourses(courses))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -46,7 +49,7 @@ export default function CoursesCalendar({ mode }) {
   useEffect(() => {
     loadCourses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end]);
+  }, [start, end, selectedInstructorId]);
 
   const coursesByDate = courses.reduce((acc, course) => {
     (acc[course.date] = acc[course.date] || []).push(course);
@@ -65,7 +68,7 @@ export default function CoursesCalendar({ mode }) {
 
   async function handleSave(payload) {
     if (modalState.course) {
-      await api.updateCourse(modalState.course.id, payload, token);
+      await api.updateCourse(modalState.course.courseId, payload, token);
     } else {
       await api.createCourse(payload, token);
     }
@@ -74,8 +77,8 @@ export default function CoursesCalendar({ mode }) {
   }
 
   async function handleDelete(course) {
-    if (!window.confirm(`Eliminare il corso "${course.name}"?`)) return;
-    await api.deleteCourse(course.id, token);
+    if (!window.confirm('Eliminare questo corso? Se è un corso fisso verranno rimosse tutte le occorrenze.')) return;
+    await api.deleteCourse(course.courseId, token);
     setModalState(null);
     loadCourses();
   }
@@ -84,7 +87,7 @@ export default function CoursesCalendar({ mode }) {
     setError('');
     setNotice('');
     try {
-      await api.updateCourse(course.id, { date: newDate }, token);
+      await api.updateCourse(course.courseId, { date: newDate }, token);
       setNotice(`"${course.name}" spostato al ${newDate}.`);
       loadCourses();
     } catch (err) {
@@ -113,14 +116,34 @@ export default function CoursesCalendar({ mode }) {
 
         {isManage && (
           <div className="calendar-admin-controls">
+            <select value={selectedInstructorId} onChange={(e) => setSelectedInstructorId(e.target.value)}>
+              <option value="">Tutti gli istruttori</option>
+              {instructors.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.username}
+                </option>
+              ))}
+            </select>
             <button onClick={() => setModalState({ course: null, defaultDate: days[0].date })}>+ Nuovo corso</button>
           </div>
         )}
       </div>
 
+      <div className="calendar-legend">
+        <span>
+          <i className="legend-dot legend-fixed" /> Corso fisso
+        </span>
+        <span>
+          <i className="legend-dot legend-mobile" /> Corso singolo
+        </span>
+        <span>
+          <i className="legend-dot legend-volante" /> Corso disponibile
+        </span>
+      </div>
       {isManage && (
         <p className="hint">
-          Clicca su un corso per modificarlo, oppure trascinalo su un altro giorno per spostarlo.
+          Clicca su un corso per modificarlo, oppure trascinalo su un altro giorno per spostarlo (i corsi fissi si
+          modificano solo dal modulo).
         </p>
       )}
 

@@ -80,11 +80,14 @@ export const api = {
 
   getHoursStats: (token, userId) => request(`/stats/hours${userId ? `?userId=${userId}` : ''}`, { token }),
 
-  listCourses: (token, { start, end }) => {
+  listCourses: (token, { start, end, instructorId }) => {
     const params = new URLSearchParams({ start, end });
+    if (instructorId) params.set('instructorId', instructorId);
     return request(`/courses?${params.toString()}`, { token });
   },
   createCourse: (payload, token) => request('/courses', { method: 'POST', body: payload, token }),
   updateCourse: (id, payload, token) => request(`/courses/${id}`, { method: 'PUT', body: payload, token }),
   deleteCourse: (id, token) => request(`/courses/${id}`, { method: 'DELETE', token }),
+  listAvailableCourses: (token) => request('/courses/available', { token }),
+  claimCourse: (id, token) => request(`/courses/${id}/claim`, { method: 'POST', token }),
 };

@@ -11,7 +11,7 @@ export default function CourseBlock({ course, draggable, onClick, onDragStart })
 
   return (
     <div
-      className="course-block"
+      className={`course-block course-${course.type}`}
       style={{
         top,
         height,
@@ -27,7 +27,7 @@ export default function CourseBlock({ course, draggable, onClick, onDragStart })
       <div className="course-block-time">
         {course.startTime}-{course.endTime}
       </div>
-      <div className="course-block-instructor">{course.instructorUsername}</div>
+      <div className="course-block-instructor">{course.instructorUsername || 'Non assegnato'}</div>
       {course.note && <div className="course-block-note">{course.note}</div>}
     </div>
   );

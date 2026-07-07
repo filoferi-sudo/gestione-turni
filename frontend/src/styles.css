@@ -537,6 +537,10 @@ textarea {
   color: #991b1b;
 }
 
+.calendar-view-switcher {
+  margin-bottom: 16px;
+}
+
 /* Calendario Corsi: a differenza di .shift-block (larghezza fissa), la larghezza e la
    posizione orizzontale sono calcolate in JS (vedi utils/courseLayout) per affiancare corsi
    sovrapposti invece di nasconderli. */
@@ -549,8 +553,21 @@ textarea {
   color: white;
   overflow: hidden;
   cursor: default;
-  background: #0ea5a4;
   border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* Stessi colori di .shift-fixed/.shift-mobile/.shift-volante: stesso significato, stesso codice
+   colore, per coerenza tra calendario turni e calendario corsi. */
+.course-fixed {
+  background: #3b82f6;
+}
+
+.course-mobile {
+  background: #f59e0b;
+}
+
+.course-volante {
+  background: #8b5cf6;
 }
 
 .course-block[role='button'] {

@@ -74,19 +74,30 @@ CREATE TABLE IF NOT EXISTS cancellation_requests (
 CREATE INDEX IF NOT EXISTS idx_cancellation_requests_status ON cancellation_requests(status);
 CREATE INDEX IF NOT EXISTS idx_cancellation_requests_requested_by ON cancellation_requests(requested_by);
 
--- Corsi (categoria "istruttore"): a differenza dei turni, più corsi possono sovrapporsi nello
--- stesso orario (es. Corso Bambini e Corso Adulti entrambi 08:00-09:00) perché li tengono
--- istruttori diversi in spazi diversi: non c'è quindi alcun vincolo di esclusività sull'orario.
+-- Corsi: stessa logica dei turni ('mobile' = corso singolo, 'fixed' = corso fisso ricorrente,
+-- 'volante' = corso disponibile non ancora accettato da un istruttore, instructor_id NULL finché
+-- non viene accettato). A differenza dei turni, più corsi possono sovrapporsi nello stesso
+-- orario (es. Corso Bambini e Corso Adulti entrambi 08:00-09:00) perché li tengono istruttori
+-- diversi in spazi diversi: nessun vincolo di esclusività sull'orario.
 CREATE TABLE IF NOT EXISTS courses (
-  id             SERIAL PRIMARY KEY,
-  name           VARCHAR(100) NOT NULL,
-  date           DATE NOT NULL,
-  start_time     TIME NOT NULL,
-  end_time       TIME NOT NULL,
-  instructor_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  note           TEXT,
-  created_by     INTEGER NOT NULL REFERENCES users(id),
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id               SERIAL PRIMARY KEY,
+  name             VARCHAR(100) NOT NULL,
+  instructor_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  start_time       TIME NOT NULL,
+  end_time         TIME NOT NULL,
+  date             DATE,
+  type             VARCHAR(10) NOT NULL CHECK (type IN ('fixed', 'mobile', 'volante')),
+  note             TEXT,
+  created_by       INTEGER NOT NULL REFERENCES users(id),
+  recurrence_rule  VARCHAR(50),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (
+    (type = 'mobile' AND date IS NOT NULL AND recurrence_rule IS NULL AND instructor_id IS NOT NULL)
+    OR
+    (type = 'fixed' AND recurrence_rule IS NOT NULL AND instructor_id IS NOT NULL)
+    OR
+    (type = 'volante' AND date IS NOT NULL AND recurrence_rule IS NULL)
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_courses_date ON courses(date);
@@ -122,3 +133,22 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS category VARCHAR(20);
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_category_check;
 ALTER TABLE users ADD CONSTRAINT users_category_check
   CHECK (category IS NULL OR category IN ('bagnino', 'istruttore'));
+
+-- I corsi adottano la stessa logica dei turni (fisso/singolo/disponibile): instructor_id e date
+-- diventano opzionali (un corso 'volante' nasce senza istruttore, un corso 'fixed' usa
+-- recurrence_rule al posto di date), e serve la colonna type per distinguerli.
+ALTER TABLE courses ALTER COLUMN instructor_id DROP NOT NULL;
+ALTER TABLE courses ALTER COLUMN date DROP NOT NULL;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS recurrence_rule VARCHAR(50);
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS type VARCHAR(10) NOT NULL DEFAULT 'mobile';
+ALTER TABLE courses ALTER COLUMN type DROP DEFAULT;
+ALTER TABLE courses DROP CONSTRAINT IF EXISTS courses_type_check;
+ALTER TABLE courses ADD CONSTRAINT courses_type_check CHECK (type IN ('fixed', 'mobile', 'volante'));
+ALTER TABLE courses DROP CONSTRAINT IF EXISTS courses_check;
+ALTER TABLE courses ADD CONSTRAINT courses_check CHECK (
+  (type = 'mobile' AND date IS NOT NULL AND recurrence_rule IS NULL AND instructor_id IS NOT NULL)
+  OR
+  (type = 'fixed' AND recurrence_rule IS NOT NULL AND instructor_id IS NOT NULL)
+  OR
+  (type = 'volante' AND date IS NOT NULL AND recurrence_rule IS NULL)
+);
