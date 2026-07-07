@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { EMPLOYEE_CATEGORIES } from '../../constants/employeeCategories';
 
 const WEEK_DAY_OPTIONS = [
   { code: 'MON', label: 'Lun' },
@@ -21,6 +22,7 @@ function parseInitialShift(shift) {
       date: '',
       daily: false,
       weekDays: [],
+      requiredCategory: '',
     };
   }
 
@@ -39,6 +41,7 @@ function parseInitialShift(shift) {
     date: shift.type !== 'fixed' ? shift.date : '',
     daily: isDaily,
     weekDays,
+    requiredCategory: shift.requiredCategory || '',
   };
 }
 
@@ -75,6 +78,10 @@ export default function ShiftFormModal({ shift, users, defaultUserId, defaultDat
       setError('Seleziona un dipendente');
       return;
     }
+    if (form.type === 'volante' && !form.requiredCategory) {
+      setError('Seleziona il ruolo richiesto per questa sostituzione');
+      return;
+    }
     if (form.startTime >= form.endTime) {
       setError("L'orario di fine deve essere successivo a quello di inizio");
       return;
@@ -86,6 +93,7 @@ export default function ShiftFormModal({ shift, users, defaultUserId, defaultDat
       startTime: form.startTime,
       endTime: form.endTime,
       note: form.note || null,
+      requiredCategory: form.type === 'volante' ? form.requiredCategory : null,
     };
 
     if (form.type === 'mobile' || form.type === 'volante') {
@@ -138,15 +146,31 @@ export default function ShiftFormModal({ shift, users, defaultUserId, defaultDat
             className={form.type === 'volante' ? 'active' : ''}
             onClick={() => update('type', 'volante')}
           >
-            Volante
+            Sostituzione
           </button>
         </div>
 
         {form.type === 'volante' ? (
-          <p className="hint">
-            Il turno volante non viene assegnato a nessun dipendente: comparirà tra i "turni disponibili" e
-            sarà del primo che lo accetta.
-          </p>
+          <>
+            <p className="hint">
+              La sostituzione non viene assegnata a nessun dipendente: comparirà solo ai dipendenti con il
+              ruolo richiesto che non hanno già un turno in quell'orario, e sarà del primo che la accetta.
+            </p>
+            <label htmlFor="shift-required-category">Ruolo richiesto</label>
+            <select
+              id="shift-required-category"
+              value={form.requiredCategory}
+              onChange={(e) => update('requiredCategory', e.target.value)}
+              required
+            >
+              <option value="">Seleziona...</option>
+              {EMPLOYEE_CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </>
         ) : (
           <>
             <label htmlFor="shift-user">Dipendente</label>

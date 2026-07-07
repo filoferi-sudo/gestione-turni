@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import CalendarPage from '../../components/calendar/CalendarPage';
 import TabbedCalendar from '../../components/calendar/TabbedCalendar';
-import VolanteShiftsPanel from '../../components/shifts/VolanteShiftsPanel';
+import SubstitutionsPanel from '../../components/shifts/SubstitutionsPanel';
 import MyCancellationRequests from '../../components/cancellation/MyCancellationRequests';
 import MyProfile from '../../components/profile/MyProfile';
 import HoursStats from '../../components/stats/HoursStats';
@@ -17,7 +17,7 @@ const CALENDAR_VIEWS = [
 ];
 
 // Dashboard della categoria "istruttore": funzioni comuni (calendario turni, turni singoli/
-// volanti, ore lavorate, profilo) più il Calendario Corsi, in sola lettura: la gestione dei
+// sostituzioni, ore lavorate, profilo) più il Calendario Corsi, in sola lettura: la gestione dei
 // corsi (creazione, modifica, assegnazione istruttore) spetta solo a responsabile e dirigente.
 export default function IstruttoreDashboard() {
   const { user, logout } = useAuth();
@@ -47,7 +47,7 @@ export default function IstruttoreDashboard() {
           <TabbedCalendar views={CALENDAR_VIEWS} />
         </section>
 
-        <VolanteShiftsPanel mode="claim" />
+        <SubstitutionsPanel mode="claim" />
 
         <CoursesAvailablePanel mode="claim" />
 

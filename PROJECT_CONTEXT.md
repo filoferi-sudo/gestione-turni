@@ -15,11 +15,13 @@ palestre). Nata come app per un'unica struttura, è stata evoluta in una piattaf
 multi-azienda**: più società possono usare la stessa installazione, ognuna con i propri utenti e
 dati completamente isolati dalle altre.
 
-Gestisce: calendario turni dei dipendenti (fissi ricorrenti, singoli, "volanti" da accettare),
-calendario corsi degli istruttori (con la stessa logica fisso/singolo/disponibile, ma con
-possibilità di corsi sovrapposti nello stesso orario), richieste di cancellazione turno con
-approvazione del responsabile, statistiche ore lavorate, gestione utenti a più livelli
-gerarchici, e amministrazione delle società da parte di un Super Admin di piattaforma.
+Gestisce: calendario turni dei dipendenti (fissi ricorrenti, singoli, "Sostituzioni" da accettare —
+turni pubblicati senza dipendente assegnato, con un ruolo richiesto, creati manualmente o
+generati automaticamente da una cancellazione approvata), calendario corsi degli istruttori (con
+la stessa logica fisso/singolo/disponibile, ma con possibilità di corsi sovrapposti nello stesso
+orario), richieste di cancellazione turno con approvazione del responsabile, statistiche ore
+lavorate, gestione utenti a più livelli gerarchici, e amministrazione delle società da parte di un
+Super Admin di piattaforma.
 
 ## Obiettivo del progetto
 
@@ -68,7 +70,7 @@ turni-app/
                                 TabbedCalendar (contenitore generico multi-vista)
         courses/                CoursesCalendar, CoursesGrid, CourseBlock, CourseFormModal,
                                 CoursesAvailablePanel
-        shifts/VolanteShiftsPanel.jsx
+        shifts/SubstitutionsPanel.jsx   "Sostituzioni" (ex "turni volanti", solo rinominate in UI)
         cancellation/           CancellationRequestsPanel (manager), MyCancellationRequests (self)
         management/UserManagementSection.jsx
         profile/MyProfile.jsx
@@ -130,9 +132,12 @@ vedi changelog).
 - `users` — `role` (`admin` | `user` | `dirigente` | `superadmin`), `category` (solo per
   `role='user'`: `bagnino` | `istruttore`, NULL altrimenti), `company_id` (NULL solo per
   `superadmin`, obbligatorio per tutti gli altri ruoli — CHECK `users_company_check`).
-- `shifts` — turni: `type` (`fixed` ricorrente | `mobile` singolo | `volante` disponibile),
-  `user_id` (NULL per `volante` non ancora accettato), `company_id` **diretto** (non dedotto da
-  `user_id`, vedi sotto), `recurrence_rule` (solo per `fixed`), `date` (per `mobile`/`volante`).
+- `shifts` — turni: `type` (`fixed` ricorrente | `mobile` singolo | `volante` = "Sostituzione" in
+  UI, disponibile), `user_id` (NULL per `volante` non ancora accettato), `company_id` **diretto**
+  (non dedotto da `user_id`, vedi sotto), `recurrence_rule` (solo per `fixed`), `date` (per
+  `mobile`/`volante`). Colonne aggiunte per le Sostituzioni (vedi sezione dedicata più sotto):
+  `status` (`active` | `cancelled_approved`), `required_category` (ruolo richiesto, NULL = nessun
+  vincolo), `origin_shift_id` (turno originale sostituito, NULL per creazione manuale).
 - `shift_exceptions` — singole occorrenze escluse da un turno `fixed` ricorrente (quando una
   richiesta di cancellazione per quella data viene approvata). Non ha `company_id`: si accede
   sempre tramite `shift_id` (mai NULL), la società si eredita per JOIN.
@@ -204,17 +209,58 @@ completamente isolati dalle altre tramite `company_id`. Punti chiave:
   un controllo DB per-request "per sicurezza" senza discuterne: sarebbe un cambio di modello
   architetturale, non un bugfix.
 
+## Logica delle Sostituzioni (ex "turni volanti")
+
+Evoluzione del vecchio meccanismo "turno volante": in UI il termine non esiste più, è sempre
+"Sostituzione" (bottoni, legenda calendario, pannelli). **Il valore interno a DB `type='volante'`
+non è cambiato** — stessa convenzione già usata per il rename "Turno mobile" → "Turno singolo":
+si rinomina solo l'etichetta mostrata, mai il dato, per evitare una migrazione di dati rischiosa
+e non necessaria.
+
+Una Sostituzione nasce in due modi:
+1. **Creazione manuale** (responsabile/dirigente, da `ShiftFormModal`): data, orario, note e un
+   **ruolo richiesto obbligatorio** (`required_category`, stessi valori di `users.category`:
+   `bagnino`/`istruttore`). Endpoint invariati (`POST/PUT /api/shifts`), solo il nuovo campo
+   `requiredCategory` nel body.
+2. **Creazione automatica da cancellazione approvata** (`cancellationController.approveRequest`):
+   quando un responsabile/dirigente approva la richiesta di cancellazione di un dipendente, il
+   turno originale **non viene più eliminato**:
+   - turno `fixed`: invariato, si esclude solo l'occorrenza richiesta via `shift_exceptions` (la
+     serie resta intatta, comportamento pre-esistente, non toccato);
+   - turno `mobile`/`volante` assegnato: la riga passa a `status='cancelled_approved'` invece di
+     essere cancellata — resta in tabella come storico ma sparisce dal calendario attivo
+     (`getExpandedShifts` filtra sempre `status='active'`). Non esiste (ancora) una UI dedicata
+     per consultare questo storico: il dato è persistito ma solo interrogabile via DB.
+   In entrambi i casi viene creata una nuova riga `shifts` con `type='volante'`, `user_id=NULL`,
+   `origin_shift_id` = id del turno originale, `required_category` ereditata dalla categoria del
+   dipendente titolare del turno cancellato (NULL se l'utente non ne ha una — sostituzione aperta
+   a tutti, non un errore).
+
+**Disponibilità e claim** (`shiftController.listAvailableShifts`/`claimShift`,
+`shiftExpansion.hasOverlappingShift`):
+- Un responsabile/dirigente vede **tutte** le Sostituzioni pendenti della società (vista
+  "manage", invariata, può solo eliminarle).
+- Un dipendente vede solo le Sostituzioni **compatibili**: `required_category` combacia con la
+  propria categoria (o è NULL) *e* non ha già, in quella data/orario, un turno attivo che si
+  sovrappone (fisso espanso o singolo/Sostituzione già accettata). La sovrapposizione si calcola
+  riusando `getExpandedShifts` sul solo giorno interessato, stessa funzione del calendario.
+- Il filtro lato lista è solo un aiuto UX: `claimShift` **ripete sempre** entrambi i controlli
+  (ruolo + sovrapposizione) prima di assegnare, per non fidarsi di chi chiama l'endpoint
+  direttamente bypassando la UI.
+
 ## Funzionalità già completate
 
 - Autenticazione JWT con primo accesso via codice iniziale + impostazione password personale.
 - Gestione utenti gerarchica con permessi differenziati per ruolo (`canManageTargetRole`).
-- Calendario turni: fissi ricorrenti (regola settimanale o giornaliera), singoli, "volanti"
-  (pubblicati senza dipendente, primo che accetta se lo aggiudica — claim atomico via `UPDATE ...
-  WHERE user_id IS NULL`).
+- Calendario turni: fissi ricorrenti (regola settimanale o giornaliera), singoli, Sostituzioni
+  (pubblicate senza dipendente, con ruolo richiesto, primo dipendente compatibile che accetta se
+  le aggiudica — claim atomico via `UPDATE ... WHERE user_id IS NULL`, vedi sezione dedicata).
 - Cancellazione turno: **sempre** su richiesta con approvazione di responsabile/dirigente
   (nessuna cancellazione automatica, qualunque sia il tipo o quanto manchi alla data). Per un
   turno fisso ricorrente si cancella solo la singola occorrenza richiesta (tabella
-  `shift_exceptions`), la serie resta intatta.
+  `shift_exceptions`), la serie resta intatta; per un turno singolo/Sostituzione la riga resta in
+  tabella con `status='cancelled_approved'` invece di essere eliminata. L'approvazione genera
+  sempre automaticamente una nuova Sostituzione collegata (vedi sezione dedicata).
 - Categorie dipendente (Bagnino, Istruttore) con dashboard dedicate.
 - Calendario Corsi per istruttori: stessa logica fisso/singolo/disponibile dei turni, ma con
   supporto a corsi sovrapposti nello stesso orario mostrati **affiancati** (algoritmo di layout a
@@ -294,6 +340,18 @@ testata (locale e produzione) e deployata.
 - **Cancellazione turno sempre con approvazione**: nessun turno si cancella automaticamente,
   indipendentemente dal preavviso. Questo è stato un cambio di requisito esplicito dell'utente
   (in precedenza esisteva una soglia di giorni), non tornare alla logica precedente.
+- **Approvazione cancellazione non elimina più il turno originale** (turni singolo/Sostituzione):
+  passa a `status='cancelled_approved'` e resta in tabella come storico; solo `getExpandedShifts`
+  lo nasconde dal calendario attivo. Non tornare a un `DELETE` diretto: romperebbe lo storico
+  richiesto esplicitamente dall'utente. Per i turni fissi resta invariato l'uso di
+  `shift_exceptions` (la serie non viene mai toccata).
+- **`type='volante'` a DB resta invariato per le Sostituzioni**: la UI non usa più il termine
+  "turno volante", ma il valore nel database non cambia (stessa convenzione già adottata per
+  "Turno mobile" → "Turno singolo": si rinomina solo l'etichetta, mai il dato salvato). Non
+  rinominare il valore CHECK/enum senza un motivo forte: nessun requisito lo richiede.
+- **Il filtro di disponibilità delle Sostituzioni (ruolo + sovrapposizione) è solo UX**:
+  `claimShift` deve sempre riverificare entrambi i controlli lato server prima di assegnare (vedi
+  sezione "Logica delle Sostituzioni"). Non rimuovere questo doppio controllo per "semplificare".
 - **`company_id` diretto su `shifts`/`courses`/`cancellation_requests`**: vedi spiegazione sopra,
   non derivarlo per JOIN da `user_id`/`instructor_id` (si romperebbero i turni/corsi
   "disponibili").
@@ -344,6 +402,9 @@ testata (locale e produzione) e deployata.
 ### Aperti
 - Nessun problema noto aperto al momento della stesura di questo file (dopo l'introduzione del
   multi-tenant, tutte le verifiche locali e di produzione sono passate).
+- **Nessuna UI di storico** per i turni con `status='cancelled_approved'`: il dato persiste nel
+  DB (non viene più eliminato) ma oggi è consultabile solo via query diretta, non da una schermata
+  dedicata. Possibile estensione futura se il cliente lo richiede esplicitamente.
 
 ## Come continuare lo sviluppo
 
@@ -367,3 +428,20 @@ Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cos
 - **2026-07-07** — Creazione di questo file (`PROJECT_CONTEXT.md`), a valle del completamento
   della trasformazione multi-azienda (Super Admin + Società). Nessun codice applicativo
   modificato in questo passaggio, solo documentazione.
+- **2026-07-07** — Trasformazione dei turni "volanti" in "Sostituzioni": rinominato solo il testo
+  UI (`type='volante'` invariato a DB, stessa convenzione del rename "Turno mobile" → "Turno
+  singolo"). Nuova logica: creazione manuale con ruolo richiesto obbligatorio
+  (`required_category`), creazione automatica alla cancellazione approvata di un turno esistente
+  (che ora non viene più eliminato ma passa a `status='cancelled_approved'`, storico), filtro di
+  disponibilità per ruolo + assenza di sovrapposizione oraria (`hasOverlappingShift`), doppio
+  controllo server-side anche al momento del claim. File principali: `backend/src/db/schema.sql`
+  (colonne `status`/`required_category`/`origin_shift_id` su `shifts`),
+  `backend/src/services/shiftExpansion.js`, `backend/src/controllers/shiftController.js`,
+  `backend/src/controllers/cancellationController.js`,
+  `frontend/src/components/shifts/SubstitutionsPanel.jsx` (rinominato da
+  `VolanteShiftsPanel.jsx`), `frontend/src/components/calendar/ShiftFormModal.jsx` e
+  `CalendarPage.jsx`. Verificato via curl (isolamento ruolo/sovrapposizione, entrambi i rami
+  fixed/mobile della cancellazione approvata) e nel browser (creazione manuale, claim, calendario
+  aggiornato). Nessuna modifica ai corsi/"corso disponibile" (fuori scope, dominio parallelo ma
+  separato). Da ricordare: non esiste ancora una UI di storico per `status='cancelled_approved'`
+  (vedi "Problemi risolti e problemi ancora aperti" → Aperti).

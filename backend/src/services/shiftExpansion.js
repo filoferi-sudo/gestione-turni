@@ -40,7 +40,7 @@ async function getExpandedShifts({ start, end, targetUserId, companyId }) {
        FROM shifts s
        LEFT JOIN users u ON u.id = s.user_id
       WHERE s.type IN ('mobile', 'volante') AND s.date BETWEEN $1 AND $2
-        AND s.company_id = $3${instanceUserFilter}`,
+        AND s.company_id = $3 AND s.status = 'active'${instanceUserFilter}`,
     instanceParams
   );
 
@@ -55,7 +55,7 @@ async function getExpandedShifts({ start, end, targetUserId, companyId }) {
     `SELECT s.*, u.username
        FROM shifts s
        JOIN users u ON u.id = s.user_id
-      WHERE s.type = 'fixed' AND s.company_id = $1${fixedUserFilter}`,
+      WHERE s.type = 'fixed' AND s.company_id = $1 AND s.status = 'active'${fixedUserFilter}`,
     fixedParams
   );
 
@@ -112,6 +112,15 @@ async function getExpandedShifts({ start, end, targetUserId, companyId }) {
   );
 }
 
+// Vero se l'utente ha già un turno attivo che si sovrappone a [startTime, endTime) in quella data,
+// considerando sia le istanze singole/sostituzioni accettate sia le occorrenze di turni fissi.
+// Usata sia per filtrare le sostituzioni compatibili mostrate a un dipendente, sia come controllo
+// server-side finale al momento del claim (la lista filtrata è solo un aiuto UX).
+async function hasOverlappingShift({ userId, companyId, date, startTime, endTime }) {
+  const dayShifts = await getExpandedShifts({ start: date, end: date, targetUserId: userId, companyId });
+  return dayShifts.some((s) => s.startTime < endTime && startTime < s.endTime);
+}
+
 function shiftDurationHours(shift) {
   const [startH, startM] = shift.startTime.split(':').map(Number);
   const [endH, endM] = shift.endTime.split(':').map(Number);
@@ -132,7 +141,18 @@ function toSafeShift(row) {
     note: row.note,
     createdBy: row.created_by,
     recurrenceRule: row.recurrence_rule,
+    status: row.status,
+    requiredCategory: row.required_category,
+    originShiftId: row.origin_shift_id,
   };
 }
 
-module.exports = { getExpandedShifts, toHHMM, toDateOnly, isValidDateString, shiftDurationHours, toSafeShift };
+module.exports = {
+  getExpandedShifts,
+  hasOverlappingShift,
+  toHHMM,
+  toDateOnly,
+  isValidDateString,
+  shiftDurationHours,
+  toSafeShift,
+};

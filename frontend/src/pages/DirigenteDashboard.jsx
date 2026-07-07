@@ -4,7 +4,7 @@ import CalendarPage from '../components/calendar/CalendarPage';
 import TabbedCalendar from '../components/calendar/TabbedCalendar';
 import UserManagementSection from '../components/management/UserManagementSection';
 import HoursStats from '../components/stats/HoursStats';
-import VolanteShiftsPanel from '../components/shifts/VolanteShiftsPanel';
+import SubstitutionsPanel from '../components/shifts/SubstitutionsPanel';
 import CancellationRequestsPanel from '../components/cancellation/CancellationRequestsPanel';
 import CoursesCalendar from '../components/courses/CoursesCalendar';
 import CoursesAvailablePanel from '../components/courses/CoursesAvailablePanel';
@@ -58,7 +58,7 @@ export default function DirigenteDashboard() {
 
         <HoursStats />
 
-        <VolanteShiftsPanel mode="manage" />
+        <SubstitutionsPanel mode="manage" />
 
         <CoursesAvailablePanel mode="manage" />
 

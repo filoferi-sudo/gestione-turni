@@ -3,8 +3,8 @@ import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 
 // mode 'claim' (istruttore: può accettare) | 'manage' (responsabile/dirigente: può solo eliminare)
-// Stessa struttura/interazione di VolanteShiftsPanel (turni volanti), per un'esperienza identica
-// tra la gestione dei turni disponibili e quella dei corsi disponibili.
+// Stessa struttura/interazione di SubstitutionsPanel (sostituzioni), per un'esperienza identica
+// tra la gestione delle sostituzioni e quella dei corsi disponibili.
 export default function CoursesAvailablePanel({ mode }) {
   const { token } = useAuth();
   const [courses, setCourses] = useState([]);

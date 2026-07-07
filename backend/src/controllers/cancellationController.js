@@ -72,9 +72,12 @@ async function fetchPendingRequestOr404(id, companyId, res) {
 }
 
 // POST /api/cancellation-requests/:id/approve (responsabile o dirigente)
-// Turni singolo/volante: l'unica occorrenza esistente viene eliminata.
 // Turni fissi ricorrenti: la serie non viene toccata, si esclude solo la data richiesta
 // (altrimenti si cancellerebbero tutte le occorrenze passate e future del turno).
+// Turni singolo/volante assegnati: la riga non viene più eliminata, resta come storico con
+// status='cancelled_approved' (sparisce dal calendario attivo, che filtra status='active').
+// In entrambi i casi viene generata automaticamente una nuova Sostituzione (type='volante',
+// non assegnata) con lo stesso orario/ruolo, collegata al turno originale via origin_shift_id.
 async function approveRequest(req, res) {
   const { id } = req.params;
   const request = await fetchPendingRequestOr404(id, req.user.companyId, res);
@@ -89,17 +92,38 @@ async function approveRequest(req, res) {
   );
 
   if (request.shift_id) {
-    const { rows: shiftRows } = await pool.query('SELECT type FROM shifts WHERE id = $1', [request.shift_id]);
+    const { rows: shiftRows } = await pool.query('SELECT * FROM shifts WHERE id = $1', [request.shift_id]);
     const shift = shiftRows[0];
 
-    if (shift && shift.type === 'fixed') {
+    if (shift) {
+      if (shift.type === 'fixed') {
+        await pool.query(
+          `INSERT INTO shift_exceptions (shift_id, excluded_date) VALUES ($1, $2)
+           ON CONFLICT (shift_id, excluded_date) DO NOTHING`,
+          [request.shift_id, request.shift_date]
+        );
+      } else {
+        await pool.query(`UPDATE shifts SET status = 'cancelled_approved' WHERE id = $1`, [request.shift_id]);
+      }
+
+      const { rows: ownerRows } = await pool.query('SELECT category FROM users WHERE id = $1', [shift.user_id]);
+      const requiredCategory = ownerRows[0]?.category || null;
+
       await pool.query(
-        `INSERT INTO shift_exceptions (shift_id, excluded_date) VALUES ($1, $2)
-         ON CONFLICT (shift_id, excluded_date) DO NOTHING`,
-        [request.shift_id, request.shift_date]
+        `INSERT INTO shifts
+           (user_id, company_id, start_time, end_time, date, type, note, created_by, status, required_category, origin_shift_id)
+         VALUES (NULL, $1, $2, $3, $4, 'volante', $5, $6, 'active', $7, $8)`,
+        [
+          request.company_id,
+          request.shift_start_time,
+          request.shift_end_time,
+          request.shift_date,
+          request.shift_note,
+          req.user.id,
+          requiredCategory,
+          shift.id,
+        ]
       );
-    } else {
-      await pool.query('DELETE FROM shifts WHERE id = $1', [request.shift_id]);
     }
   }
 

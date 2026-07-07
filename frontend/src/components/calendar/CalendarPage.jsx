@@ -141,7 +141,7 @@ export default function CalendarPage({ mode }) {
           <i className="legend-dot legend-mobile" /> Turno singolo
         </span>
         <span>
-          <i className="legend-dot legend-volante" /> Turno volante
+          <i className="legend-dot legend-volante" /> Sostituzione
         </span>
       </div>
       {!isAdmin && (

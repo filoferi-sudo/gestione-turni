@@ -1,12 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import CalendarPage from '../../components/calendar/CalendarPage';
-import VolanteShiftsPanel from '../../components/shifts/VolanteShiftsPanel';
+import SubstitutionsPanel from '../../components/shifts/SubstitutionsPanel';
 import MyCancellationRequests from '../../components/cancellation/MyCancellationRequests';
 import MyProfile from '../../components/profile/MyProfile';
 import HoursStats from '../../components/stats/HoursStats';
 
-// Dashboard della categoria "bagnino": calendario turni, turni singoli/volanti, ore lavorate,
+// Dashboard della categoria "bagnino": calendario turni, turni singoli/sostituzioni, ore lavorate,
 // profilo personale. Nessuna sezione specifica oltre a queste funzioni di base.
 export default function BagninoDashboard() {
   const { user, logout } = useAuth();
@@ -36,7 +36,7 @@ export default function BagninoDashboard() {
           <CalendarPage mode="user" />
         </section>
 
-        <VolanteShiftsPanel mode="claim" />
+        <SubstitutionsPanel mode="claim" />
 
         <MyCancellationRequests />
 

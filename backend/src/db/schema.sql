@@ -242,3 +242,29 @@ ALTER TABLE cancellation_requests ALTER COLUMN company_id SET NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_shifts_company_id ON shifts(company_id);
 CREATE INDEX IF NOT EXISTS idx_courses_company_id ON courses(company_id);
 CREATE INDEX IF NOT EXISTS idx_cancellation_requests_company_id ON cancellation_requests(company_id);
+
+-- Sostituzioni: evoluzione dei turni 'volante'. Il valore interno type='volante' NON cambia
+-- (stessa convenzione già usata per 'mobile' -> "Turno singolo": si rinomina solo l'etichetta in
+-- UI, mai il dato). Una sostituzione può nascere manualmente (con un ruolo richiesto scelto dal
+-- responsabile/dirigente) oppure automaticamente quando una richiesta di cancellazione viene
+-- approvata (vedi cancellationController.approveRequest).
+--
+-- status: quando la cancellazione di un turno 'mobile'/'volante' assegnato viene approvata, la
+-- riga non viene più eliminata (a differenza di prima) ma passa a 'cancelled_approved': resta in
+-- tabella come storico ma sparisce dal calendario attivo (getExpandedShifts filtra status='active').
+-- I turni 'fixed' continuano a usare shift_exceptions per la singola occorrenza, invariato.
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'active';
+ALTER TABLE shifts DROP CONSTRAINT IF EXISTS shifts_status_check;
+ALTER TABLE shifts ADD CONSTRAINT shifts_status_check CHECK (status IN ('active', 'cancelled_approved'));
+
+-- required_category: il "ruolo richiesto" di una sostituzione (solo type='volante'). Riusa gli
+-- stessi valori di users.category, NULL = nessun vincolo di ruolo.
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS required_category VARCHAR(20);
+ALTER TABLE shifts DROP CONSTRAINT IF EXISTS shifts_required_category_check;
+ALTER TABLE shifts ADD CONSTRAINT shifts_required_category_check
+  CHECK (required_category IS NULL OR required_category IN ('bagnino', 'istruttore'));
+
+-- origin_shift_id: per le sostituzioni generate automaticamente da una cancellazione approvata,
+-- punta al turno originale che sostituiscono (fisso o singolo). NULL per quelle create a mano.
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS origin_shift_id INTEGER REFERENCES shifts(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_shifts_origin_shift_id ON shifts(origin_shift_id);
