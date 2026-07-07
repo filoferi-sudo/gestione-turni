@@ -3,9 +3,11 @@ import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 
 // mode 'claim' (istruttore: può accettare) | 'manage' (responsabile/dirigente: può solo eliminare)
-// Stessa struttura/interazione di SubstitutionsPanel (sostituzioni), per un'esperienza identica
-// tra la gestione delle sostituzioni e quella dei corsi disponibili.
-export default function CoursesAvailablePanel({ mode }) {
+// areaId: area operativa di questo calendario (obbligatoria). areaName: opzionale, mostrato nel
+// titolo quando un dipendente ha più aree "Corsi" assegnate. Stessa struttura/interazione di
+// SubstitutionsPanel (sostituzioni), per un'esperienza identica tra la gestione delle
+// sostituzioni e quella dei corsi disponibili.
+export default function CoursesAvailablePanel({ mode, areaId, areaName }) {
   const { token } = useAuth();
   const [courses, setCourses] = useState([]);
   const [error, setError] = useState('');
@@ -14,12 +16,12 @@ export default function CoursesAvailablePanel({ mode }) {
 
   function load() {
     api
-      .listAvailableCourses(token)
+      .listAvailableCourses(token, areaId)
       .then(({ courses }) => setCourses(courses))
       .catch((err) => setError(err.message));
   }
 
-  useEffect(load, [token]);
+  useEffect(load, [token, areaId]);
 
   async function handleClaim(course) {
     setError('');
@@ -53,7 +55,9 @@ export default function CoursesAvailablePanel({ mode }) {
 
   return (
     <section className="card">
-      <h2>Corsi disponibili {mode === 'claim' ? '' : '(non ancora accettati)'}</h2>
+      <h2>
+        Corsi disponibili{areaName ? ` — ${areaName}` : ''} {mode === 'claim' ? '' : '(non ancora accettati)'}
+      </h2>
 
       {error && <div className="error">{error}</div>}
       {notice && <div className="notice">{notice}</div>}

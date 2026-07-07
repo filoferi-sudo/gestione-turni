@@ -223,8 +223,6 @@ export default function CourseFormModal({ course, instructors, defaultDate, onSa
             <input
               id="course-start"
               type="time"
-              min="07:30"
-              max="23:00"
               value={form.startTime}
               onChange={(e) => update('startTime', e.target.value)}
               required
@@ -235,8 +233,6 @@ export default function CourseFormModal({ course, instructors, defaultDate, onSa
             <input
               id="course-end"
               type="time"
-              min="07:30"
-              max="23:00"
               value={form.endTime}
               onChange={(e) => update('endTime', e.target.value)}
               required

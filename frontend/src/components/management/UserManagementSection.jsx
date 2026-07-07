@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { EMPLOYEE_CATEGORY_LABELS } from '../../constants/employeeCategories';
 
 const ROLE_LABELS = { admin: 'Responsabile', dirigente: 'Dirigente', user: 'Dipendente' };
 
@@ -16,12 +15,13 @@ function canManage(currentRole, targetRole) {
 // roles: elenco di ruoli da mostrare in questa sezione (es. ['user'] oppure ['admin'])
 // createHref/createLabel: opzionali, mostrano un link per creare un nuovo account di quel tipo
 export default function UserManagementSection({ roles, title, createHref, createLabel }) {
-  const showCategory = roles.includes('user');
+  const showAreas = roles.includes('user');
   const { token, user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [resetTarget, setResetTarget] = useState(null); // utente per cui reimpostare la password
+  const [areasTarget, setAreasTarget] = useState(null); // utente per cui riassegnare le aree
 
   function load() {
     api
@@ -76,7 +76,7 @@ export default function UserManagementSection({ roles, title, createHref, create
             <th>Email</th>
             <th>Telefono</th>
             <th>Ruolo</th>
-            {showCategory && <th>Categoria</th>}
+            {showAreas && <th>Aree</th>}
             <th>Codice primo accesso</th>
             <th>Stato</th>
             <th>Azioni</th>
@@ -91,12 +91,17 @@ export default function UserManagementSection({ roles, title, createHref, create
                 <td>{u.email}</td>
                 <td>{u.phone || '-'}</td>
                 <td>{ROLE_LABELS[u.role] || u.role}</td>
-                {showCategory && <td>{EMPLOYEE_CATEGORY_LABELS[u.category] || '-'}</td>}
+                {showAreas && <td>{u.areas?.length ? u.areas.map((a) => a.name).join(', ') : '-'}</td>}
                 <td>{u.initialCode || '-'}</td>
                 <td>{u.mustChangePassword ? 'In attesa di primo accesso' : 'Attivo'}</td>
                 <td className="actions-cell">
                   {manageable ? (
                     <>
+                      {showAreas && (
+                        <button className="table-action" onClick={() => setAreasTarget(u)}>
+                          Modifica aree
+                        </button>
+                      )}
                       <button className="table-action" onClick={() => setResetTarget(u)}>
                         Reimposta password
                       </button>
@@ -118,7 +123,7 @@ export default function UserManagementSection({ roles, title, createHref, create
           })}
           {users.length === 0 && (
             <tr>
-              <td colSpan={showCategory ? 8 : 7} className="hint">
+              <td colSpan={showAreas ? 8 : 7} className="hint">
                 Nessun utente in questa categoria.
               </td>
             </tr>
@@ -132,6 +137,17 @@ export default function UserManagementSection({ roles, title, createHref, create
           onClose={() => setResetTarget(null)}
           onDone={() => {
             setResetTarget(null);
+            load();
+          }}
+        />
+      )}
+
+      {areasTarget && (
+        <UserAreasModal
+          targetUser={areasTarget}
+          onClose={() => setAreasTarget(null)}
+          onDone={() => {
+            setAreasTarget(null);
             load();
           }}
         />
@@ -190,6 +206,93 @@ function ResetPasswordModal({ targetUser, onClose, onDone }) {
           </button>
           <button type="submit" disabled={submitting}>
             {submitting ? 'Salvataggio...' : 'Conferma'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// Multi-select delle aree operative della società (raggruppate per sede), per riassegnare in
+// qualsiasi momento a quali calendari ha accesso un dipendente esistente.
+function UserAreasModal({ targetUser, onClose, onDone }) {
+  const { token } = useAuth();
+  const [sediWithAreas, setSediWithAreas] = useState([]);
+  const [selectedAreaIds, setSelectedAreaIds] = useState((targetUser.areas || []).map((a) => a.id));
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    api
+      .listSedi(token)
+      .then(async ({ sedi }) => {
+        const grouped = await Promise.all(
+          sedi.map(async (sede) => {
+            const { areas } = await api.listAreas(sede.id, token);
+            return { sede, areas };
+          })
+        );
+        setSediWithAreas(grouped);
+      })
+      .catch((err) => setError(err.message));
+  }, [token]);
+
+  function toggleArea(areaId) {
+    setSelectedAreaIds((ids) => (ids.includes(areaId) ? ids.filter((id) => id !== areaId) : [...ids, areaId]));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      await api.updateUserAreas(targetUser.id, selectedAreaIds, token);
+      onDone();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+        <h2>Aree operative di {targetUser.username}</h2>
+
+        {sediWithAreas.every((g) => g.areas.length === 0) ? (
+          <p className="hint">Nessuna area operativa configurata in questa società.</p>
+        ) : (
+          sediWithAreas.map(
+            ({ sede, areas }) =>
+              areas.length > 0 && (
+                <div key={sede.id} className="area-picker-group">
+                  <p className="hint">{sede.name}</p>
+                  <div className="checkbox-grid">
+                    {areas.map((a) => (
+                      <label key={a.id} className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={selectedAreaIds.includes(a.id)}
+                          onChange={() => toggleArea(a.id)}
+                        />
+                        {a.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )
+          )
+        )}
+
+        {error && <div className="error">{error}</div>}
+
+        <div className="modal-actions">
+          <button type="button" className="button-secondary" onClick={onClose}>
+            Annulla
+          </button>
+          <button type="submit" disabled={submitting}>
+            {submitting ? 'Salvataggio...' : 'Salva'}
           </button>
         </div>
       </form>

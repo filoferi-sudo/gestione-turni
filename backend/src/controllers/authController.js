@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
+const { fetchUserAreas } = require('../services/userAreas');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const SESSION_EXPIRES_IN = '8h';
@@ -17,6 +18,12 @@ function toSafeUser(user) {
     companyId: user.company_id,
     mustChangePassword: user.must_change_password,
   };
+}
+
+// areas è recuperato con una query separata (non sta nel JWT: cambia raramente ma la dashboard
+// dipendente ne ha bisogno subito dopo il login per costruire le proprie tab di calendario).
+async function toSafeUserWithAreas(user) {
+  return { ...toSafeUser(user), areas: await fetchUserAreas(user.id) };
 }
 
 // POST /api/auth/login
@@ -63,7 +70,7 @@ async function login(req, res) {
     return res.json({
       firstAccess: true,
       firstAccessToken,
-      user: toSafeUser(user),
+      user: await toSafeUserWithAreas(user),
     });
   }
 
@@ -79,7 +86,7 @@ async function login(req, res) {
     { expiresIn: SESSION_EXPIRES_IN }
   );
 
-  return res.json({ firstAccess: false, token, user: toSafeUser(user) });
+  return res.json({ firstAccess: false, token, user: await toSafeUserWithAreas(user) });
 }
 
 // POST /api/auth/first-login-setup
@@ -123,7 +130,7 @@ async function firstLoginSetup(req, res) {
     { expiresIn: SESSION_EXPIRES_IN }
   );
 
-  return res.json({ token, user: toSafeUser(updatedUser) });
+  return res.json({ token, user: await toSafeUserWithAreas(updatedUser) });
 }
 
 // GET /api/auth/me
@@ -133,7 +140,7 @@ async function me(req, res) {
   if (!user) {
     return res.status(404).json({ error: 'Utente non trovato' });
   }
-  return res.json({ user: toSafeUser(user) });
+  return res.json({ user: await toSafeUserWithAreas(user) });
 }
 
 module.exports = { login, firstLoginSetup, me };

@@ -77,7 +77,8 @@ async function fetchPendingRequestOr404(id, companyId, res) {
 // Turni singolo/volante assegnati: la riga non viene più eliminata, resta come storico con
 // status='cancelled_approved' (sparisce dal calendario attivo, che filtra status='active').
 // In entrambi i casi viene generata automaticamente una nuova Sostituzione (type='volante',
-// non assegnata) con lo stesso orario/ruolo, collegata al turno originale via origin_shift_id.
+// non assegnata) con lo stesso orario/area operativa, collegata al turno originale via
+// origin_shift_id.
 async function approveRequest(req, res) {
   const { id } = req.params;
   const request = await fetchPendingRequestOr404(id, req.user.companyId, res);
@@ -106,13 +107,14 @@ async function approveRequest(req, res) {
         await pool.query(`UPDATE shifts SET status = 'cancelled_approved' WHERE id = $1`, [request.shift_id]);
       }
 
-      const { rows: ownerRows } = await pool.query('SELECT category FROM users WHERE id = $1', [shift.user_id]);
-      const requiredCategory = ownerRows[0]?.category || null;
-
+      // L'area (e la sede) si ereditano direttamente dal turno originale: da quando ogni turno
+      // appartiene sempre a un'area operativa, l'area stessa è già il "ruolo richiesto" della
+      // nuova Sostituzione (vedi PROJECT_CONTEXT.md, sezione Sedi/Aree). Non serve più risalire
+      // alla categoria del dipendente titolare.
       await pool.query(
         `INSERT INTO shifts
-           (user_id, company_id, start_time, end_time, date, type, note, created_by, status, required_category, origin_shift_id)
-         VALUES (NULL, $1, $2, $3, $4, 'volante', $5, $6, 'active', $7, $8)`,
+           (user_id, company_id, start_time, end_time, date, type, note, created_by, status, area_id, sede_id, origin_shift_id)
+         VALUES (NULL, $1, $2, $3, $4, 'volante', $5, $6, 'active', $7, $8, $9)`,
         [
           request.company_id,
           request.shift_start_time,
@@ -120,7 +122,8 @@ async function approveRequest(req, res) {
           request.shift_date,
           request.shift_note,
           req.user.id,
-          requiredCategory,
+          shift.area_id,
+          shift.sede_id,
           shift.id,
         ]
       );

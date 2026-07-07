@@ -5,7 +5,7 @@ import Login from './pages/Login';
 import FirstAccessSetup from './pages/FirstAccessSetup';
 import AdminDashboard from './pages/AdminDashboard';
 import DirigenteDashboard from './pages/DirigenteDashboard';
-import EmployeeDashboardRouter from './pages/employee/EmployeeDashboardRouter';
+import EmployeeDashboard from './pages/employee/EmployeeDashboard';
 import CreateUser from './pages/CreateUser';
 import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard';
 
@@ -27,7 +27,7 @@ export default function App() {
         path="/dashboard"
         element={
           <ProtectedRoute requireRole="user">
-            <EmployeeDashboardRouter />
+            <EmployeeDashboard />
           </ProtectedRoute>
         }
       />

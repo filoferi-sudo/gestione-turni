@@ -27,12 +27,20 @@ function isValidDateString(value) {
 // Se targetUserId è indicato, filtra solo i turni di quel dipendente (i turni volanti non ancora
 // accettati, con user_id NULL, vengono così esclusi). Se targetUserId è null vengono restituiti
 // i turni di tutti gli utenti della società (vista amministratore), inclusi i volanti disponibili.
-async function getExpandedShifts({ start, end, targetUserId, companyId }) {
+// areaId è opzionale: se indicato limita il risultato a quell'area operativa (il calendario di
+// una singola area); omesso quando serve controllare TUTTI i turni di un dipendente a prescindere
+// dall'area (es. hasOverlappingShift, che deve rilevare sovrapposizioni anche tra aree diverse).
+async function getExpandedShifts({ start, end, targetUserId, companyId, areaId }) {
   const instanceParams = [start, end, companyId];
   let instanceUserFilter = '';
   if (targetUserId) {
     instanceParams.push(targetUserId);
     instanceUserFilter = ` AND s.user_id = $${instanceParams.length}`;
+  }
+  let instanceAreaFilter = '';
+  if (areaId) {
+    instanceParams.push(areaId);
+    instanceAreaFilter = ` AND s.area_id = $${instanceParams.length}`;
   }
 
   const { rows: instanceRows } = await pool.query(
@@ -40,7 +48,7 @@ async function getExpandedShifts({ start, end, targetUserId, companyId }) {
        FROM shifts s
        LEFT JOIN users u ON u.id = s.user_id
       WHERE s.type IN ('mobile', 'volante') AND s.date BETWEEN $1 AND $2
-        AND s.company_id = $3 AND s.status = 'active'${instanceUserFilter}`,
+        AND s.company_id = $3 AND s.status = 'active'${instanceUserFilter}${instanceAreaFilter}`,
     instanceParams
   );
 
@@ -50,12 +58,17 @@ async function getExpandedShifts({ start, end, targetUserId, companyId }) {
     fixedParams.push(targetUserId);
     fixedUserFilter = ` AND s.user_id = $${fixedParams.length}`;
   }
+  let fixedAreaFilter = '';
+  if (areaId) {
+    fixedParams.push(areaId);
+    fixedAreaFilter = ` AND s.area_id = $${fixedParams.length}`;
+  }
 
   const { rows: fixedRows } = await pool.query(
     `SELECT s.*, u.username
        FROM shifts s
        JOIN users u ON u.id = s.user_id
-      WHERE s.type = 'fixed' AND s.company_id = $1 AND s.status = 'active'${fixedUserFilter}`,
+      WHERE s.type = 'fixed' AND s.company_id = $1 AND s.status = 'active'${fixedUserFilter}${fixedAreaFilter}`,
     fixedParams
   );
 
@@ -83,6 +96,8 @@ async function getExpandedShifts({ start, end, targetUserId, companyId }) {
     type: row.type,
     note: row.note,
     createdBy: row.created_by,
+    areaId: row.area_id,
+    sedeId: row.sede_id,
   }));
 
   const fixedShifts = [];
@@ -103,6 +118,8 @@ async function getExpandedShifts({ start, end, targetUserId, companyId }) {
         note: row.note,
         recurrenceRule: row.recurrence_rule,
         createdBy: row.created_by,
+        areaId: row.area_id,
+        sedeId: row.sede_id,
       });
     }
   }
@@ -144,6 +161,8 @@ function toSafeShift(row) {
     status: row.status,
     requiredCategory: row.required_category,
     originShiftId: row.origin_shift_id,
+    areaId: row.area_id,
+    sedeId: row.sede_id,
   };
 }
 

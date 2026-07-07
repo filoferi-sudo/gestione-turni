@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { EMPLOYEE_CATEGORY_LABELS } from '../../constants/employeeCategories';
 
-// mode 'claim' (dipendente: può accettare, lista già filtrata dal backend per ruolo/disponibilità)
-// | 'manage' (responsabile/dirigente: vede tutte le sostituzioni pendenti, può solo eliminare)
-export default function SubstitutionsPanel({ mode }) {
+// mode 'claim' (dipendente: può accettare, lista già filtrata dal backend per area/disponibilità)
+// | 'manage' (responsabile/dirigente: vede tutte le sostituzioni pendenti di quest'area, può
+// solo eliminare). areaId: area operativa di questo calendario (obbligatoria). areaName:
+// opzionale, mostrato nel titolo quando un dipendente ha più aree "Turni" assegnate.
+export default function SubstitutionsPanel({ mode, areaId, areaName }) {
   const { token } = useAuth();
   const [shifts, setShifts] = useState([]);
   const [error, setError] = useState('');
@@ -14,12 +15,12 @@ export default function SubstitutionsPanel({ mode }) {
 
   function load() {
     api
-      .listAvailableShifts(token)
+      .listAvailableShifts(token, areaId)
       .then(({ shifts }) => setShifts(shifts))
       .catch((err) => setError(err.message));
   }
 
-  useEffect(load, [token]);
+  useEffect(load, [token, areaId]);
 
   async function handleClaim(shift) {
     setError('');
@@ -53,7 +54,9 @@ export default function SubstitutionsPanel({ mode }) {
 
   return (
     <section className="card">
-      <h2>Sostituzioni disponibili {mode === 'manage' ? '(non ancora accettate)' : ''}</h2>
+      <h2>
+        Sostituzioni disponibili{areaName ? ` — ${areaName}` : ''} {mode === 'manage' ? '(non ancora accettate)' : ''}
+      </h2>
 
       {error && <div className="error">{error}</div>}
       {notice && <div className="notice">{notice}</div>}
@@ -66,9 +69,6 @@ export default function SubstitutionsPanel({ mode }) {
             <li key={shift.id} className="shift-list-item">
               <span>
                 {shift.date} · {shift.startTime}-{shift.endTime}
-                {shift.requiredCategory && (
-                  <span className="badge">{EMPLOYEE_CATEGORY_LABELS[shift.requiredCategory]}</span>
-                )}
                 {shift.note ? ` · ${shift.note}` : ''}
                 {shift.originUsername && (
                   <span className="hint"> · sostituisce il turno di {shift.originUsername}</span>

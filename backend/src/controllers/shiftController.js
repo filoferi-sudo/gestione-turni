@@ -8,17 +8,23 @@ const {
   isValidDateString,
   toSafeShift,
 } = require('../services/shiftExpansion');
-const { EMPLOYEE_CATEGORIES } = require('../constants/employeeCategories');
 
 const SHIFT_TYPES = ['fixed', 'mobile', 'volante'];
 
-// GET /api/calendar?start=YYYY-MM-DD&end=YYYY-MM-DD&userId=<solo admin/dirigente>
-// L'utente standard vede sempre e solo il proprio calendario; responsabile/dirigente vedono tutto o filtrano per userId.
+// GET /api/calendar?start=YYYY-MM-DD&end=YYYY-MM-DD&areaId=<obbligatoria>&userId=<solo admin/dirigente>
+// Il calendario è sempre quello di una specifica area operativa (ogni area ha il proprio, non
+// esiste più un unico calendario turni per società). L'utente standard vede sempre e solo il
+// proprio calendario; responsabile/dirigente vedono tutto o filtrano per userId.
 async function getCalendar(req, res) {
   const { start, end } = req.query;
+  const areaId = Number(req.query.areaId);
 
   if (!isValidDateString(start) || !isValidDateString(end) || start > end) {
     return res.status(400).json({ error: 'Parametri start/end non validi (formato YYYY-MM-DD)' });
+  }
+  const area = await assertAreaExists(areaId, req.user.companyId, 'shifts');
+  if (!area) {
+    return res.status(404).json({ error: 'Area operativa non trovata' });
   }
 
   let targetUserId = null;
@@ -28,7 +34,7 @@ async function getCalendar(req, res) {
     targetUserId = req.user.id;
   }
 
-  const shifts = await getExpandedShifts({ start, end, targetUserId, companyId: req.user.companyId });
+  const shifts = await getExpandedShifts({ start, end, targetUserId, companyId: req.user.companyId, areaId });
   return res.json({ shifts });
 }
 
@@ -40,16 +46,48 @@ async function assertUserExists(userId, companyId) {
   return rows.length > 0;
 }
 
+// Verifica che l'area esista, appartenga alla società di chi opera, e usi il motore di calendario
+// atteso ('shifts' per i turni): un'area in modalità 'courses' non può ospitare turni. Ritorna la
+// riga dell'area (serve sede_id per valorizzare shifts.sede_id) con in più l'orario calendario
+// configurato per la sua sede (calendar_start_time/calendar_end_time), usato per validare che i
+// turni stiano dentro la fascia oraria scelta dal Dirigente per quella sede.
+async function assertAreaExists(areaId, companyId, expectedMode) {
+  if (!areaId) return null;
+  const { rows } = await pool.query(
+    `SELECT oa.*, s.calendar_start_time, s.calendar_end_time
+       FROM operational_areas oa
+       JOIN sedi s ON s.id = oa.sede_id
+      WHERE oa.id = $1 AND oa.company_id = $2 AND oa.calendar_mode = $3`,
+    [areaId, companyId, expectedMode]
+  );
+  return rows[0] || null;
+}
+
+// Vero se il dipendente è assegnato all'area indicata (sostituisce il vecchio controllo per
+// categoria: l'area di appartenenza determina ora chi può vedere/accettare una Sostituzione).
+async function isUserAssignedToArea(userId, areaId) {
+  const { rows } = await pool.query('SELECT 1 FROM user_areas WHERE user_id = $1 AND area_id = $2', [userId, areaId]);
+  return rows.length > 0;
+}
+
 function todayDateString() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
-// GET /api/shifts/available - sostituzioni non ancora accettate da nessuno, della propria società.
-// Per un dipendente il risultato viene filtrato a quelle compatibili (ruolo richiesto + nessuna
-// sovrapposizione con i propri turni già assegnati); un responsabile/dirigente le vede tutte
-// (vista "manage", per poterle comunque eliminare a prescindere dalla compatibilità).
+// GET /api/shifts/available?areaId=<obbligatoria> - sostituzioni non ancora accettate di una
+// specifica area operativa. Per un dipendente il risultato viene filtrato a quelle compatibili
+// (assegnato a quest'area + nessuna sovrapposizione con i propri turni già assegnati, in
+// qualunque area); un responsabile/dirigente le vede tutte (vista "manage", per poterle comunque
+// eliminare). L'area sostituisce il vecchio "ruolo richiesto": una Sostituzione pubblicata in
+// quest'area è per definizione destinata a chi vi è assegnato, non serve più un campo separato.
 async function listAvailableShifts(req, res) {
+  const areaId = Number(req.query.areaId);
+  const area = await assertAreaExists(areaId, req.user.companyId, 'shifts');
+  if (!area) {
+    return res.status(404).json({ error: 'Area operativa non trovata' });
+  }
+
   const { rows } = await pool.query(
     `SELECT s.*, creator.username AS created_by_username, origin_user.username AS origin_username
        FROM shifts s
@@ -57,28 +95,26 @@ async function listAvailableShifts(req, res) {
        LEFT JOIN shifts origin ON origin.id = s.origin_shift_id
        LEFT JOIN users origin_user ON origin_user.id = origin.user_id
       WHERE s.type = 'volante' AND s.user_id IS NULL AND s.status = 'active'
-        AND s.date >= $1 AND s.company_id = $2
+        AND s.date >= $1 AND s.company_id = $2 AND s.area_id = $3
       ORDER BY s.date, s.start_time`,
-    [todayDateString(), req.user.companyId]
+    [todayDateString(), req.user.companyId, areaId]
   );
 
   let visibleRows = rows;
   if (req.user.role === 'user') {
-    const { rows: userRows } = await pool.query('SELECT category FROM users WHERE id = $1', [req.user.id]);
-    const myCategory = userRows[0]?.category || null;
-
     visibleRows = [];
-    for (const row of rows) {
-      if (row.required_category && row.required_category !== myCategory) continue;
-      const overlapping = await hasOverlappingShift({
-        userId: req.user.id,
-        companyId: req.user.companyId,
-        date: toDateOnly(row.date),
-        startTime: row.start_time.slice(0, 5),
-        endTime: row.end_time.slice(0, 5),
-      });
-      if (overlapping) continue;
-      visibleRows.push(row);
+    if (await isUserAssignedToArea(req.user.id, areaId)) {
+      for (const row of rows) {
+        const overlapping = await hasOverlappingShift({
+          userId: req.user.id,
+          companyId: req.user.companyId,
+          date: toDateOnly(row.date),
+          startTime: row.start_time.slice(0, 5),
+          endTime: row.end_time.slice(0, 5),
+        });
+        if (overlapping) continue;
+        visibleRows.push(row);
+      }
     }
   }
 
@@ -89,7 +125,6 @@ async function listAvailableShifts(req, res) {
       startTime: row.start_time.slice(0, 5),
       endTime: row.end_time.slice(0, 5),
       note: row.note,
-      requiredCategory: row.required_category,
       createdByUsername: row.created_by_username,
       originUsername: row.origin_username,
     })),
@@ -98,7 +133,7 @@ async function listAvailableShifts(req, res) {
 
 // POST /api/shifts/:id/claim - il primo dipendente compatibile che lo richiede lo riceve
 // automaticamente. La lista filtrata in listAvailableShifts è solo un aiuto UX: qui si
-// riverificano sempre ruolo richiesto e assenza di sovrapposizione, per non fidarsi di una
+// riverificano sempre appartenenza all'area e assenza di sovrapposizione, per non fidarsi di una
 // richiesta diretta all'endpoint che aggiri il filtro lato client.
 async function claimShift(req, res) {
   const { id } = req.params;
@@ -113,10 +148,8 @@ async function claimShift(req, res) {
     return res.status(409).json({ error: 'La sostituzione non è più disponibile' });
   }
 
-  const { rows: userRows } = await pool.query('SELECT category FROM users WHERE id = $1', [req.user.id]);
-  const myCategory = userRows[0]?.category || null;
-  if (shift.required_category && shift.required_category !== myCategory) {
-    return res.status(403).json({ error: 'Questa sostituzione richiede un ruolo diverso dal tuo' });
+  if (!(await isUserAssignedToArea(req.user.id, shift.area_id))) {
+    return res.status(403).json({ error: 'Questa sostituzione appartiene a un\'area a cui non sei assegnato' });
   }
 
   const overlapping = await hasOverlappingShift({
@@ -160,19 +193,11 @@ function validateTypeFields({ type, date, recurrenceRule }) {
   return { finalDate: isValidDateString(date) ? date : null, finalRecurrenceRule: recurrenceRule };
 }
 
-// Le sostituzioni (type='volante') create manualmente devono indicare il ruolo richiesto
-// (categoria dipendente): è così che il sistema decide a chi mostrarle.
-function validateRequiredCategory(type, requiredCategory) {
-  if (type !== 'volante') return { finalRequiredCategory: null };
-  if (!EMPLOYEE_CATEGORIES.includes(requiredCategory)) {
-    return { error: `requiredCategory deve essere uno tra ${EMPLOYEE_CATEGORIES.join(', ')}` };
-  }
-  return { finalRequiredCategory: requiredCategory };
-}
-
-// POST /api/shifts (responsabile o dirigente)
+// POST /api/shifts (responsabile o dirigente) - areaId obbligatorio: ogni turno appartiene a
+// un'area operativa fin dalla creazione (è il contesto in cui il form viene aperto, una specifica
+// tab di calendario). sede_id si deriva dall'area, non va indicato separatamente dal client.
 async function createShift(req, res) {
-  const { userId, type, startTime, endTime, note, date, recurrenceRule, requiredCategory } = req.body;
+  const { userId, type, startTime, endTime, note, date, recurrenceRule, areaId } = req.body;
 
   if (!SHIFT_TYPES.includes(type)) {
     return res.status(400).json({ error: `type deve essere uno tra ${SHIFT_TYPES.join(', ')}` });
@@ -182,8 +207,15 @@ async function createShift(req, res) {
     return res.status(400).json({ error: 'userId è obbligatorio per turni fissi e singoli' });
   }
 
-  if (!isWithinDailyWindow(startTime, endTime)) {
-    return res.status(400).json({ error: 'Orario non valido: deve essere compreso tra 07:30 e 23:00' });
+  const area = await assertAreaExists(Number(areaId), req.user.companyId, 'shifts');
+  if (!area) {
+    return res.status(400).json({ error: 'areaId non valido per questa società (o non è un\'area di tipo Turni)' });
+  }
+
+  if (!isWithinDailyWindow(startTime, endTime, area.calendar_start_time.slice(0, 5), area.calendar_end_time.slice(0, 5))) {
+    return res.status(400).json({
+      error: `Orario non valido: deve essere compreso tra ${area.calendar_start_time.slice(0, 5)} e ${area.calendar_end_time.slice(0, 5)} (orari della sede)`,
+    });
   }
 
   if (userId && !(await assertUserExists(userId, req.user.companyId))) {
@@ -193,15 +225,12 @@ async function createShift(req, res) {
   const result = validateTypeFields({ type, date, recurrenceRule });
   if (result.error) return res.status(400).json({ error: result.error });
 
-  const categoryResult = validateRequiredCategory(type, requiredCategory);
-  if (categoryResult.error) return res.status(400).json({ error: categoryResult.error });
-
   // I turni volanti (sostituzioni) nascono senza dipendente assegnato: verranno accettati in un secondo momento
   const finalUserId = type === 'volante' ? null : userId;
 
   const { rows } = await pool.query(
-    `INSERT INTO shifts (user_id, company_id, start_time, end_time, date, type, note, created_by, recurrence_rule, required_category)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO shifts (user_id, company_id, start_time, end_time, date, type, note, created_by, recurrence_rule, area_id, sede_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       finalUserId,
@@ -213,7 +242,8 @@ async function createShift(req, res) {
       note || null,
       req.user.id,
       result.finalRecurrenceRule,
-      categoryResult.finalRequiredCategory,
+      area.id,
+      area.sede_id,
     ]
   );
 
@@ -223,7 +253,7 @@ async function createShift(req, res) {
 // PUT /api/shifts/:id (responsabile o dirigente)
 async function updateShift(req, res) {
   const { id } = req.params;
-  const { userId, type, startTime, endTime, note, date, recurrenceRule, requiredCategory } = req.body;
+  const { userId, type, startTime, endTime, note, date, recurrenceRule } = req.body;
 
   const { rows: existingRows } = await pool.query('SELECT * FROM shifts WHERE id = $1', [id]);
   const existing = existingRows[0];
@@ -240,8 +270,31 @@ async function updateShift(req, res) {
     return res.status(400).json({ error: `type deve essere uno tra ${SHIFT_TYPES.join(', ')}` });
   }
 
-  if (!isWithinDailyWindow(finalStartTime, finalEndTime)) {
-    return res.status(400).json({ error: 'Orario non valido: deve essere compreso tra 07:30 e 23:00' });
+  let finalAreaId = existing.area_id;
+  let finalSedeId = existing.sede_id;
+  let areaForWindow = null;
+  if (req.body.areaId !== undefined) {
+    areaForWindow = await assertAreaExists(Number(req.body.areaId), req.user.companyId, 'shifts');
+    if (!areaForWindow) {
+      return res.status(400).json({ error: 'areaId non valido per questa società (o non è un\'area di tipo Turni)' });
+    }
+    finalAreaId = areaForWindow.id;
+    finalSedeId = areaForWindow.sede_id;
+  } else {
+    areaForWindow = await assertAreaExists(existing.area_id, req.user.companyId, 'shifts');
+  }
+
+  if (
+    !isWithinDailyWindow(
+      finalStartTime,
+      finalEndTime,
+      areaForWindow.calendar_start_time.slice(0, 5),
+      areaForWindow.calendar_end_time.slice(0, 5)
+    )
+  ) {
+    return res.status(400).json({
+      error: `Orario non valido: deve essere compreso tra ${areaForWindow.calendar_start_time.slice(0, 5)} e ${areaForWindow.calendar_end_time.slice(0, 5)} (orari della sede)`,
+    });
   }
 
   if (finalUserId && finalUserId !== existing.user_id && !(await assertUserExists(finalUserId, req.user.companyId))) {
@@ -253,15 +306,11 @@ async function updateShift(req, res) {
   const result = validateTypeFields({ type: finalType, date: candidateDate, recurrenceRule: candidateRule });
   if (result.error) return res.status(400).json({ error: result.error });
 
-  const candidateRequiredCategory = requiredCategory !== undefined ? requiredCategory : existing.required_category;
-  const categoryResult = validateRequiredCategory(finalType, candidateRequiredCategory);
-  if (categoryResult.error) return res.status(400).json({ error: categoryResult.error });
-
   const { rows } = await pool.query(
     `UPDATE shifts
         SET user_id = $1, start_time = $2, end_time = $3, date = $4,
-            type = $5, note = $6, recurrence_rule = $7, required_category = $8
-      WHERE id = $9
+            type = $5, note = $6, recurrence_rule = $7, area_id = $8, sede_id = $9
+      WHERE id = $10
       RETURNING *`,
     [
       finalUserId,
@@ -271,7 +320,8 @@ async function updateShift(req, res) {
       finalType,
       note !== undefined ? note : existing.note,
       result.finalRecurrenceRule,
-      categoryResult.finalRequiredCategory,
+      finalAreaId,
+      finalSedeId,
       id,
     ]
   );

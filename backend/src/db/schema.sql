@@ -134,6 +134,52 @@ CREATE INDEX IF NOT EXISTS idx_courses_date ON courses(date);
 CREATE INDEX IF NOT EXISTS idx_courses_instructor_id ON courses(instructor_id);
 CREATE INDEX IF NOT EXISTS idx_companies_is_active ON companies(is_active);
 
+-- Sedi: una società può avere una o più sedi fisiche. calendar_start_time/calendar_end_time
+-- personalizzano l'intervallo orario mostrato nel calendario di quella sede (default invariati
+-- rispetto al comportamento storico: 07:30-23:00).
+CREATE TABLE IF NOT EXISTS sedi (
+  id                    SERIAL PRIMARY KEY,
+  company_id            INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  name                  VARCHAR(150) NOT NULL,
+  is_active             BOOLEAN NOT NULL DEFAULT TRUE,
+  display_order         INTEGER NOT NULL DEFAULT 0,
+  calendar_start_time   TIME NOT NULL DEFAULT '07:30',
+  calendar_end_time     TIME NOT NULL DEFAULT '23:00',
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (calendar_end_time > calendar_start_time)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sedi_company_id ON sedi(company_id);
+
+-- Aree operative: definite liberamente dal Dirigente dentro una sede (Bagnini, Reception, Bar,
+-- Manutenzione, ...). calendar_mode decide quale motore di calendario usa l'area: 'shifts' (turni
+-- fisso/singolo/Sostituzione, il caso generale) oppure 'courses' (corsi nominati con sovrapposizioni
+-- affiancate, per aree stile "Istruttori"). Nessuna area è predefinita dal codice: il Dirigente le
+-- crea tutte, anche quelle che replicano concettualmente le vecchie categorie bagnino/istruttore.
+CREATE TABLE IF NOT EXISTS operational_areas (
+  id                SERIAL PRIMARY KEY,
+  company_id        INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  sede_id           INTEGER NOT NULL REFERENCES sedi(id) ON DELETE CASCADE,
+  name              VARCHAR(100) NOT NULL,
+  calendar_mode     VARCHAR(10) NOT NULL DEFAULT 'shifts' CHECK (calendar_mode IN ('shifts', 'courses')),
+  display_order     INTEGER NOT NULL DEFAULT 0,
+  is_active         BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_operational_areas_sede_id ON operational_areas(sede_id);
+CREATE INDEX IF NOT EXISTS idx_operational_areas_company_id ON operational_areas(company_id);
+
+-- Assegnazione dipendente <-> area operativa: un dipendente può appartenere a più aree
+-- contemporaneamente (sostituisce il vecchio users.category, che restava un valore singolo).
+CREATE TABLE IF NOT EXISTS user_areas (
+  user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  area_id  INTEGER NOT NULL REFERENCES operational_areas(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, area_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_areas_area_id ON user_areas(area_id);
+
 -- Migrazioni idempotenti per database creati con versioni precedenti dello schema
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'user', 'dirigente', 'superadmin'));
@@ -268,3 +314,72 @@ ALTER TABLE shifts ADD CONSTRAINT shifts_required_category_check
 -- punta al turno originale che sostituiscono (fisso o singolo). NULL per quelle create a mano.
 ALTER TABLE shifts ADD COLUMN IF NOT EXISTS origin_shift_id INTEGER REFERENCES shifts(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_shifts_origin_shift_id ON shifts(origin_shift_id);
+
+-- Configurabilità: Sedi -> Aree operative. Un solo npm run migrate porta un database "a categorie
+-- fisse" (bagnino/istruttore) allo stato configurabile, senza perdita di funzionalità: crea una
+-- sede di default per ogni società esistente, due aree che replicano esattamente le vecchie
+-- categorie (così dashboard/permessi restano identici subito dopo la migrazione), collega ogni
+-- dipendente/turno/corso esistente all'area corrispondente. Da qui in poi il Dirigente può
+-- rinominare, aggiungere o rimuovere aree/sedi liberamente: la migrazione è solo il punto di
+-- partenza compatibile con i dati preesistenti, non un vincolo permanente.
+INSERT INTO sedi (company_id, name)
+  SELECT id, 'Sede Principale' FROM companies c
+   WHERE NOT EXISTS (SELECT 1 FROM sedi s WHERE s.company_id = c.id);
+
+INSERT INTO operational_areas (company_id, sede_id, name, calendar_mode, display_order)
+  SELECT s.company_id, s.id, 'Bagnino', 'shifts', 0
+    FROM sedi s
+   WHERE NOT EXISTS (SELECT 1 FROM operational_areas oa WHERE oa.sede_id = s.id AND oa.name = 'Bagnino');
+
+INSERT INTO operational_areas (company_id, sede_id, name, calendar_mode, display_order)
+  SELECT s.company_id, s.id, 'Istruttore', 'courses', 1
+    FROM sedi s
+   WHERE NOT EXISTS (SELECT 1 FROM operational_areas oa WHERE oa.sede_id = s.id AND oa.name = 'Istruttore');
+
+-- Ogni dipendente con una category valorizzata viene collegato all'area equivalente della sede
+-- di default (la prima) della propria società: nessun dipendente perde l'accesso al proprio
+-- calendario dopo la migrazione.
+INSERT INTO user_areas (user_id, area_id)
+  SELECT u.id, oa.id
+    FROM users u
+    JOIN sedi s ON s.company_id = u.company_id AND s.id = (
+      SELECT id FROM sedi s2 WHERE s2.company_id = u.company_id ORDER BY id LIMIT 1
+    )
+    JOIN operational_areas oa ON oa.sede_id = s.id
+      AND oa.name = CASE u.category WHEN 'bagnino' THEN 'Bagnino' WHEN 'istruttore' THEN 'Istruttore' END
+   WHERE u.category IS NOT NULL
+  ON CONFLICT (user_id, area_id) DO NOTHING;
+
+-- sede_id/area_id su shifts e courses: ordine nullable -> backfill -> NOT NULL, come da
+-- convenzione del progetto. company_id NON viene toccato: resta la fonte di verità per
+-- l'isolamento multi-tenant, area_id si aggiunge per lo scoping fine per area operativa.
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS sede_id INTEGER REFERENCES sedi(id) ON DELETE CASCADE;
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS area_id INTEGER REFERENCES operational_areas(id) ON DELETE CASCADE;
+UPDATE shifts s SET
+  sede_id = (SELECT id FROM sedi WHERE company_id = s.company_id ORDER BY id LIMIT 1),
+  area_id = (
+    SELECT oa.id FROM operational_areas oa
+     WHERE oa.name = 'Bagnino'
+       AND oa.sede_id = (SELECT id FROM sedi WHERE company_id = s.company_id ORDER BY id LIMIT 1)
+  )
+ WHERE s.area_id IS NULL;
+ALTER TABLE shifts ALTER COLUMN sede_id SET NOT NULL;
+ALTER TABLE shifts ALTER COLUMN area_id SET NOT NULL;
+
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS sede_id INTEGER REFERENCES sedi(id) ON DELETE CASCADE;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS area_id INTEGER REFERENCES operational_areas(id) ON DELETE CASCADE;
+UPDATE courses c SET
+  sede_id = (SELECT id FROM sedi WHERE company_id = c.company_id ORDER BY id LIMIT 1),
+  area_id = (
+    SELECT oa.id FROM operational_areas oa
+     WHERE oa.name = 'Istruttore'
+       AND oa.sede_id = (SELECT id FROM sedi WHERE company_id = c.company_id ORDER BY id LIMIT 1)
+  )
+ WHERE c.area_id IS NULL;
+ALTER TABLE courses ALTER COLUMN sede_id SET NOT NULL;
+ALTER TABLE courses ALTER COLUMN area_id SET NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_shifts_sede_id ON shifts(sede_id);
+CREATE INDEX IF NOT EXISTS idx_shifts_area_id ON shifts(area_id);
+CREATE INDEX IF NOT EXISTS idx_courses_sede_id ON courses(sede_id);
+CREATE INDEX IF NOT EXISTS idx_courses_area_id ON courses(area_id);

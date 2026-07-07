@@ -2,11 +2,15 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { addDays, formatRangeLabel, getSingleDay, getWeekDays } from '../../utils/dates';
+import { DEFAULT_TIME_WINDOW } from '../../utils/timeWindow';
 import CalendarGrid from './CalendarGrid';
 import ShiftFormModal from './ShiftFormModal';
 
-// mode: 'admin' (CRUD completo, tutti gli utenti) | 'user' (sola lettura, solo il proprio calendario)
-export default function CalendarPage({ mode }) {
+// mode: 'admin' (CRUD completo, tutti i dipendenti dell'area) | 'user' (sola lettura, solo il
+// proprio calendario). areaId: area operativa a cui appartiene questo calendario (obbligatoria,
+// ogni area ha il proprio). timeWindow: orari calendario configurati per la sede (opzionale,
+// vedi utils/timeWindow.js).
+export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_WINDOW }) {
   const { token } = useAuth();
   const isAdmin = mode === 'admin';
 
@@ -26,15 +30,18 @@ export default function CalendarPage({ mode }) {
 
   useEffect(() => {
     if (isAdmin) {
-      api.listUsers(token).then(({ users }) => setUsers(users)).catch((err) => setError(err.message));
+      api
+        .listUsers(token)
+        .then(({ users: all }) => setUsers(all.filter((u) => u.areas?.some((a) => a.id === areaId))))
+        .catch((err) => setError(err.message));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [areaId]);
 
   function loadCalendar() {
     setLoading(true);
     api
-      .getCalendar(token, { start, end, userId: isAdmin ? selectedUserId || undefined : undefined })
+      .getCalendar(token, { start, end, areaId, userId: isAdmin ? selectedUserId || undefined : undefined })
       .then(({ shifts }) => setShifts(shifts))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -43,7 +50,7 @@ export default function CalendarPage({ mode }) {
   useEffect(() => {
     loadCalendar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end, selectedUserId]);
+  }, [start, end, selectedUserId, areaId]);
 
   const shiftsByDate = shifts.reduce((acc, shift) => {
     (acc[shift.date] = acc[shift.date] || []).push(shift);
@@ -64,7 +71,7 @@ export default function CalendarPage({ mode }) {
     if (modalState.shift) {
       await api.updateShift(modalState.shift.shiftId, payload, token);
     } else {
-      await api.createShift(payload, token);
+      await api.createShift({ ...payload, areaId }, token);
     }
     setModalState(null);
     loadCalendar();
@@ -161,6 +168,7 @@ export default function CalendarPage({ mode }) {
           shiftsByDate={shiftsByDate}
           showUsername={isAdmin && !selectedUserId}
           onShiftClick={isAdmin ? (shift) => setModalState({ shift }) : handleUserShiftClick}
+          timeWindow={timeWindow}
         />
       )}
 

@@ -1,4 +1,4 @@
-# PROJECT_CONTEXT.md — Gestione Turni (SaaS multi-azienda)
+# PROJECT_CONTEXT.md — Gestione Turni (SaaS multi-azienda, configurabile)
 
 > **Regola per chi (umano o AI) lavora su questo progetto**: leggi questo file per intero prima
 > di iniziare qualunque modifica non banale. È la fonte di verità sul contesto del progetto,
@@ -12,25 +12,31 @@
 
 Applicazione web per la gestione di turni di lavoro e corsi in strutture sportive (piscine/
 palestre). Nata come app per un'unica struttura, è stata evoluta in una piattaforma **SaaS
-multi-azienda**: più società possono usare la stessa installazione, ognuna con i propri utenti e
-dati completamente isolati dalle altre.
+multi-azienda e configurabile**: più società possono usare la stessa installazione, ognuna con i
+propri utenti e dati completamente isolati dalle altre, e ogni società organizza liberamente la
+propria struttura interna — **sedi fisiche** e **aree operative** — senza bisogno di modifiche al
+codice.
 
-Gestisce: calendario turni dei dipendenti (fissi ricorrenti, singoli, "Sostituzioni" da accettare —
-turni pubblicati senza dipendente assegnato, con un ruolo richiesto, creati manualmente o
-generati automaticamente da una cancellazione approvata), calendario corsi degli istruttori (con
-la stessa logica fisso/singolo/disponibile, ma con possibilità di corsi sovrapposti nello stesso
-orario), richieste di cancellazione turno con approvazione del responsabile, statistiche ore
-lavorate, gestione utenti a più livelli gerarchici, e amministrazione delle società da parte di un
-Super Admin di piattaforma.
+Gestisce: sedi multiple per società, aree operative configurabili liberamente dal Dirigente
+all'interno di ogni sede (ognuna con il proprio calendario, generato automaticamente), calendario
+turni dei dipendenti (fissi ricorrenti, singoli, "Sostituzioni" da accettare — turni pubblicati
+senza dipendente assegnato, creati manualmente o generati automaticamente da una cancellazione
+approvata), calendario corsi (stessa logica fisso/singolo/disponibile, ma con possibilità di corsi
+sovrapposti nello stesso orario), richieste di cancellazione turno con approvazione del
+responsabile, statistiche ore lavorate, gestione utenti a più livelli gerarchici con assegnazione
+a una o più aree operative, personalizzazione dell'intervallo orario del calendario per sede, e
+amministrazione delle società da parte di un Super Admin di piattaforma.
 
 ## Obiettivo del progetto
 
 Fornire uno strumento semplice e specifico (non un ERP generico) per la programmazione di turni
 e corsi in strutture come piscine comunali, con un flusso di lavoro chiaro per ruolo: chi decide
-gli orari (dirigente/responsabile), chi li esegue (dipendenti, categorizzati per mansione), e —
-dall'introduzione del multi-tenant — chi vende/amministra il software a più clienti (super
-admin). L'obiettivo di fondo è restare **rivendibile a più aziende dalla stessa piattaforma**,
-mantenendo tutte le funzionalità già costruite per la singola azienda.
+gli orari (dirigente/responsabile), chi li esegue (dipendenti, assegnati liberamente alle aree
+operative di competenza), e — dall'introduzione del multi-tenant — chi vende/amministra il
+software a più clienti (super admin). L'obiettivo di fondo è restare **rivendibile a più aziende
+dalla stessa piattaforma**, con ciascuna società capace di **modellare la propria organizzazione
+(sedi, aree, orari) senza richiedere interventi sul codice**, mantenendo tutte le funzionalità già
+costruite.
 
 ## Struttura attuale dell'applicazione
 
@@ -49,45 +55,59 @@ turni-app/
       server.js                avvio locale (node src/server.js / npm run dev)
       config/db.js             pool pg, gestisce SSL per provider hosted
       middleware/auth.js       authenticate, requireManager, requireDirigente, requireSuperAdmin
-      controllers/             un controller per dominio (vedi sotto)
-      routes/                  un file per dominio, wiring middleware + controller
+      controllers/             un controller per dominio (vedi sotto), incluso
+                                sedeController.js, areaController.js
+      routes/                  un file per dominio, wiring middleware + controller, incluso
+                                sedi.js (annidate: /api/sedi/:sedeId/areas), areas.js (flat:
+                                /api/areas/:id)
       services/                 shiftExpansion.js, courseExpansion.js: espansione ricorrenze
-      utils/                    helper puri: date/ore, generazione codici, ricorrenza
+                                (entrambe filtrano anche per area_id); userAreas.js: unica fonte
+                                di verità per le aree operative assegnate a un utente (usata sia
+                                da authController sia da userController)
+      utils/                    helper puri: date/ore (isWithinDailyWindow ora accetta la
+                                finestra oraria della sede), generazione codici, ricorrenza
       db/
         schema.sql              SCHEMA + MIGRAZIONI IDEMPOTENTI, unica fonte di verità del DB
         seedDirigente.js        bootstrap locale/dev: crea società demo + dirigente
         seedSuperAdmin.js       crea/aggiorna l'account super admin (company_id NULL)
         reset.js                wipe dati applicativi — SOLO uso locale/dev (vedi sotto)
-      constants/employeeCategories.js   unica fonte di verità categorie dipendente (backend)
   frontend/
     vercel.json                rewrite SPA per il routing lato client
     src/
       main.jsx, App.jsx        routing (react-router-dom), mappa ruolo -> home
       api/client.js            unico client HTTP, tutte le chiamate API passano da qui
-      context/AuthContext.jsx   token + user in localStorage, redirect su logout/scadenza
+      context/AuthContext.jsx   token + user (con `areas[]`) in localStorage
+      hooks/useSedeSelection.js  stato "sede selezionata" per le dashboard manager (elenco sedi
+                                della società + sede attiva, persistita in localStorage)
       components/
-        calendar/               CalendarPage (turni), CalendarGrid, ShiftBlock, ShiftFormModal,
-                                TabbedCalendar (contenitore generico multi-vista)
-        courses/                CoursesCalendar, CoursesGrid, CourseBlock, CourseFormModal,
-                                CoursesAvailablePanel
-        shifts/SubstitutionsPanel.jsx   "Sostituzioni" (ex "turni volanti", solo rinominate in UI)
+        calendar/               CalendarPage (turni, richiede areaId+timeWindow), CalendarGrid,
+                                ShiftBlock, ShiftFormModal (senza più "ruolo richiesto"),
+                                TabbedCalendar (contenitore generico multi-vista, usato ora per
+                                costruire dinamicamente una tab per area)
+        courses/                CoursesCalendar (richiede areaId+timeWindow), CoursesGrid,
+                                CourseBlock, CourseFormModal, CoursesAvailablePanel
+        shifts/SubstitutionsPanel.jsx   "Sostituzioni" (ex "turni volanti"), scoped per area
         cancellation/           CancellationRequestsPanel (manager), MyCancellationRequests (self)
-        management/UserManagementSection.jsx
+        management/UserManagementSection.jsx   colonna "Aree" + azione "Modifica aree"
+        areas/AreasManagement.jsx   CRUD aree operative di una sede (solo Dirigente)
         profile/MyProfile.jsx
         stats/HoursStats.jsx     riusato sia per vista manager (tutti) sia self-service (proprie ore)
       pages/
         Login.jsx, FirstAccessSetup.jsx
-        AdminDashboard.jsx (responsabile), DirigenteDashboard.jsx
-        employee/               BagninoDashboard.jsx, IstruttoreDashboard.jsx,
-                                EmployeeDashboardRouter.jsx (registro categoria -> dashboard)
+        AdminDashboard.jsx (responsabile), DirigenteDashboard.jsx  entrambe: selettore sede +
+                                tab calendario dinamiche costruite dalle aree della sede attiva
+        dirigente/SediManagement.jsx   CRUD sedi (solo Dirigente), dentro DirigenteDashboard
+        employee/EmployeeDashboard.jsx   dashboard unica per qualunque dipendente: le tab e i
+                                pannelli "disponibili" si costruiscono dalle aree assegnate
+                                (user.areas), non più da una categoria/dashboard hardcoded
         superadmin/SuperAdminDashboard.jsx
-        CreateUser.jsx           creazione responsabile/dipendente (non crea dirigenti: quelli
-                                si creano solo dal pannello Super Admin)
-      constants/employeeCategories.js   unica fonte di verità categorie dipendente (frontend)
-      utils/                    dates.js, timeWindow.js (griglia oraria), courseLayout.js
-                                (algoritmo "lane" per corsi sovrapposti)
+        CreateUser.jsx           creazione responsabile/dipendente con multi-select aree operative
+                                (raggruppate per sede) al posto della vecchia categoria singola
+      utils/                    dates.js, timeWindow.js (createTimeWindow(start,end): fabbrica
+                                della finestra oraria del calendario, non più costanti fisse),
+                                courseLayout.js (algoritmo "lane" per corsi sovrapposti)
       styles.css                unico foglio di stile, classi riusate ovunque (.card, .table,
-                                .segmented, .modal-*, .badge, ecc.)
+                                .segmented, .modal-*, .badge, .checkbox-grid, .area-picker-group)
 ```
 
 ## Tecnologie utilizzate
@@ -129,15 +149,28 @@ vedi changelog).
 - `companies` — società/piscine: `name`, `email`, `phone`, `address`, `is_active`, `created_by`,
   `created_at`. `created_by` referenzia `users(id)` con FK aggiunta *dopo* la creazione di
   `users` nel file, per evitare dipendenza circolare tra le due `CREATE TABLE`.
-- `users` — `role` (`admin` | `user` | `dirigente` | `superadmin`), `category` (solo per
-  `role='user'`: `bagnino` | `istruttore`, NULL altrimenti), `company_id` (NULL solo per
-  `superadmin`, obbligatorio per tutti gli altri ruoli — CHECK `users_company_check`).
+- `sedi` — sedi fisiche di una società: `company_id`, `name`, `is_active`, `display_order`,
+  `calendar_start_time`/`calendar_end_time` (default `07:30`/`23:00`, personalizzabili dal
+  Dirigente). Una società creata da Super Admin riceve automaticamente una "Sede Principale"
+  vuota (nessuna area predefinita).
+- `operational_areas` — aree operative, create liberamente dal Dirigente **dentro** una sede
+  (Bagnini, Reception, Bar, Manutenzione, Istruttori, ...): `sede_id`, `company_id`, `name`,
+  `calendar_mode` (`shifts` | `courses`, sceglie quale motore di calendario usa l'area),
+  `display_order`, `is_active`. Nessuna area è predefinita dal codice.
+- `user_areas` — tabella ponte `(user_id, area_id)`: un dipendente può appartenere a più aree,
+  anche di sedi diverse. Sostituisce il vecchio `users.category` come fonte di verità.
+- `users` — `role` (`admin` | `user` | `dirigente` | `superadmin`). `category` (legacy:
+  `bagnino`/`istruttore`) **resta nello schema per compatibilità storica ma non è più la fonte di
+  verità**: sostituita da `user_areas`. `company_id` (NULL solo per `superadmin`, obbligatorio per
+  tutti gli altri ruoli — CHECK `users_company_check`).
 - `shifts` — turni: `type` (`fixed` ricorrente | `mobile` singolo | `volante` = "Sostituzione" in
   UI, disponibile), `user_id` (NULL per `volante` non ancora accettato), `company_id` **diretto**
-  (non dedotto da `user_id`, vedi sotto), `recurrence_rule` (solo per `fixed`), `date` (per
-  `mobile`/`volante`). Colonne aggiunte per le Sostituzioni (vedi sezione dedicata più sotto):
-  `status` (`active` | `cancelled_approved`), `required_category` (ruolo richiesto, NULL = nessun
-  vincolo), `origin_shift_id` (turno originale sostituito, NULL per creazione manuale).
+  (non dedotto da `user_id`, vedi sotto), `area_id`/`sede_id` **obbligatori** (ogni turno
+  appartiene sempre a un'area operativa, valorizzati fin dalla creazione), `recurrence_rule` (solo
+  per `fixed`), `date` (per `mobile`/`volante`). `status` (`active` | `cancelled_approved`),
+  `required_category` (**legacy, non più scritta per le nuove Sostituzioni**: superata da
+  `area_id`, vedi sezione dedicata), `origin_shift_id` (turno originale sostituito, NULL per
+  creazione manuale).
 - `shift_exceptions` — singole occorrenze escluse da un turno `fixed` ricorrente (quando una
   richiesta di cancellazione per quella data viene approvata). Non ha `company_id`: si accede
   sempre tramite `shift_id` (mai NULL), la società si eredita per JOIN.
@@ -146,52 +179,51 @@ vedi changelog).
   eliminato in seguito ad approvazione).
 - `courses` — corsi, stessa logica di `shifts` ma con `instructor_id` al posto di `user_id` e
   **nessun vincolo di esclusività sull'orario** (più corsi possono sovrapporsi, istruttori/spazi
-  diversi). `company_id` diretto.
+  diversi). `company_id` diretto, `area_id`/`sede_id` obbligatori (area con `calendar_mode='courses'`).
 
 **Perché `company_id` è diretto su `shifts`/`courses`/`cancellation_requests` e non dedotto da
 `user_id`/`instructor_id`**: un turno o corso `volante`/disponibile nasce **senza** utente
 assegnato (`user_id`/`instructor_id` NULL). Se la società si potesse dedurre solo tramite
 l'utente assegnato, un turno/corso non ancora accettato non avrebbe modo di sapere a quale
 società appartiene. Questo è un vincolo strutturale, non una scelta arbitraria — non
-"semplificare" rimuovendo la colonna e facendo un JOIN.
+"semplificare" rimuovendo la colonna e facendo un JOIN. **Stesso principio vale per `area_id`/
+`sede_id`** su `shifts`/`courses`: diretti e non dedotti, per la stessa ragione (una Sostituzione
+non ancora accettata non ha alcun dipendente da cui risalire all'area).
 
 ## Ruoli presenti nel sistema
 
-Gerarchia: **Super Admin → Società → Dirigente → Responsabili → Dipendenti**.
+Gerarchia: **Super Admin → Società → Sede → Area operativa → Dirigente/Responsabili/Dipendenti**.
 
 - **Super Admin** (`role='superadmin'`, `company_id` sempre NULL): non appartiene a nessuna
   società, le amministra tutte. Può creare/modificare/disattivare società, creare il primo
   dirigente di ciascuna, vedere statistiche aggregate di piattaforma. **Non entra mai** nei dati
-  operativi (turni/corsi/dipendenti specifici) di una società: resta un ruolo di supervisione a
-  livello di anagrafica società, non di gestione quotidiana (decisione esplicita dell'utente, non
-  cambiare senza riconferma). Pannello dedicato: `/superadmin`.
-- **Dirigente** (`role='dirigente'`): uno o più per società (in pratica di solito uno, ma il
-  Super Admin può crearne altri). Gestisce responsabili e dipendenti della propria società,
-  calendario turni/corsi, richieste di cancellazione, statistiche. Creato **solo** dal pannello
+  operativi (sedi/aree/turni/corsi/dipendenti specifici) di una società: resta un ruolo di
+  supervisione a livello di anagrafica società, non di gestione quotidiana (decisione esplicita
+  dell'utente, non cambiare senza riconferma). Pannello dedicato: `/superadmin`.
+- **Dirigente** (`role='dirigente'`): uno o più per società. Gestisce **sedi e aree operative
+  della propria società** (unico ruolo che può crearle/modificarle/eliminarle — i Responsabili le
+  selezionano ma non le gestiscono), responsabili e dipendenti, calendario turni/corsi (dentro le
+  aree già configurate), richieste di cancellazione, statistiche. Creato **solo** dal pannello
   Super Admin (`POST /api/companies/:id/dirigente`), mai da `CreateUser.jsx`/`POST /api/users`.
 - **Responsabile** (`role='admin'`, in UI "Responsabile"): creato dal dirigente, stesse
-  funzionalità gestionali del dirigente sul calendario/dipendenti, ma non può creare altri
-  responsabili né gestire l'account dirigente.
-- **Dipendente** (`role='user'`): categoria obbligatoria che determina dashboard e
-  funzionalità visibili. Categorie attuali:
-  - **Bagnino** — calendario turni, turni singoli/volanti, ore lavorate proprie, profilo.
-  - **Istruttore** — stesse funzioni comuni + **Calendario Corsi** (sola lettura: vede tutti i
-    corsi della struttura, non solo i propri) + pannello "Corsi disponibili" per accettare corsi
-    pubblicati senza istruttore assegnato.
-  - Nuove categorie future (Reception, Segreteria, Personal Trainer, Addetti pulizie...): si
-    aggiungono in `EMPLOYEE_CATEGORIES` (backend `constants/employeeCategories.js` e frontend
-    `constants/employeeCategories.js`, tenerli allineati), si aggiorna il CHECK
-    `users_category_check` in `schema.sql`, si crea la dashboard dedicata e la si registra in
-    `frontend/src/pages/employee/EmployeeDashboardRouter.jsx`. Nessun'altra parte del sistema
-    (routing, permessi, calendario turni) va toccata: è il punto di estendibilità pensato
-    apposta per questo.
-  - Account dipendente creati **prima** dell'introduzione delle categorie (`category` NULL)
-    ricadono automaticamente su `BagninoDashboard` (fallback in `EmployeeDashboardRouter.jsx`):
-    nessuna regressione per dati storici.
+  funzionalità gestionali del dirigente su calendario/dipendenti **dentro le sedi/aree già
+  configurate dal Dirigente**, ma non può creare altri responsabili, gestire l'account dirigente,
+  né creare/modificare/eliminare sedi o aree operative.
+- **Dipendente** (`role='user'`): può appartenere a **una o più aree operative** (tabella
+  `user_areas`), assegnate alla creazione o modificabili in qualsiasi momento
+  (`PUT /api/users/:id/areas`). La dashboard (`EmployeeDashboard.jsx`, generica) costruisce
+  dinamicamente una tab di calendario per ogni area assegnata (motore turni o corsi secondo
+  `calendar_mode` dell'area), più i pannelli "Sostituzioni disponibili"/"Corsi disponibili" per
+  ciascuna area di tipo turni/corsi. **Nessuna categoria fissa nel codice**: il Dirigente crea le
+  aree che vuole (Bagnini, Reception, Bar, Manutenzione, Istruttori...) e i dipendenti vi si
+  assegnano, senza toccare codice.
+  - Account dipendente creati **prima** dell'introduzione delle aree operative (con la vecchia
+    `category` valorizzata) sono stati migrati automaticamente a `user_areas` (vedi sezione
+    "Gerarchia Sedi → Aree operative" più sotto): nessuna regressione per dati storici.
 
 ## Gestione delle società/piscine
 
-Ogni società (`companies`) ha dirigente/responsabili/dipendenti/turni/corsi/richieste
+Ogni società (`companies`) ha sedi/aree/dirigente/responsabili/dipendenti/turni/corsi/richieste
 completamente isolati dalle altre tramite `company_id`. Punti chiave:
 
 - Il **login non chiede la società**: username ed email sono **univoci a livello globale di
@@ -201,13 +233,102 @@ completamente isolati dalle altre tramite `company_id`. Punti chiave:
 - Il JWT di sessione include `companyId` (oltre a `id`, `username`, `role`). Ogni controller
   esistente filtra le proprie query con `req.user.companyId`, e le operazioni di
   update/delete verificano esplicitamente che la riga appartenga alla stessa società prima di
-  agire (altrimenti 404, per non rivelare l'esistenza di risorse di altre società).
+  agire (altrimenti 404, per non rivelare l'esistenza di risorse di altre società). Lo stesso
+  principio si applica ora a `sedeId`/`areaId`: ogni endpoint di sedi/aree/turni/corsi verifica
+  che l'entità richiesta appartenga alla società di chi opera.
 - **Disattivare una società** (`is_active=false`) blocca solo i **nuovi login** (controllo in
   `authController.login()`). Le sessioni già aperte (JWT, max 8h) restano valide fino a scadenza
   naturale — **scelta deliberata**, coerente con il fatto che in nessun altro punto del sistema
   si fa un controllo a DB ad ogni richiesta autenticata (si fida sempre del JWT). Non aggiungere
   un controllo DB per-request "per sicurezza" senza discuterne: sarebbe un cambio di modello
   architetturale, non un bugfix.
+- **Una nuova società creata dal Super Admin riceve automaticamente una "Sede Principale" vuota**
+  (nessuna area predefinita): il Dirigente parte da zero e costruisce la propria struttura. Le
+  società preesistenti alla migrazione hanno invece ricevuto aree "Bagnino"/"Istruttore" per
+  compatibilità con i dati storici (vedi sezione dedicata).
+
+## Gerarchia Sedi → Aree operative (configurabilità)
+
+Introdotta per rendere il gestionale **completamente configurabile dal Dirigente senza modifiche
+al codice**: prima esisteva un'unica categoria fissa di dipendente (`bagnino`/`istruttore`,
+hardcoded), un'unica dashboard per categoria, due domini paralleli hardcoded (turni/corsi), un
+solo calendario per società con orari fissi (07:30-23:00). Ora:
+
+### Modello
+
+- **Sede** (`sedi`): una società può avere più sedi fisiche. Ogni sede ha un proprio intervallo
+  orario per il calendario (`calendar_start_time`/`calendar_end_time`, es. 05:00→00:00),
+  configurabile liberamente dal Dirigente (`SediManagement.jsx`). Il "00:00" come orario di fine
+  è trattato come mezzanotte/24:00 (fine giornata), non come inizio, sia lato validazione backend
+  (`isWithinDailyWindow`) sia lato calcolo griglia frontend (`createTimeWindow`).
+- **Area operativa** (`operational_areas`): dentro una sede, il Dirigente crea liberamente le
+  aree che rispecchiano la propria organizzazione (Bagnini, Reception, Bar, Manutenzione,
+  Istruttori, ...). Ogni area sceglie alla creazione un **motore di calendario**
+  (`calendar_mode`): `'shifts'` (turni fisso/singolo/Sostituzione — il caso generale, adatto alla
+  maggior parte delle aree) oppure `'courses'` (corsi nominati con sovrapposizioni affiancate —
+  per aree stile "Istruttori"). **Nessuna fusione dei due motori**: si è scelto di riusare i due
+  motori esistenti (già collaudati, con tutta la logica Sostituzioni/cancellazioni costruita sui
+  turni) invece di crearne un terzo generico, per minimizzare il rischio. Il tipo di calendario si
+  può cambiare solo se l'area non ha ancora turni/corsi (altrimenti i dati esistenti diventerebbero
+  incoerenti con la nuova modalità).
+- **Assegnazione dipendente-area** (`user_areas`): un dipendente può appartenere a più aree, anche
+  di sedi diverse. Sostituisce interamente `users.category`.
+- **Ogni turno/corso appartiene sempre a un'area** (`shifts.area_id`/`courses.area_id`,
+  obbligatori, mai NULL): non esistono più calendari "generali" di società, solo calendari di
+  area. `sede_id` si eredita dall'area (denormalizzato per comodità di query, sempre coerente
+  con `area.sede_id` per costruzione applicativa).
+
+### Intuizione chiave: l'area sostituisce il "ruolo richiesto"
+
+Prima delle aree, una Sostituzione portava un `required_category` esplicito perché non c'era
+altro modo di sapere a chi fosse destinata (non ha ancora un dipendente assegnato). Da quando
+**ogni turno — Sostituzioni comprese — appartiene sempre a un'area operativa**, l'area **è già**
+il "ruolo richiesto": una Sostituzione creata nel calendario dell'area "Bagnini" è per definizione
+per chi è assegnato a quell'area. Conseguenze pratiche:
+- `shifts.required_category` **non viene più scritta** per le nuove Sostituzioni (resta nello
+  schema per lo storico, letta solo per compatibilità, mai più fonte di verità applicativa).
+- Il selettore "Ruolo richiesto" in `ShiftFormModal` è stato **rimosso**: il contesto (l'area/tab
+  in cui si crea la Sostituzione) lo sostituisce implicitamente.
+- `shiftController.listAvailableShifts`/`claimShift` filtrano ora per `user_areas` (il dipendente
+  è assegnato all'area del turno?), non più per categoria.
+- `cancellationController.approveRequest`: la nuova Sostituzione generata eredita `area_id`/
+  `sede_id` **direttamente dal turno originale**, non più dalla categoria del dipendente titolare
+  — più semplice e sempre corretto per costruzione.
+- Stesso principio per i corsi: `courseController.claimCourse` verifica "il dipendente è
+  assegnato a quest'area" invece di "categoria = istruttore".
+
+### Migrazione dati preesistenti (idempotente, in `schema.sql`)
+
+Un solo `npm run migrate` porta un database "a categorie fisse" allo stato configurabile senza
+perdita di funzionalità:
+1. Ogni società priva di sedi riceve una "Sede Principale".
+2. Ogni sede priva di aree riceve due aree che replicano esattamente le vecchie categorie:
+   "Bagnino" (`calendar_mode='shifts'`) e "Istruttore" (`calendar_mode='courses'`).
+3. Ogni dipendente con `category` valorizzata viene collegato (`user_areas`) all'area
+   equivalente della sede di default della propria società.
+4. Ogni turno/corso esistente viene collegato all'area "Bagnino"/"Istruttore" della sede di
+   default della propria società (`area_id`/`sede_id` backfillati, poi resi `NOT NULL`).
+
+Il risultato: **zero regressioni** per le società esistenti (dashboard, calendari, permessi
+restano identici subito dopo la migrazione), ma da quel momento il Dirigente può rinominare,
+aggiungere, riordinare o rimuovere aree/sedi liberamente — la migrazione è solo un punto di
+partenza compatibile, non un vincolo permanente. Le società create **dopo** questa migrazione
+(via Super Admin) non ricevono invece alcuna area predefinita: partono da una sede vuota, così da
+non imporre nomi di categoria legacy a clienti nuovi.
+
+### Permessi
+
+Gestione sedi/aree (crea/modifica/elimina/riordina) **riservata al Dirigente**: coerente con
+permessi già esistenti (es. solo il Dirigente crea i Responsabili). I Responsabili selezionano
+la sede su cui lavorare ma non la gestiscono. Sia Responsabili sia Dirigente possono leggere
+l'elenco sedi/aree per navigare (`GET /api/sedi`, `GET /api/sedi/:id/areas` con `requireManager`).
+
+### Cancellazione di sedi/aree
+
+Nessun hard-delete distruttivo se l'entità ha dati collegati (coerente con l'assenza di
+hard-delete altrove nel sistema: companies, cancellation_requests). Una sede non si può eliminare
+se ha aree operative; un'area non si può eliminare se ha turni, corsi o dipendenti assegnati. In
+questi casi si usa `isActive=false` per "nascondere" l'entità dalla navigazione mantenendo i dati.
 
 ## Logica delle Sostituzioni (ex "turni volanti")
 
@@ -218,10 +339,10 @@ si rinomina solo l'etichetta mostrata, mai il dato, per evitare una migrazione d
 e non necessaria.
 
 Una Sostituzione nasce in due modi:
-1. **Creazione manuale** (responsabile/dirigente, da `ShiftFormModal`): data, orario, note e un
-   **ruolo richiesto obbligatorio** (`required_category`, stessi valori di `users.category`:
-   `bagnino`/`istruttore`). Endpoint invariati (`POST/PUT /api/shifts`), solo il nuovo campo
-   `requiredCategory` nel body.
+1. **Creazione manuale** (responsabile/dirigente, da `ShiftFormModal`, dentro una specifica area):
+   data, orario, note. Il "ruolo richiesto" non è più un campo esplicito: è l'area stessa (vedi
+   sezione "Gerarchia Sedi → Aree operative" sopra). Endpoint invariati (`POST/PUT /api/shifts`),
+   con `areaId` obbligatorio nel body.
 2. **Creazione automatica da cancellazione approvata** (`cancellationController.approveRequest`):
    quando un responsabile/dirigente approva la richiesta di cancellazione di un dipendente, il
    turno originale **non viene più eliminato**:
@@ -232,48 +353,52 @@ Una Sostituzione nasce in due modi:
      (`getExpandedShifts` filtra sempre `status='active'`). Non esiste (ancora) una UI dedicata
      per consultare questo storico: il dato è persistito ma solo interrogabile via DB.
    In entrambi i casi viene creata una nuova riga `shifts` con `type='volante'`, `user_id=NULL`,
-   `origin_shift_id` = id del turno originale, `required_category` ereditata dalla categoria del
-   dipendente titolare del turno cancellato (NULL se l'utente non ne ha una — sostituzione aperta
-   a tutti, non un errore).
+   `origin_shift_id` = id del turno originale, `area_id`/`sede_id` **ereditati direttamente dal
+   turno originale** (non più dalla categoria del dipendente).
 
 **Disponibilità e claim** (`shiftController.listAvailableShifts`/`claimShift`,
 `shiftExpansion.hasOverlappingShift`):
-- Un responsabile/dirigente vede **tutte** le Sostituzioni pendenti della società (vista
-  "manage", invariata, può solo eliminarle).
-- Un dipendente vede solo le Sostituzioni **compatibili**: `required_category` combacia con la
-  propria categoria (o è NULL) *e* non ha già, in quella data/orario, un turno attivo che si
-  sovrappone (fisso espanso o singolo/Sostituzione già accettata). La sovrapposizione si calcola
-  riusando `getExpandedShifts` sul solo giorno interessato, stessa funzione del calendario.
+- Un responsabile/dirigente vede **tutte** le Sostituzioni pendenti di un'area (vista "manage",
+  invariata, può solo eliminarle).
+- Un dipendente vede solo le Sostituzioni **compatibili**: assegnato all'area del turno (tramite
+  `user_areas`) *e* non ha già, in quella data/orario, un turno attivo che si sovrappone (fisso
+  espanso o singolo/Sostituzione già accettata, **in qualunque area**: la sovrapposizione si
+  controlla sempre su tutte le aree del dipendente, non solo su quella del turno). La
+  sovrapposizione si calcola riusando `getExpandedShifts` sul solo giorno interessato, stessa
+  funzione del calendario.
 - Il filtro lato lista è solo un aiuto UX: `claimShift` **ripete sempre** entrambi i controlli
-  (ruolo + sovrapposizione) prima di assegnare, per non fidarsi di chi chiama l'endpoint
+  (area + sovrapposizione) prima di assegnare, per non fidarsi di chi chiama l'endpoint
   direttamente bypassando la UI.
 
 ## Funzionalità già completate
 
 - Autenticazione JWT con primo accesso via codice iniziale + impostazione password personale.
 - Gestione utenti gerarchica con permessi differenziati per ruolo (`canManageTargetRole`).
+- **Sedi e aree operative configurabili dal Dirigente**: CRUD sedi (con orari calendario
+  personalizzati), CRUD aree operative per sede (con motore di calendario a scelta, riordino),
+  assegnazione dipendenti a una o più aree, dashboard dipendente/manager costruite dinamicamente
+  dalle aree esistenti (nessuna dashboard hardcoded per "tipo di dipendente").
 - Calendario turni: fissi ricorrenti (regola settimanale o giornaliera), singoli, Sostituzioni
-  (pubblicate senza dipendente, con ruolo richiesto, primo dipendente compatibile che accetta se
-  le aggiudica — claim atomico via `UPDATE ... WHERE user_id IS NULL`, vedi sezione dedicata).
+  (pubblicate senza dipendente, primo dipendente compatibile dell'area che accetta se le
+  aggiudica — claim atomico via `UPDATE ... WHERE user_id IS NULL`, vedi sezione dedicata),
+  scoped per area operativa, con intervallo orario personalizzabile per sede.
 - Cancellazione turno: **sempre** su richiesta con approvazione di responsabile/dirigente
   (nessuna cancellazione automatica, qualunque sia il tipo o quanto manchi alla data). Per un
   turno fisso ricorrente si cancella solo la singola occorrenza richiesta (tabella
   `shift_exceptions`), la serie resta intatta; per un turno singolo/Sostituzione la riga resta in
   tabella con `status='cancelled_approved'` invece di essere eliminata. L'approvazione genera
-  sempre automaticamente una nuova Sostituzione collegata (vedi sezione dedicata).
-- Categorie dipendente (Bagnino, Istruttore) con dashboard dedicate.
-- Calendario Corsi per istruttori: stessa logica fisso/singolo/disponibile dei turni, ma con
-  supporto a corsi sovrapposti nello stesso orario mostrati **affiancati** (algoritmo di layout a
-  "corsie" in `frontend/src/utils/courseLayout.js`), non nascosti l'uno sull'altro. Gestione CRUD
-  completa lato dirigente/responsabile, incluso drag & drop per spostare un corso su un altro
-  giorno (nativo HTML5, nessuna libreria). I corsi fissi ricorrenti **non** sono trascinabili
+  sempre automaticamente una nuova Sostituzione collegata, nella stessa area (vedi sezione dedicata).
+- Calendario Corsi: stessa logica fisso/singolo/disponibile dei turni, ma con supporto a corsi
+  sovrapposti nello stesso orario mostrati **affiancati** (algoritmo di layout a "corsie" in
+  `frontend/src/utils/courseLayout.js`), non nascosti l'uno sull'altro. Gestione CRUD completa
+  lato dirigente/responsabile, incluso drag & drop per spostare un corso su un altro giorno
+  (nativo HTML5, nessuna libreria). I corsi fissi ricorrenti **non** sono trascinabili
   (l'occorrenza non è una riga a sé: si modificano dal modulo, che agisce sull'intera serie).
-  "Corsi disponibili" con claim riservato alla categoria istruttore (verificata a DB, non nel
-  JWT).
-- Calendario unificato a tab (`TabbedCalendar.jsx`, componente generico riutilizzabile): un solo
-  calendario per pagina con selettore "Turni Bagnini" / "Corsi Istruttori" (o "Turni" / "Corsi
-  Istruttori" nella dashboard personale dell'istruttore), invece di due calendari separati sulla
-  stessa pagina.
+  "Corsi disponibili" con claim riservato a chi è assegnato all'area (verificato a DB, non nel
+  JWT), scoped per area come i turni.
+- Calendario unificato a tab (`TabbedCalendar.jsx`, componente generico riutilizzabile): le tab
+  si costruiscono dinamicamente dalle aree operative disponibili (una per area), non più
+  hardcoded turni/corsi.
 - Statistiche ore lavorate: vista aggregata per manager, vista self-service per il dipendente
   (stesso componente `HoursStats.jsx`, backend forza `filterUserId = req.user.id` quando
   `role==='user'`).
@@ -284,22 +409,23 @@ Una Sostituzione nasce in due modi:
 
 ## Funzionalità in sviluppo
 
-Nessuna al momento: l'ultima funzionalità (multi-azienda + Super Admin) è stata completata,
-testata (locale e produzione) e deployata.
+Nessuna al momento: l'ultima funzionalità (Sedi/Aree operative configurabili) è stata completata,
+testata (locale, in attesa di verifica produzione) e documentata.
 
 ## Funzionalità future previste
 
 - **Abbonamenti/piani per società**: la tabella `companies` è pensata come punto di aggancio per
   una futura tabella `subscriptions`/`plans` (FK su `companies.id`) — non ancora costruita.
 - **Gestione pagamenti** legata agli abbonamenti.
-- **Limiti per piano** (es. numero massimo di dipendenti/società, funzionalità premium).
+- **Limiti per piano** (es. numero massimo di dipendenti/società/sedi, funzionalità premium).
 - **Statistiche di utilizzo** della piattaforma (oltre ai conteggi aggregati già presenti in
   `getPlatformStats`).
-- Nuove categorie di dipendente (Reception, Segreteria, Personal Trainer, Addetti pulizie...): il
-  meccanismo di estendibilità esiste già, vedi sopra.
-- Possibile evoluzione: dare al dirigente la possibilità di modificare la categoria di un
-  dipendente esistente dopo la creazione (oggi la categoria si sceglie solo alla creazione,
-  nessun endpoint di modifica successiva).
+- **UI di storico** per i turni con `status='cancelled_approved'`: oggi il dato persiste nel DB
+  ma è consultabile solo via query diretta, non da una schermata dedicata.
+- **Vista calendario multi-area simultanea**: oggi `TabbedCalendar` mostra un'area per volta;
+  si potrebbe aggiungere una tab "Tutte le aree" che impila le viste (idea già annotata in
+  `EmployeeDashboard.jsx` come possibile estensione, non ancora implementata per le dashboard
+  manager).
 - Possibile evoluzione: permettere al Super Admin di eliminare (non solo disattivare) una
   società — oggi non esiste un endpoint DELETE per `companies`, la disattivazione è l'unico
   meccanismo "soft" previsto, deliberatamente (coerente con l'assenza di hard-delete altrove nel
@@ -310,30 +436,40 @@ testata (locale e produzione) e deployata.
 - **Niente ORM**: query SQL dirette con `pg`, parametrizzate. Ogni controller ha le proprie query,
   niente layer di astrazione condiviso tra domini (turni e corsi hanno controller/service
   *paralleli ma separati*, non un modulo generico condiviso — scelta deliberata per permettere
-  alle due logiche di divergere in futuro senza intaccarsi a vicenda; vedi es. la cancellazione
-  turno che richiede sempre approvazione, mentre i corsi non hanno un flusso di cancellazione
-  equivalente).
+  alle due logiche di divergere in futuro senza intaccarsi a vicenda).
+- **Due motori di calendario riusati, non fusi, per le aree operative**: ogni area sceglie tra
+  `calendar_mode='shifts'` o `'courses'` invece di un terzo motore generico. Scelta deliberata:
+  molto meno rischiosa di una fusione completa, riusa integralmente la logica Sostituzioni/
+  cancellazioni già costruita su `shifts`. Non introdurre un modello di dati unificato per
+  turni+corsi senza ripensare da zero cancellazioni/Sostituzioni/storico.
+- **L'area operativa sostituisce il concetto di "ruolo richiesto"**: da quando ogni turno
+  appartiene sempre a un'area, non serve più un campo separato per "chi può accettare una
+  Sostituzione" (vedi sezione dedicata). Non reintrodurre un campo `requiredCategory`/
+  `requiredArea` esplicito: sarebbe ridondante con `area_id`.
 - **JWT stateless, nessuna verifica a DB ad ogni richiesta**: `role`, `companyId` (e per i
   session token anche `username`) sono presi per buoni dal JWT in ogni middleware/controller.
-  Le uniche eccezioni deliberate sono verifiche puntuali dove il dato non può stare nel JWT
-  (es. `category` dell'istruttore per il claim di un corso, verificata a DB ad ogni richiesta
-  perché cambierebbe raramente ma con conseguenze di sicurezza se stale).
+  Le eccezioni deliberate sono verifiche puntuali dove il dato non può stare nel JWT (es.
+  appartenenza a un'area per il claim di turno/corso, verificata a DB ad ogni richiesta perché
+  cambierebbe raramente ma con conseguenze di sicurezza se stale).
 - **Frontend "dumb", scoping lato backend**: la UI non sa nulla di società/isolamento dati; ogni
-  filtro è applicato dal backend tramite `req.user.companyId`. Questo ha permesso di aggiungere
-  il multi-tenant **senza modificare una sola dashboard esistente**.
+  filtro è applicato dal backend tramite `req.user.companyId` (e ora anche `areaId`/`sedeId`
+  verificati contro la società di chi opera). Questo ha permesso di aggiungere sia il multi-tenant
+  sia le aree operative **senza logica di autorizzazione duplicata lato client**.
 - **Pattern "type-aware" ripetuto per turni e corsi**: entrambi usano lo stesso schema di tipi
   (`fixed`/`mobile`/`volante`), la stessa funzione di espansione ricorrenze
   (`expandRecurrenceDates` in `utils/recurrence.js`, condivisa), e la stessa struttura di
-  controller (`validateTypeFields`, CRUD, `available` + `claim`). Se si modifica la logica di un
-  tipo in uno dei due domini, valutare se la modifica ha senso anche nell'altro (ma non sono
-  automaticamente sincronizzati: sono file separati per design, vedi sopra).
+  controller (`validateTypeFields`, CRUD, `available` + `claim`, ora entrambi scoped per
+  `area_id`). Se si modifica la logica di un tipo in uno dei due domini, valutare se la modifica
+  ha senso anche nell'altro (ma non sono automaticamente sincronizzati: sono file separati per
+  design, vedi sopra).
 - **Autenticazione unica per primo accesso e login standard**: stesso endpoint
   `POST /api/auth/login`, il backend distingue in base a `must_change_password`.
 - **`toSafeUser` duplicata** in `authController.js` e `userController.js` (non condivisa): due
   fonti di verità per la stessa proiezione dati. **Fonte già nota di bug** (vedi sotto): quando si
   aggiunge un campo a un utente che deve arrivare al frontend, va aggiunto **in entrambe le
-  copie**, altrimenti il campo appare mancante solo in certi flussi (es. dopo login ma non nelle
-  liste, o viceversa).
+  copie** — per il campo `areas[]` si è invece introdotta `services/userAreas.js` come unica
+  fonte di verità per quella specifica proiezione, chiamata da entrambi i controller, proprio per
+  non ripetere lo stesso errore.
 
 ## Logiche importanti che non devono essere modificate senza motivo
 
@@ -347,27 +483,39 @@ testata (locale e produzione) e deployata.
   `shift_exceptions` (la serie non viene mai toccata).
 - **`type='volante'` a DB resta invariato per le Sostituzioni**: la UI non usa più il termine
   "turno volante", ma il valore nel database non cambia (stessa convenzione già adottata per
-  "Turno mobile" → "Turno singolo": si rinomina solo l'etichetta, mai il dato salvato). Non
-  rinominare il valore CHECK/enum senza un motivo forte: nessun requisito lo richiede.
-- **Il filtro di disponibilità delle Sostituzioni (ruolo + sovrapposizione) è solo UX**:
-  `claimShift` deve sempre riverificare entrambi i controlli lato server prima di assegnare (vedi
-  sezione "Logica delle Sostituzioni"). Non rimuovere questo doppio controllo per "semplificare".
+  "Turno mobile" → "Turno singolo": si rinomina solo l'etichetta, mai il dato salvato).
+- **`shifts.area_id`/`courses.area_id` obbligatori e mai dedotti**: ogni turno/corso appartiene
+  sempre a un'area fin dalla creazione, esattamente come `company_id` non si deduce da
+  `user_id`/`instructor_id` (stesso motivo: un turno/corso "disponibile" non ha ancora un
+  dipendente da cui risalire). Non rimuovere questi campi per "semplificare".
+- **Il "ruolo richiesto" di una Sostituzione è l'area, non un campo separato**: non reintrodurre
+  `requiredCategory`/un nuovo `requiredArea` esplicito nella UI — sarebbe ridondante e
+  incoerente col modello (vedi sezione "Gerarchia Sedi → Aree operative").
+- **Il filtro di disponibilità delle Sostituzioni (area + sovrapposizione) è solo UX**:
+  `claimShift`/`claimCourse` devono sempre riverificare entrambi i controlli lato server prima di
+  assegnare. Non rimuovere questo doppio controllo per "semplificare".
+- **Gestione sedi/aree riservata al Dirigente**: i Responsabili possono selezionare/leggere ma
+  non creare/modificare/eliminare sedi o aree. Non allargare questo permesso senza riconferma
+  esplicita (decisione presa insieme all'utente durante la progettazione).
+- **Nessun hard-delete di sedi/aree con dati collegati**: coerente con l'assenza di hard-delete
+  distruttivi altrove nel sistema (companies, cancellation_requests). Usare `isActive=false`.
+- **Cambio di `calendar_mode` di un'area bloccato se ha già turni/corsi**: altrimenti i dati
+  esistenti diventerebbero incoerenti con il nuovo motore di calendario.
 - **`company_id` diretto su `shifts`/`courses`/`cancellation_requests`**: vedi spiegazione sopra,
   non derivarlo per JOIN da `user_id`/`instructor_id` (si romperebbero i turni/corsi
   "disponibili").
 - **Username/email univoci a livello di piattaforma**, non per società: necessario per il login
   senza selettore azienda.
 - **`npm run db:reset` non va mai eseguito contro il database di produzione**: cancella utenti e
-  dati applicativi (tranne dirigente "di bootstrap" e super admin). Prima del multi-tenant era
-  sicuro (dati di una sola azienda); ora cancellerebbe i dati di **tutte** le società. Va usato
-  solo in locale/dev. `npm run setup` (che lo include) è anch'esso solo per bootstrap locale.
+  dati applicativi (tranne dirigente "di bootstrap" e super admin). Va usato solo in locale/dev.
+  `npm run setup` (che lo include) è anch'esso solo per bootstrap locale.
 - **Migrazioni sempre idempotenti in `schema.sql`**, mai riscritte da zero: deve poter girare
   ripetutamente sia su DB vuoti sia sul DB di produzione già popolato, senza perdita dati. Ordine:
   aggiungi colonna nullable → backfill → vincoli NOT NULL/CHECK → indici.
 - **Super Admin non gestisce dati operativi di una società specifica** (decisione esplicita
   dell'utente): non aggiungere endpoint che permettano al super admin di modificare
-  turni/corsi/dipendenti di una singola società senza prima riconfermare che questo vincolo
-  debba cambiare.
+  sedi/aree/turni/corsi/dipendenti di una singola società senza prima riconfermare che questo
+  vincolo debba cambiare.
 - **Corsi fissi ricorrenti non trascinabili** (drag & drop) nel Calendario Corsi: l'occorrenza
   condivide la riga con tutta la serie, uno spostamento via drag interpretato come "sposta solo
   questa occorrenza" sarebbe fuorviante. Si modificano solo dal modulo di modifica.
@@ -387,21 +535,18 @@ testata (locale e produzione) e deployata.
   deploy).
 - **Dashboard istruttore mostrava sempre "Bagnino"**: `authController.js` aveva una propria
   `toSafeUser` che non includeva `category` (poi anche `companyId`), diversa da quella di
-  `userController.js`. Vedi la nota sopra sulla duplicazione di `toSafeUser`: è una fonte di bug
-  ricorrente, controllare **entrambe le copie** ogni volta che si aggiunge un campo utente.
-- **Turni volanti "non visibili ai dipendenti"**: indagine approfondita non ha trovato un bug
-  reale nel codice (l'endpoint `/api/shifts/available` filtra correttamente); il sintomo era
-  quasi certamente dovuto al problema di login/CORS in produzione risolto in parallelo. Se il
-  problema si ripresentasse, verificare per primo lo stato della connessione API (console
-  browser) prima di modificare la logica di visibilità.
+  `userController.js`. Causa risolta strutturalmente introducendo `services/userAreas.js` come
+  unica fonte di verità per la proiezione "aree di un utente", condivisa da entrambi i
+  controller — vedi decisione architetturale dedicata.
 - **Migrazioni schema fallite per ordine errato delle istruzioni**: capitato più volte durante lo
-  sviluppo del multi-tenant (indice creato prima della colonna, vincolo CHECK aggiunto prima del
-  backfill, righe orfane in `cancellation_requests` senza società deducibile). Vedi la regola
-  sull'ordine delle migrazioni sopra.
+  sviluppo del multi-tenant e delle Sedi/Aree (indice creato prima della colonna, vincolo CHECK
+  aggiunto prima del backfill). Vedi la regola sull'ordine delle migrazioni sopra.
+- **`CoursesCalendar` chiamava `GET /api/users` anche in modalità sola lettura** (dipendente):
+  regressione introdotta durante il refactor per le aree operative (rimossa per errore la
+  guardia `if (isManage)`), causava 403 per i dipendenti. Risolta ripristinando la guardia:
+  `listUsers` (riservato a `requireManager`) va chiamato solo in `mode='manage'`.
 
 ### Aperti
-- Nessun problema noto aperto al momento della stesura di questo file (dopo l'introduzione del
-  multi-tenant, tutte le verifiche locali e di produzione sono passate).
 - **Nessuna UI di storico** per i turni con `status='cancelled_approved'`: il dato persiste nel
   DB (non viene più eliminato) ma oggi è consultabile solo via query diretta, non da una schermata
   dedicata. Possibile estensione futura se il cliente lo richiede esplicitamente.
@@ -416,9 +561,10 @@ testata (locale e produzione) e deployata.
 3. Per modifiche allo schema DB: segui il pattern idempotente esistente in `schema.sql`, testa in
    locale (`npm run migrate` due volte di fila, deve essere no-op la seconda), poi in produzione
    con la stessa connection string usata finora (mai `db:reset` in produzione).
-4. Per nuove categorie di dipendente o nuove viste calendario: usa i punti di estendibilità già
-   pensati (`EMPLOYEE_CATEGORIES`, `EmployeeDashboardRouter`, `TabbedCalendar`) invece di
-   introdurre nuovi pattern paralleli.
+4. Per nuove aree operative o nuovi tipi di calendario: usa i punti di estendibilità già pensati
+   (il Dirigente crea aree via UI, nessun codice nuovo richiesto per una nuova "categoria" di
+   dipendente; per un terzo motore di calendario oltre a `shifts`/`courses`, valuta prima se è
+   davvero necessario — i due esistenti coprono la stragrande maggioranza dei casi).
 5. Dopo la modifica: aggiorna la sezione [Changelog](#changelog--aggiornamenti) qui sotto.
 
 ## Changelog / aggiornamenti
@@ -431,17 +577,37 @@ Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cos
 - **2026-07-07** — Trasformazione dei turni "volanti" in "Sostituzioni": rinominato solo il testo
   UI (`type='volante'` invariato a DB, stessa convenzione del rename "Turno mobile" → "Turno
   singolo"). Nuova logica: creazione manuale con ruolo richiesto obbligatorio
-  (`required_category`), creazione automatica alla cancellazione approvata di un turno esistente
-  (che ora non viene più eliminato ma passa a `status='cancelled_approved'`, storico), filtro di
-  disponibilità per ruolo + assenza di sovrapposizione oraria (`hasOverlappingShift`), doppio
-  controllo server-side anche al momento del claim. File principali: `backend/src/db/schema.sql`
-  (colonne `status`/`required_category`/`origin_shift_id` su `shifts`),
-  `backend/src/services/shiftExpansion.js`, `backend/src/controllers/shiftController.js`,
-  `backend/src/controllers/cancellationController.js`,
-  `frontend/src/components/shifts/SubstitutionsPanel.jsx` (rinominato da
-  `VolanteShiftsPanel.jsx`), `frontend/src/components/calendar/ShiftFormModal.jsx` e
-  `CalendarPage.jsx`. Verificato via curl (isolamento ruolo/sovrapposizione, entrambi i rami
-  fixed/mobile della cancellazione approvata) e nel browser (creazione manuale, claim, calendario
-  aggiornato). Nessuna modifica ai corsi/"corso disponibile" (fuori scope, dominio parallelo ma
-  separato). Da ricordare: non esiste ancora una UI di storico per `status='cancelled_approved'`
-  (vedi "Problemi risolti e problemi ancora aperti" → Aperti).
+  (`required_category`, poi superato dalle aree operative nella modifica successiva), creazione
+  automatica alla cancellazione approvata di un turno esistente (che ora non viene più eliminato
+  ma passa a `status='cancelled_approved'`, storico), filtro di disponibilità per ruolo + assenza
+  di sovrapposizione oraria (`hasOverlappingShift`), doppio controllo server-side anche al momento
+  del claim. File principali: `backend/src/db/schema.sql`, `shiftExpansion.js`,
+  `shiftController.js`, `cancellationController.js`,
+  `frontend/src/components/shifts/SubstitutionsPanel.jsx`, `ShiftFormModal.jsx`,
+  `CalendarPage.jsx`. Verificato via curl e nel browser, sia in locale sia in produzione.
+- **2026-07-07** — **Sedi e Aree operative configurabili**: trasformazione più ampia della
+  sessione. Nuove tabelle `sedi`/`operational_areas`/`user_areas`; `shifts`/`courses` ricevono
+  `area_id`/`sede_id` obbligatori; `required_category` superata dal concetto di area (vedi
+  sezione dedicata "Gerarchia Sedi → Aree operative" e decisione architettuale correlata); nuovo
+  `sedeController.js`/`areaController.js` + routes `sedi.js`/`areas.js`; `userController.js`
+  sostituisce `category` con `areaIds[]` (endpoint `PUT /api/users/:id/areas` per riassegnare in
+  qualsiasi momento); `shiftController.js`/`courseController.js` scoped per `areaId` con
+  validazione oraria dinamica per sede (`isWithinDailyWindow` ora parametrica);
+  `cancellationController.js` eredita `area_id`/`sede_id` dal turno originale. Frontend: nuovo
+  `hooks/useSedeSelection.js`, `pages/dirigente/SediManagement.jsx`,
+  `components/areas/AreasManagement.jsx`, `pages/employee/EmployeeDashboard.jsx` (sostituisce
+  `EmployeeDashboardRouter`/`BagninoDashboard`/`IstruttoreDashboard`, rimossi insieme a
+  `constants/employeeCategories.js` frontend e backend, verificati non più referenziati prima
+  della rimozione); `AdminDashboard.jsx`/`DirigenteDashboard.jsx` riscritte con selettore sede +
+  tab calendario dinamiche; `CreateUser.jsx`/`UserManagementSection.jsx` con multi-select aree
+  invece di categoria singola; `utils/timeWindow.js` da costanti fisse a
+  `createTimeWindow(start,end)`; `CalendarGrid`/`ShiftBlock`/`CoursesGrid`/`CourseBlock` ricevono
+  la finestra oraria come prop. Migrazione idempotente con backfill automatico (Sede Principale +
+  aree Bagnino/Istruttore per compatibilità dati storici; nessuna area predefinita per società
+  create dopo questa migrazione). Bug trovato e risolto durante la verifica: `CoursesCalendar`
+  chiamava `/api/users` anche per dipendenti in sola lettura (403), mancava la guardia
+  `if (isManage)` persa nel refactor. Verificato a fondo via curl (isolamento per area, guardie
+  su calendar_mode/delete, validazione orari per sede) e nel browser end-to-end (creazione sedi/
+  aree, dipendente multi-area con dashboard dinamica a due tab, creazione e claim di una
+  Sostituzione). Migrazione produzione ed eventuale smoke test: vedi voce successiva se già
+  eseguiti al momento della lettura.

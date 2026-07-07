@@ -52,8 +52,8 @@ export const api = {
   me: (token) => request('/auth/me', { token }),
   createUser: (payload, token) => request('/users', { method: 'POST', body: payload, token }),
   listUsers: (token) => request('/users', { token }),
-  getCalendar: (token, { start, end, userId }) => {
-    const params = new URLSearchParams({ start, end });
+  getCalendar: (token, { start, end, areaId, userId }) => {
+    const params = new URLSearchParams({ start, end, areaId });
     if (userId) params.set('userId', userId);
     return request(`/calendar?${params.toString()}`, { token });
   },
@@ -62,12 +62,13 @@ export const api = {
   deleteShift: (id, token) => request(`/shifts/${id}`, { method: 'DELETE', token }),
   deleteShiftSelf: (id, token, date) =>
     request(`/shifts/${id}/self`, { method: 'DELETE', token, body: date ? { date } : undefined }),
-  listAvailableShifts: (token) => request('/shifts/available', { token }),
+  listAvailableShifts: (token, areaId) => request(`/shifts/available?areaId=${areaId}`, { token }),
   claimShift: (id, token) => request(`/shifts/${id}/claim`, { method: 'POST', token }),
 
   resetPassword: (id, newPassword, token) =>
     request(`/users/${id}/reset-password`, { method: 'POST', body: { newPassword }, token }),
   regenerateCode: (id, token) => request(`/users/${id}/regenerate-code`, { method: 'POST', token }),
+  updateUserAreas: (id, areaIds, token) => request(`/users/${id}/areas`, { method: 'PUT', body: { areaIds }, token }),
   deleteUser: (id, token) => request(`/users/${id}`, { method: 'DELETE', token }),
 
   listCancellationRequests: (token, status) =>
@@ -80,15 +81,15 @@ export const api = {
 
   getHoursStats: (token, userId) => request(`/stats/hours${userId ? `?userId=${userId}` : ''}`, { token }),
 
-  listCourses: (token, { start, end, instructorId }) => {
-    const params = new URLSearchParams({ start, end });
+  listCourses: (token, { start, end, areaId, instructorId }) => {
+    const params = new URLSearchParams({ start, end, areaId });
     if (instructorId) params.set('instructorId', instructorId);
     return request(`/courses?${params.toString()}`, { token });
   },
   createCourse: (payload, token) => request('/courses', { method: 'POST', body: payload, token }),
   updateCourse: (id, payload, token) => request(`/courses/${id}`, { method: 'PUT', body: payload, token }),
   deleteCourse: (id, token) => request(`/courses/${id}`, { method: 'DELETE', token }),
-  listAvailableCourses: (token) => request('/courses/available', { token }),
+  listAvailableCourses: (token, areaId) => request(`/courses/available?areaId=${areaId}`, { token }),
   claimCourse: (id, token) => request(`/courses/${id}/claim`, { method: 'POST', token }),
 
   listCompanies: (token) => request('/companies', { token }),
@@ -97,4 +98,16 @@ export const api = {
   createCompanyDirigente: (companyId, payload, token) =>
     request(`/companies/${companyId}/dirigente`, { method: 'POST', body: payload, token }),
   getPlatformStats: (token) => request('/companies/stats', { token }),
+
+  listSedi: (token) => request('/sedi', { token }),
+  createSede: (payload, token) => request('/sedi', { method: 'POST', body: payload, token }),
+  updateSede: (id, payload, token) => request(`/sedi/${id}`, { method: 'PUT', body: payload, token }),
+  deleteSede: (id, token) => request(`/sedi/${id}`, { method: 'DELETE', token }),
+
+  listAreas: (sedeId, token) => request(`/sedi/${sedeId}/areas`, { token }),
+  createArea: (sedeId, payload, token) => request(`/sedi/${sedeId}/areas`, { method: 'POST', body: payload, token }),
+  updateArea: (id, payload, token) => request(`/areas/${id}`, { method: 'PUT', body: payload, token }),
+  deleteArea: (id, token) => request(`/areas/${id}`, { method: 'DELETE', token }),
+  reorderAreas: (sedeId, areaIds, token) =>
+    request(`/sedi/${sedeId}/areas/reorder`, { method: 'PUT', body: { areaIds }, token }),
 };

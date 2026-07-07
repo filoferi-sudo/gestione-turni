@@ -10,6 +10,8 @@ const cancellationRequestRoutes = require('./routes/cancellationRequests');
 const statsRoutes = require('./routes/stats');
 const courseRoutes = require('./routes/courses');
 const companyRoutes = require('./routes/companies');
+const sedeRoutes = require('./routes/sedi');
+const areaRoutes = require('./routes/areas');
 
 const app = express();
 
@@ -27,6 +29,8 @@ app.use('/api/cancellation-requests', cancellationRequestRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/companies', companyRoutes);
+app.use('/api/sedi', sedeRoutes);
+app.use('/api/areas', areaRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

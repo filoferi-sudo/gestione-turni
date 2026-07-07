@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { EMPLOYEE_CATEGORIES } from '../../constants/employeeCategories';
 
 const WEEK_DAY_OPTIONS = [
   { code: 'MON', label: 'Lun' },
@@ -22,7 +21,6 @@ function parseInitialShift(shift) {
       date: '',
       daily: false,
       weekDays: [],
-      requiredCategory: '',
     };
   }
 
@@ -41,11 +39,11 @@ function parseInitialShift(shift) {
     date: shift.type !== 'fixed' ? shift.date : '',
     daily: isDaily,
     weekDays,
-    requiredCategory: shift.requiredCategory || '',
   };
 }
 
 // shift: turno esistente da modificare (null per la creazione)
+// users: dipendenti assegnati all'area di questo calendario (già filtrati dal chiamante)
 // defaultDate: data preselezionata quando si crea un nuovo turno singolo
 export default function ShiftFormModal({ shift, users, defaultUserId, defaultDate, onSave, onDelete, onClose }) {
   const [form, setForm] = useState(parseInitialShift(shift));
@@ -78,10 +76,6 @@ export default function ShiftFormModal({ shift, users, defaultUserId, defaultDat
       setError('Seleziona un dipendente');
       return;
     }
-    if (form.type === 'volante' && !form.requiredCategory) {
-      setError('Seleziona il ruolo richiesto per questa sostituzione');
-      return;
-    }
     if (form.startTime >= form.endTime) {
       setError("L'orario di fine deve essere successivo a quello di inizio");
       return;
@@ -93,7 +87,6 @@ export default function ShiftFormModal({ shift, users, defaultUserId, defaultDat
       startTime: form.startTime,
       endTime: form.endTime,
       note: form.note || null,
-      requiredCategory: form.type === 'volante' ? form.requiredCategory : null,
     };
 
     if (form.type === 'mobile' || form.type === 'volante') {
@@ -151,26 +144,10 @@ export default function ShiftFormModal({ shift, users, defaultUserId, defaultDat
         </div>
 
         {form.type === 'volante' ? (
-          <>
-            <p className="hint">
-              La sostituzione non viene assegnata a nessun dipendente: comparirà solo ai dipendenti con il
-              ruolo richiesto che non hanno già un turno in quell'orario, e sarà del primo che la accetta.
-            </p>
-            <label htmlFor="shift-required-category">Ruolo richiesto</label>
-            <select
-              id="shift-required-category"
-              value={form.requiredCategory}
-              onChange={(e) => update('requiredCategory', e.target.value)}
-              required
-            >
-              <option value="">Seleziona...</option>
-              {EMPLOYEE_CATEGORIES.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </>
+          <p className="hint">
+            La sostituzione non viene assegnata a nessun dipendente: comparirà solo ai dipendenti di quest'area che
+            non hanno già un turno in quell'orario, e sarà del primo che la accetta.
+          </p>
         ) : (
           <>
             <label htmlFor="shift-user">Dipendente</label>
@@ -182,6 +159,9 @@ export default function ShiftFormModal({ shift, users, defaultUserId, defaultDat
                 </option>
               ))}
             </select>
+            {users.length === 0 && (
+              <p className="hint">Nessun dipendente assegnato a quest'area: aggiungine uno dalla gestione dipendenti.</p>
+            )}
           </>
         )}
 
@@ -219,8 +199,6 @@ export default function ShiftFormModal({ shift, users, defaultUserId, defaultDat
             <input
               id="shift-start"
               type="time"
-              min="07:30"
-              max="23:00"
               value={form.startTime}
               onChange={(e) => update('startTime', e.target.value)}
               required
@@ -231,8 +209,6 @@ export default function ShiftFormModal({ shift, users, defaultUserId, defaultDat
             <input
               id="shift-end"
               type="time"
-              min="07:30"
-              max="23:00"
               value={form.endTime}
               onChange={(e) => update('endTime', e.target.value)}
               required

@@ -1,7 +1,7 @@
 const bcrypt = require('bcrypt');
 const pool = require('../config/db');
 const { generateInitialCode } = require('../utils/generateCode');
-const { EMPLOYEE_CATEGORIES } = require('../constants/employeeCategories');
+const { fetchUserAreas, fetchUserAreasBatch } = require('../services/userAreas');
 
 function toSafeUser(user) {
   return {
@@ -16,7 +16,27 @@ function toSafeUser(user) {
     // Il codice iniziale è visibile solo finché non è stato consumato al primo accesso
     initialCode: user.must_change_password ? user.initial_code : null,
     createdAt: user.created_at,
+    areas: [], // valorizzato dai chiamanti con fetchUserAreas/fetchUserAreasBatch (vedi sotto)
   };
+}
+
+// Verifica che tutte le aree indicate esistano e appartengano alla società di chi opera: evita
+// di assegnare un dipendente ad aree di un'altra società (anche indovinando l'id).
+async function assertAreasBelongToCompany(areaIds, companyId) {
+  if (areaIds.length === 0) return true;
+  const { rows } = await pool.query(
+    'SELECT COUNT(*)::int AS count FROM operational_areas WHERE id = ANY($1::int[]) AND company_id = $2',
+    [areaIds, companyId]
+  );
+  return rows[0].count === areaIds.length;
+}
+
+async function setUserAreas(userId, areaIds) {
+  await pool.query('DELETE FROM user_areas WHERE user_id = $1', [userId]);
+  if (areaIds.length > 0) {
+    const values = areaIds.map((_, i) => `($1, $${i + 2})`).join(', ');
+    await pool.query(`INSERT INTO user_areas (user_id, area_id) VALUES ${values}`, [userId, ...areaIds]);
+  }
 }
 
 // Solo il dirigente può creare/modificare/eliminare account di responsabili (o del dirigente stesso).
@@ -37,7 +57,7 @@ function sameCompany(req, target) {
 // Solo il dirigente può creare account con ruolo 'admin' (responsabile); il ruolo 'dirigente'
 // non è creabile da API (esiste un solo account dirigente, creato via seed).
 async function createUser(req, res) {
-  const { username, email, phone, role, category } = req.body;
+  const { username, email, phone, role, areaIds } = req.body;
   const targetRole = role || 'user';
 
   if (!username || !email || !phone) {
@@ -52,14 +72,12 @@ async function createUser(req, res) {
     return res.status(403).json({ error: 'Solo il dirigente può creare account responsabile' });
   }
 
-  // La categoria (bagnino, istruttore, ...) esiste solo per i dipendenti: determina quale
-  // dashboard e quali funzionalità vedrà. Responsabili e dirigente non ne hanno una.
-  let targetCategory = null;
-  if (targetRole === 'user') {
-    if (!EMPLOYEE_CATEGORIES.includes(category)) {
-      return res.status(400).json({ error: `category deve essere una tra ${EMPLOYEE_CATEGORIES.join(', ')}` });
-    }
-    targetCategory = category;
+  // Le aree operative (Bagnini, Reception, Bar, ...) esistono solo per i dipendenti: determinano
+  // quali calendari vedrà. Responsabili e dirigente non ne hanno. Un dipendente può appartenere
+  // a più aree, o anche a nessuna al momento della creazione (assegnabili dopo in qualsiasi momento).
+  const targetAreaIds = targetRole === 'user' && Array.isArray(areaIds) ? areaIds.map(Number) : [];
+  if (targetAreaIds.length > 0 && !(await assertAreasBelongToCompany(targetAreaIds, req.user.companyId))) {
+    return res.status(400).json({ error: "Una o più aree operative non sono valide" });
   }
 
   const existing = await pool.query(
@@ -73,15 +91,19 @@ async function createUser(req, res) {
   const initialCode = generateInitialCode();
 
   const { rows } = await pool.query(
-    `INSERT INTO users (username, email, phone, initial_code, role, category, company_id, must_change_password)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
+    `INSERT INTO users (username, email, phone, initial_code, role, company_id, must_change_password)
+     VALUES ($1, $2, $3, $4, $5, $6, TRUE)
      RETURNING *`,
-    [username, email, phone, initialCode, targetRole, targetCategory, req.user.companyId]
+    [username, email, phone, initialCode, targetRole, req.user.companyId]
   );
   const user = rows[0];
 
+  if (targetAreaIds.length > 0) {
+    await setUserAreas(user.id, targetAreaIds);
+  }
+
   return res.status(201).json({
-    user: toSafeUser(user),
+    user: { ...toSafeUser(user), areas: await fetchUserAreas(user.id) },
     initialCode, // comunicato una sola volta al responsabile, da consegnare al dipendente
   });
 }
@@ -92,7 +114,39 @@ async function listUsers(req, res) {
     'SELECT * FROM users WHERE company_id = $1 ORDER BY created_at DESC',
     [req.user.companyId]
   );
-  return res.json({ users: rows.map(toSafeUser) });
+  const areasByUser = await fetchUserAreasBatch(rows.map((r) => r.id));
+  return res.json({
+    users: rows.map((row) => ({ ...toSafeUser(row), areas: areasByUser[row.id] || [] })),
+  });
+}
+
+// PUT /api/users/:id/areas (responsabile o dirigente) - riassegna in blocco le aree operative di
+// un dipendente esistente, in qualsiasi momento (non solo alla creazione).
+async function updateUserAreas(req, res) {
+  const { id } = req.params;
+  const { areaIds } = req.body;
+
+  const target = await fetchUserOr404(id, res);
+  if (!target) return;
+
+  if (!sameCompany(req, target)) {
+    return res.status(404).json({ error: 'Utente non trovato' });
+  }
+  if (target.role !== 'user') {
+    return res.status(400).json({ error: 'Solo i dipendenti possono avere aree operative assegnate' });
+  }
+  if (!Array.isArray(areaIds)) {
+    return res.status(400).json({ error: 'areaIds deve essere un array' });
+  }
+
+  const normalizedAreaIds = areaIds.map(Number);
+  if (normalizedAreaIds.length > 0 && !(await assertAreasBelongToCompany(normalizedAreaIds, req.user.companyId))) {
+    return res.status(400).json({ error: 'Una o più aree operative non sono valide' });
+  }
+
+  await setUserAreas(id, normalizedAreaIds);
+
+  return res.json({ user: { ...toSafeUser(target), areas: await fetchUserAreas(id) } });
 }
 
 async function fetchUserOr404(id, res) {
@@ -191,4 +245,4 @@ async function deleteUser(req, res) {
   return res.status(204).send();
 }
 
-module.exports = { createUser, listUsers, resetPassword, regenerateCode, deleteUser };
+module.exports = { createUser, listUsers, resetPassword, regenerateCode, deleteUser, updateUserAreas };

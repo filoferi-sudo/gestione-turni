@@ -1,4 +1,4 @@
-import { GRID_HEIGHT, getHourMarks, minutesToTop } from '../../utils/timeWindow';
+import { DEFAULT_TIME_WINDOW } from '../../utils/timeWindow';
 import { layoutCourses } from '../../utils/courseLayout';
 import CourseBlock from './CourseBlock';
 
@@ -6,11 +6,12 @@ import CourseBlock from './CourseBlock';
 // coursesByDate: { [date]: Course[] }
 // onDropOnDay: (date, course) => void — chiamata quando un corso viene rilasciato su una colonna
 // giorno diversa dalla propria (spostamento via drag & drop). Omesso in modalità sola lettura.
+// timeWindow: vedi CalendarGrid.jsx, stessa convenzione (orari calendario della sede attiva).
 // I corsi fissi ricorrenti non sono trascinabili (l'occorrenza non è una riga a sé: spostarla
 // richiederebbe la stessa logica di eccezioni usata per i turni, non prevista per i corsi):
 // per cambiarne giorno/orario si passa dal modulo di modifica, che agisce sull'intera serie.
-export default function CoursesGrid({ days, coursesByDate, onCourseClick, onDropOnDay }) {
-  const hourMarks = getHourMarks();
+export default function CoursesGrid({ days, coursesByDate, onCourseClick, onDropOnDay, timeWindow = DEFAULT_TIME_WINDOW }) {
+  const hourMarks = timeWindow.getHourMarks();
   const canDrop = Boolean(onDropOnDay);
 
   function handleDragStart(e, course) {
@@ -43,9 +44,9 @@ export default function CoursesGrid({ days, coursesByDate, onCourseClick, onDrop
         </div>
       ))}
 
-      <div className="calendar-time-col" style={{ height: GRID_HEIGHT }}>
+      <div className="calendar-time-col" style={{ height: timeWindow.GRID_HEIGHT }}>
         {hourMarks.map((mark) => (
-          <div key={mark.minutes} className="calendar-hour-label" style={{ top: minutesToTop(mark.minutes) }}>
+          <div key={mark.minutes} className="calendar-hour-label" style={{ top: timeWindow.minutesToTop(mark.minutes) }}>
             {mark.label}
           </div>
         ))}
@@ -57,12 +58,12 @@ export default function CoursesGrid({ days, coursesByDate, onCourseClick, onDrop
           <div
             key={day.date}
             className="calendar-day-col"
-            style={{ height: GRID_HEIGHT }}
+            style={{ height: timeWindow.GRID_HEIGHT }}
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, day)}
           >
             {hourMarks.map((mark) => (
-              <div key={mark.minutes} className="calendar-hour-line" style={{ top: minutesToTop(mark.minutes) }} />
+              <div key={mark.minutes} className="calendar-hour-line" style={{ top: timeWindow.minutesToTop(mark.minutes) }} />
             ))}
             {dayCourses.map((course) => (
               <CourseBlock
@@ -71,6 +72,7 @@ export default function CoursesGrid({ days, coursesByDate, onCourseClick, onDrop
                 draggable={canDrop && course.type !== 'fixed'}
                 onDragStart={handleDragStart}
                 onClick={onCourseClick}
+                timeWindow={timeWindow}
               />
             ))}
           </div>

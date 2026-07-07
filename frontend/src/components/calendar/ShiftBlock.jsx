@@ -1,7 +1,7 @@
-import { timeToMinutes, minutesToTop, PX_PER_MIN } from '../../utils/timeWindow';
+import { timeToMinutes, PX_PER_MIN, DEFAULT_TIME_WINDOW } from '../../utils/timeWindow';
 
-export default function ShiftBlock({ shift, showUsername, onClick }) {
-  const top = minutesToTop(timeToMinutes(shift.startTime));
+export default function ShiftBlock({ shift, showUsername, onClick, timeWindow = DEFAULT_TIME_WINDOW }) {
+  const top = timeWindow.minutesToTop(timeToMinutes(shift.startTime));
   const height = (timeToMinutes(shift.endTime) - timeToMinutes(shift.startTime)) * PX_PER_MIN;
 
   return (

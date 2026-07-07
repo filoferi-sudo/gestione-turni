@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { EMPLOYEE_CATEGORIES } from '../constants/employeeCategories';
 
 const ROLE_LABELS = { admin: 'Responsabile', dirigente: 'Dirigente', user: 'Dipendente' };
 
@@ -17,16 +16,41 @@ export default function CreateUser() {
     email: '',
     phone: '',
     role: defaultRole,
-    category: EMPLOYEE_CATEGORIES[0].value,
+    areaIds: [],
   });
+  const [sediWithAreas, setSediWithAreas] = useState([]); // [{ sede, areas: Area[] }]
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState(null);
 
   const backHref = user.role === 'dirigente' ? '/dirigente' : '/admin';
 
+  // Aree operative disponibili, raggruppate per sede: un dipendente può appartenere a più aree
+  // anche di sedi diverse.
+  useEffect(() => {
+    api
+      .listSedi(token)
+      .then(async ({ sedi }) => {
+        const grouped = await Promise.all(
+          sedi.map(async (sede) => {
+            const { areas } = await api.listAreas(sede.id, token);
+            return { sede, areas };
+          })
+        );
+        setSediWithAreas(grouped);
+      })
+      .catch((err) => setError(err.message));
+  }, [token]);
+
   function updateField(field) {
     return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+  }
+
+  function toggleArea(areaId) {
+    setForm((f) => ({
+      ...f,
+      areaIds: f.areaIds.includes(areaId) ? f.areaIds.filter((id) => id !== areaId) : [...f.areaIds, areaId],
+    }));
   }
 
   async function handleSubmit(e) {
@@ -34,10 +58,10 @@ export default function CreateUser() {
     setError('');
     setSubmitting(true);
     try {
-      const payload = { ...form, category: form.role === 'user' ? form.category : undefined };
+      const payload = { ...form, areaIds: form.role === 'user' ? form.areaIds : undefined };
       const result = await api.createUser(payload, token);
       setCreated(result);
-      setForm({ username: '', email: '', phone: '', role: form.role, category: form.category });
+      setForm({ username: '', email: '', phone: '', role: form.role, areaIds: [] });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -84,22 +108,35 @@ export default function CreateUser() {
 
           {form.role === 'user' && (
             <>
-              <label>Categoria</label>
-              <div className="segmented">
-                {EMPLOYEE_CATEGORIES.map((c) => (
-                  <button
-                    key={c.value}
-                    type="button"
-                    className={form.category === c.value ? 'active' : ''}
-                    onClick={() => setForm((f) => ({ ...f, category: c.value }))}
-                  >
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-              <p className="hint">
-                Determina quale dashboard e quali funzionalità vedrà il dipendente dopo l'accesso.
-              </p>
+              <label>Aree operative</label>
+              {sediWithAreas.every((g) => g.areas.length === 0) ? (
+                <p className="hint">
+                  Nessuna area operativa configurata: puoi crearne una dalla gestione sedi, oppure creare comunque il
+                  dipendente e assegnargli le aree in un secondo momento.
+                </p>
+              ) : (
+                sediWithAreas.map(
+                  ({ sede, areas }) =>
+                    areas.length > 0 && (
+                      <div key={sede.id} className="area-picker-group">
+                        <p className="hint">{sede.name}</p>
+                        <div className="checkbox-grid">
+                          {areas.map((a) => (
+                            <label key={a.id} className="checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={form.areaIds.includes(a.id)}
+                                onChange={() => toggleArea(a.id)}
+                              />
+                              {a.name}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                )
+              )}
+              <p className="hint">Determina quali calendari vedrà il dipendente dopo l'accesso. Modificabile in seguito.</p>
             </>
           )}
 

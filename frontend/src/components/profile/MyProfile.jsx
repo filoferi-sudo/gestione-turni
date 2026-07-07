@@ -1,11 +1,11 @@
 import { useAuth } from '../../context/AuthContext';
-import { EMPLOYEE_CATEGORY_LABELS } from '../../constants/employeeCategories';
 
-// Scheda di sola lettura con i dati del proprio account. Condivisa da tutte le categorie di
-// dipendente (bagnino, istruttore, e quelle future): non contiene nulla di specifico per una
-// singola categoria.
+// Scheda di sola lettura con i dati del proprio account. Condivisa da tutti i dipendenti,
+// qualunque area operativa a cui siano assegnati: non contiene nulla di specifico per una
+// singola area.
 export default function MyProfile() {
   const { user } = useAuth();
+  const areas = user.areas || [];
 
   return (
     <section className="card">
@@ -23,10 +23,10 @@ export default function MyProfile() {
           <dt>Telefono</dt>
           <dd>{user.phone || '-'}</dd>
         </div>
-        {user.category && (
+        {areas.length > 0 && (
           <div className="profile-row">
-            <dt>Categoria</dt>
-            <dd>{EMPLOYEE_CATEGORY_LABELS[user.category] || user.category}</dd>
+            <dt>Aree operative</dt>
+            <dd>{areas.map((a) => a.name).join(', ')}</dd>
           </div>
         )}
       </dl>

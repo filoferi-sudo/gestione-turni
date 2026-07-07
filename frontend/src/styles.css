@@ -422,6 +422,20 @@ button:disabled {
   color: white;
 }
 
+.area-picker-group {
+  margin-bottom: 10px;
+}
+
+.area-picker-group:last-of-type {
+  margin-bottom: 4px;
+}
+
+.checkbox-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+}
+
 .time-row {
   display: flex;
   gap: 12px;

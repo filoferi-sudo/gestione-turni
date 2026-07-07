@@ -5,27 +5,57 @@ const { getExpandedCourses, toDateOnly, isValidDateString, toSafeCourse } = requ
 
 const COURSE_TYPES = ['fixed', 'mobile', 'volante'];
 
-// GET /api/courses?start=YYYY-MM-DD&end=YYYY-MM-DD&instructorId=<opzionale>
+// GET /api/courses?start=YYYY-MM-DD&end=YYYY-MM-DD&areaId=<obbligatoria>&instructorId=<opzionale>
 // A differenza del calendario turni, qui non c'è auto-filtro per ruolo: sia responsabile/dirigente
-// sia istruttore vedono di default tutti i corsi della fascia oraria (anche di altri istruttori),
-// perché il senso del Calendario Corsi è mostrare l'intera programmazione della struttura.
-// instructorId è un filtro opzionale (usato dal selettore "Tutti gli istruttori" lato gestione).
+// sia istruttore vedono di default tutti i corsi dell'area (anche di altri istruttori assegnati
+// alla stessa area), perché il senso del Calendario Corsi è mostrare l'intera programmazione
+// dell'area. instructorId è un filtro opzionale (usato dal selettore "Tutti gli istruttori").
 async function listCourses(req, res) {
   const { start, end } = req.query;
+  const areaId = Number(req.query.areaId);
 
   if (!isValidDateString(start) || !isValidDateString(end) || start > end) {
     return res.status(400).json({ error: 'Parametri start/end non validi (formato YYYY-MM-DD)' });
   }
+  const area = await assertAreaExists(areaId, req.user.companyId, 'courses');
+  if (!area) {
+    return res.status(404).json({ error: 'Area operativa non trovata' });
+  }
 
   const targetInstructorId = req.query.instructorId ? Number(req.query.instructorId) : null;
-  const courses = await getExpandedCourses({ start, end, targetInstructorId, companyId: req.user.companyId });
+  const courses = await getExpandedCourses({ start, end, targetInstructorId, companyId: req.user.companyId, areaId });
   return res.json({ courses });
 }
 
-async function assertInstructorExists(instructorId, companyId) {
+// Verifica che l'area esista, appartenga alla società di chi opera, e usi il motore di calendario
+// atteso ('courses'): un'area in modalità 'shifts' non può ospitare corsi. Ritorna la riga
+// dell'area (serve sede_id) con in più l'orario calendario configurato per la sua sede, usato per
+// validare che i corsi stiano dentro la fascia oraria scelta dal Dirigente per quella sede.
+async function assertAreaExists(areaId, companyId, expectedMode) {
+  if (!areaId) return null;
   const { rows } = await pool.query(
-    `SELECT id FROM users WHERE id = $1 AND role = 'user' AND category = 'istruttore' AND company_id = $2`,
-    [instructorId, companyId]
+    `SELECT oa.*, s.calendar_start_time, s.calendar_end_time
+       FROM operational_areas oa
+       JOIN sedi s ON s.id = oa.sede_id
+      WHERE oa.id = $1 AND oa.company_id = $2 AND oa.calendar_mode = $3`,
+    [areaId, companyId, expectedMode]
+  );
+  return rows[0] || null;
+}
+
+// Un istruttore può accettare/essere assegnato a un corso solo se è assegnato all'area operativa
+// a cui appartiene quel corso (sostituisce il vecchio controllo per categoria 'istruttore').
+async function isUserAssignedToArea(userId, areaId) {
+  const { rows } = await pool.query('SELECT 1 FROM user_areas WHERE user_id = $1 AND area_id = $2', [userId, areaId]);
+  return rows.length > 0;
+}
+
+async function assertInstructorExists(instructorId, companyId, areaId) {
+  const { rows } = await pool.query(
+    `SELECT u.id FROM users u
+       JOIN user_areas ua ON ua.user_id = u.id
+      WHERE u.id = $1 AND u.role = 'user' AND u.company_id = $2 AND ua.area_id = $3`,
+    [instructorId, companyId, areaId]
   );
   return rows.length > 0;
 }
@@ -35,17 +65,24 @@ function todayDateString() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
-// GET /api/courses/available - corsi disponibili non ancora accettati da nessuno (tutti gli
-// utenti autenticati: la UI li propone solo agli istruttori, ma non c'è nulla di sensibile
-// da nascondere agli altri ruoli).
+// GET /api/courses/available?areaId=<obbligatoria> - corsi disponibili non ancora accettati di
+// una specifica area (tutti gli utenti autenticati: la UI li propone solo agli assegnati a
+// quell'area, ma non c'è nulla di sensibile da nascondere agli altri ruoli).
 async function listAvailableCourses(req, res) {
+  const areaId = Number(req.query.areaId);
+  const area = await assertAreaExists(areaId, req.user.companyId, 'courses');
+  if (!area) {
+    return res.status(404).json({ error: 'Area operativa non trovata' });
+  }
+
   const { rows } = await pool.query(
     `SELECT c.*, creator.username AS created_by_username
        FROM courses c
        JOIN users creator ON creator.id = c.created_by
-      WHERE c.type = 'volante' AND c.instructor_id IS NULL AND c.date >= $1 AND c.company_id = $2
+      WHERE c.type = 'volante' AND c.instructor_id IS NULL AND c.date >= $1
+        AND c.company_id = $2 AND c.area_id = $3
       ORDER BY c.date, c.start_time`,
-    [todayDateString(), req.user.companyId]
+    [todayDateString(), req.user.companyId, areaId]
   );
 
   return res.json({
@@ -62,14 +99,23 @@ async function listAvailableCourses(req, res) {
 }
 
 // POST /api/courses/:id/claim - il primo istruttore che lo richiede lo riceve automaticamente.
-// A differenza dei turni volanti (aperti a chiunque), solo un account categoria "istruttore" può
-// accettare un corso: la categoria non è nel JWT, va verificata a DB ad ogni richiesta.
+// A differenza dei turni volanti (aperti a chiunque), solo chi è assegnato all'area operativa a
+// cui appartiene il corso può accettarlo (sostituisce il vecchio controllo per categoria
+// 'istruttore'): non è nel JWT, va verificato a DB ad ogni richiesta.
 async function claimCourse(req, res) {
   const { id } = req.params;
 
-  const { rows: userRows } = await pool.query('SELECT category FROM users WHERE id = $1', [req.user.id]);
-  if (userRows[0]?.category !== 'istruttore') {
-    return res.status(403).json({ error: 'Solo un istruttore può accettare un corso disponibile' });
+  const { rows: courseRows } = await pool.query(
+    `SELECT * FROM courses WHERE id = $1 AND type = 'volante' AND instructor_id IS NULL AND company_id = $2`,
+    [id, req.user.companyId]
+  );
+  const course = courseRows[0];
+  if (!course) {
+    return res.status(409).json({ error: 'Il corso non è più disponibile' });
+  }
+
+  if (!(await isUserAssignedToArea(req.user.id, course.area_id))) {
+    return res.status(403).json({ error: 'Questo corso appartiene a un\'area a cui non sei assegnato' });
   }
 
   const { rows, rowCount } = await pool.query(
@@ -102,9 +148,10 @@ function validateTypeFields({ type, date, recurrenceRule }) {
   return { finalDate: isValidDateString(date) ? date : null, finalRecurrenceRule: recurrenceRule };
 }
 
-// POST /api/courses (responsabile o dirigente)
+// POST /api/courses (responsabile o dirigente) - areaId obbligatorio, stesso principio di
+// shiftController.createShift: il corso appartiene sempre all'area/tab in cui viene creato.
 async function createCourse(req, res) {
-  const { name, instructorId, type, startTime, endTime, note, date, recurrenceRule } = req.body;
+  const { name, instructorId, type, startTime, endTime, note, date, recurrenceRule, areaId } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Il nome del corso è obbligatorio' });
@@ -115,11 +162,20 @@ async function createCourse(req, res) {
   if (type !== 'volante' && !instructorId) {
     return res.status(400).json({ error: 'instructorId è obbligatorio per corsi fissi e singoli' });
   }
-  if (!isWithinDailyWindow(startTime, endTime)) {
-    return res.status(400).json({ error: 'Orario non valido: deve essere compreso tra 07:30 e 23:00' });
+
+  const area = await assertAreaExists(Number(areaId), req.user.companyId, 'courses');
+  if (!area) {
+    return res.status(400).json({ error: 'areaId non valido per questa società (o non è un\'area di tipo Corsi)' });
   }
-  if (instructorId && !(await assertInstructorExists(instructorId, req.user.companyId))) {
-    return res.status(400).json({ error: 'Istruttore non valido' });
+
+  if (!isWithinDailyWindow(startTime, endTime, area.calendar_start_time.slice(0, 5), area.calendar_end_time.slice(0, 5))) {
+    return res.status(400).json({
+      error: `Orario non valido: deve essere compreso tra ${area.calendar_start_time.slice(0, 5)} e ${area.calendar_end_time.slice(0, 5)} (orari della sede)`,
+    });
+  }
+
+  if (instructorId && !(await assertInstructorExists(instructorId, req.user.companyId, area.id))) {
+    return res.status(400).json({ error: 'Istruttore non valido (deve essere assegnato a questa area)' });
   }
 
   const result = validateTypeFields({ type, date, recurrenceRule });
@@ -129,8 +185,8 @@ async function createCourse(req, res) {
   const finalInstructorId = type === 'volante' ? null : instructorId;
 
   const { rows } = await pool.query(
-    `INSERT INTO courses (name, instructor_id, company_id, start_time, end_time, date, type, note, created_by, recurrence_rule)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO courses (name, instructor_id, company_id, start_time, end_time, date, type, note, created_by, recurrence_rule, area_id, sede_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *, (SELECT username FROM users WHERE id = $2) AS instructor_username`,
     [
       name.trim(),
@@ -143,6 +199,8 @@ async function createCourse(req, res) {
       note || null,
       req.user.id,
       result.finalRecurrenceRule,
+      area.id,
+      area.sede_id,
     ]
   );
 
@@ -153,7 +211,7 @@ async function createCourse(req, res) {
 // sia dallo spostamento rapido via drag & drop (che invia solo date/startTime/endTime).
 async function updateCourse(req, res) {
   const { id } = req.params;
-  const { name, instructorId, type, startTime, endTime, note, date, recurrenceRule } = req.body;
+  const { name, instructorId, type, startTime, endTime, note, date, recurrenceRule, areaId } = req.body;
 
   const { rows: existingRows } = await pool.query('SELECT * FROM courses WHERE id = $1', [id]);
   const existing = existingRows[0];
@@ -173,15 +231,40 @@ async function updateCourse(req, res) {
   if (!COURSE_TYPES.includes(finalType)) {
     return res.status(400).json({ error: `type deve essere uno tra ${COURSE_TYPES.join(', ')}` });
   }
-  if (!isWithinDailyWindow(finalStartTime, finalEndTime)) {
-    return res.status(400).json({ error: 'Orario non valido: deve essere compreso tra 07:30 e 23:00' });
+
+  let finalAreaId = existing.area_id;
+  let finalSedeId = existing.sede_id;
+  let areaForWindow = null;
+  if (areaId !== undefined) {
+    areaForWindow = await assertAreaExists(Number(areaId), req.user.companyId, 'courses');
+    if (!areaForWindow) {
+      return res.status(400).json({ error: 'areaId non valido per questa società (o non è un\'area di tipo Corsi)' });
+    }
+    finalAreaId = areaForWindow.id;
+    finalSedeId = areaForWindow.sede_id;
+  } else {
+    areaForWindow = await assertAreaExists(existing.area_id, req.user.companyId, 'courses');
   }
+
+  if (
+    !isWithinDailyWindow(
+      finalStartTime,
+      finalEndTime,
+      areaForWindow.calendar_start_time.slice(0, 5),
+      areaForWindow.calendar_end_time.slice(0, 5)
+    )
+  ) {
+    return res.status(400).json({
+      error: `Orario non valido: deve essere compreso tra ${areaForWindow.calendar_start_time.slice(0, 5)} e ${areaForWindow.calendar_end_time.slice(0, 5)} (orari della sede)`,
+    });
+  }
+
   if (
     finalInstructorId &&
     finalInstructorId !== existing.instructor_id &&
-    !(await assertInstructorExists(finalInstructorId, req.user.companyId))
+    !(await assertInstructorExists(finalInstructorId, req.user.companyId, finalAreaId))
   ) {
-    return res.status(400).json({ error: 'Istruttore non valido' });
+    return res.status(400).json({ error: 'Istruttore non valido (deve essere assegnato a questa area)' });
   }
 
   const candidateDate = date !== undefined ? date : toDateOnly(existing.date);
@@ -194,8 +277,8 @@ async function updateCourse(req, res) {
   const { rows } = await pool.query(
     `UPDATE courses
         SET name = $1, instructor_id = $2, start_time = $3, end_time = $4, date = $5,
-            type = $6, note = $7, recurrence_rule = $8
-      WHERE id = $9
+            type = $6, note = $7, recurrence_rule = $8, area_id = $9, sede_id = $10
+      WHERE id = $11
       RETURNING *, (SELECT username FROM users WHERE id = $2) AS instructor_username`,
     [
       finalName.trim(),
@@ -206,6 +289,8 @@ async function updateCourse(req, res) {
       finalType,
       note !== undefined ? note : existing.note,
       result.finalRecurrenceRule,
+      finalAreaId,
+      finalSedeId,
       id,
     ]
   );

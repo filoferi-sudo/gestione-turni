@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { addDays, formatRangeLabel, getSingleDay, getWeekDays } from '../../utils/dates';
+import { DEFAULT_TIME_WINDOW } from '../../utils/timeWindow';
 import CoursesGrid from './CoursesGrid';
 import CourseFormModal from './CourseFormModal';
 
 // mode: 'manage' (responsabile/dirigente: crea/modifica/elimina/sposta) | 'view' (istruttore:
-// sola lettura, vede tutti i corsi della giornata/settimana, non solo i propri).
+// sola lettura, vede tutti i corsi dell'area). areaId: area operativa di questo calendario
+// (obbligatoria, modalità 'courses'). timeWindow: orari calendario configurati per la sede.
 // Stessa struttura/interazione di CalendarPage (turni), per un'esperienza identica tra le due
 // gestioni: stesso layout toolbar, stessa legenda, stesso modulo di modifica.
-export default function CoursesCalendar({ mode }) {
+export default function CoursesCalendar({ mode, areaId, timeWindow = DEFAULT_TIME_WINDOW }) {
   const { token } = useAuth();
   const isManage = mode === 'manage';
 
@@ -31,16 +33,16 @@ export default function CoursesCalendar({ mode }) {
     if (isManage) {
       api
         .listUsers(token)
-        .then(({ users }) => setInstructors(users.filter((u) => u.category === 'istruttore')))
+        .then(({ users }) => setInstructors(users.filter((u) => u.areas?.some((a) => a.id === areaId))))
         .catch((err) => setError(err.message));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [areaId]);
 
   function loadCourses() {
     setLoading(true);
     api
-      .listCourses(token, { start, end, instructorId: isManage ? selectedInstructorId || undefined : undefined })
+      .listCourses(token, { start, end, areaId, instructorId: isManage ? selectedInstructorId || undefined : undefined })
       .then(({ courses }) => setCourses(courses))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -49,7 +51,7 @@ export default function CoursesCalendar({ mode }) {
   useEffect(() => {
     loadCourses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end, selectedInstructorId]);
+  }, [start, end, selectedInstructorId, areaId]);
 
   const coursesByDate = courses.reduce((acc, course) => {
     (acc[course.date] = acc[course.date] || []).push(course);
@@ -70,7 +72,7 @@ export default function CoursesCalendar({ mode }) {
     if (modalState.course) {
       await api.updateCourse(modalState.course.courseId, payload, token);
     } else {
-      await api.createCourse(payload, token);
+      await api.createCourse({ ...payload, areaId }, token);
     }
     setModalState(null);
     loadCourses();
@@ -157,6 +159,7 @@ export default function CoursesCalendar({ mode }) {
           coursesByDate={coursesByDate}
           onCourseClick={isManage ? (course) => setModalState({ course }) : undefined}
           onDropOnDay={isManage ? handleDropOnDay : undefined}
+          timeWindow={timeWindow}
         />
       )}
 

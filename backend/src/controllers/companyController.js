@@ -36,7 +36,11 @@ async function listCompanies(req, res) {
 }
 
 // POST /api/companies (super admin) - crea una nuova società (senza dirigente: si aggiunge
-// separatamente con POST /api/companies/:id/dirigente)
+// separatamente con POST /api/companies/:id/dirigente). Crea anche una sede di default vuota
+// ("Sede Principale", nessuna area operativa): il Dirigente deve avere sempre almeno una sede
+// per poter iniziare a configurare le proprie aree, ma non riceve alcuna area predefinita (a
+// differenza delle società preesistenti migrate da 'bagnino'/'istruttore', qui non c'è nulla da
+// preservare: la struttura la decide da zero il Dirigente).
 async function createCompany(req, res) {
   const { name, email, phone, address } = req.body;
 
@@ -50,6 +54,8 @@ async function createCompany(req, res) {
      RETURNING *`,
     [name.trim(), email || null, phone || null, address || null, req.user.id]
   );
+
+  await pool.query(`INSERT INTO sedi (company_id, name) VALUES ($1, 'Sede Principale')`, [rows[0].id]);
 
   return res.status(201).json({ company: toSafeCompany(rows[0]) });
 }
