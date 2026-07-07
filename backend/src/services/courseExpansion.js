@@ -18,15 +18,6 @@ async function getExpandedCourses({ start, end, targetInstructorId, companyId, a
     instanceFilter = ` AND c.instructor_id = $${instanceParams.length}`;
   }
 
-  const { rows: instanceRows } = await pool.query(
-    `SELECT c.*, u.username AS instructor_username
-       FROM courses c
-       LEFT JOIN users u ON u.id = c.instructor_id
-      WHERE c.type IN ('mobile', 'volante') AND c.date BETWEEN $1 AND $2
-        AND c.company_id = $3 AND c.area_id = $4${instanceFilter}`,
-    instanceParams
-  );
-
   const fixedParams = [companyId, areaId];
   let fixedFilter = '';
   if (targetInstructorId) {
@@ -34,13 +25,25 @@ async function getExpandedCourses({ start, end, targetInstructorId, companyId, a
     fixedFilter = ` AND c.instructor_id = $${fixedParams.length}`;
   }
 
-  const { rows: fixedRows } = await pool.query(
-    `SELECT c.*, u.username AS instructor_username
-       FROM courses c
-       JOIN users u ON u.id = c.instructor_id
-      WHERE c.type = 'fixed' AND c.company_id = $1 AND c.area_id = $2${fixedFilter}`,
-    fixedParams
-  );
+  // Le due query sono indipendenti: eseguite in parallelo invece che in sequenza (stesso fix
+  // applicato separatamente in shiftExpansion.js/getExpandedShifts, non condiviso di proposito).
+  const [{ rows: instanceRows }, { rows: fixedRows }] = await Promise.all([
+    pool.query(
+      `SELECT c.*, u.username AS instructor_username
+         FROM courses c
+         LEFT JOIN users u ON u.id = c.instructor_id
+        WHERE c.type IN ('mobile', 'volante') AND c.date BETWEEN $1 AND $2
+          AND c.company_id = $3 AND c.area_id = $4${instanceFilter}`,
+      instanceParams
+    ),
+    pool.query(
+      `SELECT c.*, u.username AS instructor_username
+         FROM courses c
+         JOIN users u ON u.id = c.instructor_id
+        WHERE c.type = 'fixed' AND c.company_id = $1 AND c.area_id = $2${fixedFilter}`,
+      fixedParams
+    ),
+  ]);
 
   const instanceCourses = instanceRows.map((row) => ({
     id: `${row.type}-${row.id}`,

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { addDays, formatRangeLabel, getWeekDays } from '../../utils/dates';
+import { usePolling } from '../../hooks/usePolling';
 import StaffingScheduleModal from './StaffingScheduleModal';
 import StaffingSingleModal from './StaffingSingleModal';
 import StaffingOccurrenceModal from './StaffingOccurrenceModal';
@@ -45,6 +46,14 @@ export default function StaffingPanel({ areaId, areaName }) {
   }
 
   useEffect(load, [areaId, start, end, token]);
+
+  // Aggiornamenti quasi in tempo reale: la copertura cambia quando altri utenti accettano
+  // Sostituzioni o quando cambia un turno assegnato. Sospeso mentre uno dei modali di modifica è
+  // aperto; il refetch riprende comunque subito alla chiusura (vedi ciascun onClose sotto).
+  usePolling(load, {
+    intervalMs: 10000,
+    enabled: !scheduleModalOpen && !singleModalState && !occurrenceModalState,
+  });
 
   function goPrev() {
     setReferenceDate((d) => addDays(d, -7));
@@ -145,7 +154,10 @@ export default function StaffingPanel({ areaId, areaName }) {
       {scheduleModalOpen && (
         <StaffingScheduleModal
           areaId={areaId}
-          onClose={() => setScheduleModalOpen(false)}
+          onClose={() => {
+            setScheduleModalOpen(false);
+            load();
+          }}
           onSaved={() => {
             setScheduleModalOpen(false);
             load();
@@ -157,7 +169,10 @@ export default function StaffingPanel({ areaId, areaName }) {
         <StaffingSingleModal
           areaId={areaId}
           requirement={singleModalState.requirement}
-          onClose={() => setSingleModalState(null)}
+          onClose={() => {
+            setSingleModalState(null);
+            load();
+          }}
           onSaved={() => {
             setSingleModalState(null);
             load();
@@ -173,7 +188,10 @@ export default function StaffingPanel({ areaId, areaName }) {
         <StaffingOccurrenceModal
           requirement={occurrenceModalState.requirement}
           occurrence={occurrenceModalState.occurrence}
-          onClose={() => setOccurrenceModalState(null)}
+          onClose={() => {
+            setOccurrenceModalState(null);
+            load();
+          }}
           onSaved={() => {
             setOccurrenceModalState(null);
             load();

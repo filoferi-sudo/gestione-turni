@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { usePolling } from '../../hooks/usePolling';
 
 // mode 'claim' (dipendente: può accettare, lista già filtrata dal backend per area/disponibilità)
 // | 'manage' (responsabile/dirigente: vede tutte le sostituzioni pendenti di quest'area, può
@@ -21,6 +22,10 @@ export default function SubstitutionsPanel({ mode, areaId, areaName }) {
   }
 
   useEffect(load, [token, areaId]);
+
+  // Aggiornamenti quasi in tempo reale: un'altra persona può accettare/eliminare una Sostituzione
+  // in ogni momento. Sospeso mentre una claim/delete locale è in corso (busyId già esistente).
+  usePolling(load, { intervalMs: 5000, enabled: !busyId });
 
   async function handleClaim(shift) {
     setError('');

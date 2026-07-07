@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { usePolling } from '../../hooks/usePolling';
 
 const STATUS_LABELS = {
   pending: 'In attesa',
@@ -14,12 +15,18 @@ export default function MyCancellationRequests() {
   const [requests, setRequests] = useState([]);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  function load() {
     api
       .listMyCancellationRequests(token)
       .then(({ requests }) => setRequests(requests))
       .catch((err) => setError(err.message));
-  }, [token]);
+  }
+
+  useEffect(load, [token]);
+
+  // Aggiornamenti quasi in tempo reale: l'esito (approvata/rifiutata) arriva dal responsabile in
+  // ogni momento, funge da notifica.
+  usePolling(load, { intervalMs: 10000 });
 
   if (requests.length === 0 && !error) return null;
 

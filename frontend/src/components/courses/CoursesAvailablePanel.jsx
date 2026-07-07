@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { usePolling } from '../../hooks/usePolling';
 
 // mode 'claim' (istruttore: può accettare) | 'manage' (responsabile/dirigente: può solo eliminare)
 // areaId: area operativa di questo calendario (obbligatoria). areaName: opzionale, mostrato nel
@@ -22,6 +23,10 @@ export default function CoursesAvailablePanel({ mode, areaId, areaName }) {
   }
 
   useEffect(load, [token, areaId]);
+
+  // Aggiornamenti quasi in tempo reale: un'altra persona può accettare/eliminare un corso
+  // disponibile in ogni momento. Sospeso mentre una claim/delete locale è in corso.
+  usePolling(load, { intervalMs: 5000, enabled: !busyId });
 
   async function handleClaim(course) {
     setError('');

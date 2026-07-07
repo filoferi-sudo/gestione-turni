@@ -447,3 +447,7 @@ CREATE INDEX IF NOT EXISTS idx_staffing_req_exceptions_requirement_id
 ALTER TABLE shifts ADD COLUMN IF NOT EXISTS requirement_id
   INTEGER REFERENCES staffing_requirements(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_shifts_requirement_id ON shifts(requirement_id);
+
+-- Usato da shiftController.deleteShiftSelf per il controllo di richieste pendenti duplicate sullo
+-- stesso turno; mancava rispetto agli altri indici già presenti su cancellation_requests.
+CREATE INDEX IF NOT EXISTS idx_cancellation_requests_shift_id ON cancellation_requests(shift_id);

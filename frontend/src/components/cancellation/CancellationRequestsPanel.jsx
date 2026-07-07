@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { usePolling } from '../../hooks/usePolling';
 
 // Pannello per responsabile/dirigente: elenco richieste di cancellazione turno in attesa,
 // con possibilità di approvare o rifiutare.
@@ -18,6 +19,9 @@ export default function CancellationRequestsPanel() {
   }
 
   useEffect(load, [token]);
+
+  // Aggiornamenti quasi in tempo reale: nuove richieste possono arrivare in ogni momento.
+  usePolling(load, { intervalMs: 10000, enabled: !busyId });
 
   async function handleDecision(request, decision) {
     setError('');

@@ -85,6 +85,9 @@ turni-app/
       context/AuthContext.jsx   token + user (con `areas[]`) in localStorage
       hooks/useSedeSelection.js  stato "sede selezionata" per le dashboard manager (elenco sedi
                                 della società + sede attiva, persistita in localStorage)
+      hooks/usePolling.js       polling leggero riutilizzabile (pausa se tab non visibile, refetch
+                                immediato al ritorno di focus) per aggiornamenti quasi in tempo
+                                reale sui dati condivisi tra utenti (vedi sezione dedicata)
       components/
         calendar/               CalendarPage (turni, richiede areaId+timeWindow), CalendarGrid
                                 (turni sovrapposti affiancati via utils/courseLayout.layoutCourses,
@@ -474,10 +477,66 @@ su `startTime`/`endTime`): turni sovrapposti si affiancano invece di nascondersi
 (`laneCount=1`) la larghezza resta 100%, identica al comportamento storico: nessuna regressione
 per l'uso esistente. Nessuna modifica a `courseLayout.js`/`CoursesGrid.jsx`/`CourseBlock.jsx`.
 
+## Aggiornamenti quasi in tempo reale (polling leggero)
+
+Problema: quando un utente crea/modifica un turno o accetta una Sostituzione, gli altri utenti
+collegati contemporaneamente non vedevano l'aggiornamento finché non ricaricavano manualmente la
+pagina. Causa: ogni componente con dati condivisi caricava i dati **solo** in un `useEffect` al
+mount/cambio di dipendenze — nessun meccanismo avvisava le sessioni degli altri utenti.
+
+**Soluzione**: `frontend/src/hooks/usePolling.js`, hook riutilizzabile che affianca (non
+sostituisce) l'`useEffect` di fetch già esistente in ogni componente:
+- Polling a intervallo configurabile, **solo quando `document.visibilityState === 'visible'`**
+  (nessuna richiesta per tab in background).
+- **Refetch immediato** su `visibilitychange` quando la tab torna visibile, così chi torna su una
+  finestra già aperta non aspetta il prossimo tick.
+- `enabled` opzionale per sospendere il polling quando un modale di modifica è aperto sullo stesso
+  componente (evita ridisegni della griglia sotto al modale); alla chiusura del modale (sia
+  salvando sia annullando) il componente chiama comunque subito la propria `load()`, così eventuali
+  modifiche di altri utenti fatte nel frattempo (quando il polling era sospeso) sono recuperate
+  senza aspettare il tick successivo.
+- Cambi di contesto che già in precedenza causavano un refetch immediato (cambio area/settimana/
+  utente selezionato, sono nell'array di dipendenze dell'`useEffect` esistente) **non sono stati
+  toccati**: restano il meccanismo primario, il polling è solo un complemento per gli aggiornamenti
+  generati da altri utenti.
+
+**Perché polling e non WebSocket**: il backend gira su Vercel come funzioni serverless (non un
+server Node persistente), quindi un vero WebSocket richiederebbe un'infrastruttura terza
+(Pusher/Ably o simili) — sproporzionato per la scala di questa applicazione (poche decine di utenti
+per società) e in contrasto con l'istruzione esplicita di non introdurre complessità/dipendenze
+inutili. Nessun jitter randomico sul periodo: con questo numero di utenti concorrenti non c'è un
+rischio reale di sovraccarico da sincronizzazione accidentale dei timer.
+
+**Componenti con polling attivo e intervalli** (solo dati condivisi tra utenti; pannelli di
+amministrazione a bassa concorrenza come `UserManagementSection`/`AreasManagement`/`SediManagement`
+non lo hanno, deliberatamente):
+
+| Componente | Intervallo |
+|---|---|
+| `CalendarPage` (turni), `CoursesCalendar` (corsi) | 5s |
+| `SubstitutionsPanel`, `CoursesAvailablePanel` | 5s |
+| `StaffingPanel` (Fabbisogno) | 10s |
+| `CancellationRequestsPanel`, `MyCancellationRequests` | 10s |
+| `HoursStats` | 60s |
+
+**Ottimizzazioni query collegate** (stesso intervento, per ridurre il carico generato dal polling
+più frequente): `shiftExpansion.getExpandedShifts`/`courseExpansion.getExpandedCourses` eseguono
+ora le due query indipendenti (istanze singole/Sostituzioni vs turni fissi) in parallelo
+(`Promise.all`) invece che in sequenza — stesso output, una round-trip DB in meno per chiamata.
+`shiftController.listAvailableShifts` non itera più con una `hasOverlappingShift` sequenziale per
+ogni Sostituzione candidata (N query): carica una sola volta i turni espansi del dipendente
+sull'intervallo di date coperto dalle righe candidate e fa il confronto di sovrapposizione in
+memoria, con lo stesso identico predicato — verificato che il comportamento resti bit-per-bit
+equivalente (stesso filtro "in qualunque area", non solo quella corrente). Aggiunto anche
+l'indice mancante `idx_cancellation_requests_shift_id`.
+
 ## Funzionalità già completate
 
 - Autenticazione JWT con primo accesso via codice iniziale + impostazione password personale.
 - Gestione utenti gerarchica con permessi differenziati per ruolo (`canManageTargetRole`).
+- **Aggiornamenti quasi in tempo reale** su calendario turni/corsi, Sostituzioni/Corsi disponibili,
+  Fabbisogno e richieste di cancellazione: polling leggero (`hooks/usePolling.js`) con pausa su tab
+  non visibile e refetch immediato al ritorno di focus/chiusura modali, vedi sezione dedicata.
 - **Fabbisogno di personale per area operativa** (solo aree Turni): regole fisse (ricorrenti per
   giorno della settimana, con le 4 modalità di modifica per singola occorrenza) e singole
   (esigenza straordinaria per una data), calcolo automatico della copertura confrontando il
@@ -520,8 +579,9 @@ per l'uso esistente. Nessuna modifica a `courseLayout.js`/`CoursesGrid.jsx`/`Cou
 
 ## Funzionalità in sviluppo
 
-Nessuna al momento: l'ultima funzionalità (Fabbisogno di personale per area operativa) è stata
-completata, testata (locale, in attesa di verifica produzione) e documentata.
+Nessuna al momento: l'ultima modifica (ottimizzazione aggiornamenti quasi in tempo reale + query
+più veloci) è stata completata, testata in locale e documentata; resta solo la migrazione
+dell'indice in produzione, da eseguire dopo conferma esplicita dell'utente.
 
 ## Funzionalità future previste
 
@@ -550,6 +610,12 @@ completata, testata (locale, in attesa di verifica produzione) e documentata.
 
 ## Decisioni architetturali prese
 
+- **Aggiornamenti tra utenti via polling leggero, non WebSocket**: scelta deliberata dato l'hosting
+  Vercel serverless (nessun server Node persistente su cui appoggiare un vero WebSocket senza un
+  servizio terzo tipo Pusher/Ably). Hook unico e riutilizzabile (`hooks/usePolling.js`) applicato
+  solo ai componenti con dati condivisi tra utenti, con pausa su tab non visibile e refetch
+  immediato su focus/chiusura modali — vedi sezione dedicata "Aggiornamenti quasi in tempo reale".
+  Non introdurre un vero canale realtime senza discuterne: cambierebbe l'infrastruttura di hosting.
 - **Niente ORM**: query SQL dirette con `pg`, parametrizzate. Ogni controller ha le proprie query,
   niente layer di astrazione condiviso tra domini (turni e corsi hanno controller/service
   *paralleli ma separati*, non un modulo generico condiviso — scelta deliberata per permettere
@@ -794,3 +860,29 @@ Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cos
   (pannello fabbisogno, generazione e claim di una Sostituzione da un buco, verifica visiva di
   turni sovrapposti affiancati nel calendario). Migrazione produzione: da eseguire solo dopo
   conferma esplicita dell'utente (stesso protocollo delle feature precedenti).
+- **2026-07-07** — **Ottimizzazione: aggiornamenti quasi in tempo reale + query più veloci**.
+  Causa individuata: ogni componente con dati condivisi caricava i dati solo in un `useEffect` al
+  mount/cambio dipendenze, nessun meccanismo avvisava le sessioni degli altri utenti di una
+  modifica (dettaglio completo in "Aggiornamenti quasi in tempo reale (polling leggero)"). Nuovo
+  `frontend/src/hooks/usePolling.js` (polling con pausa su tab non visibile, refetch immediato su
+  focus/chiusura modali), applicato a `CalendarPage.jsx`, `CoursesCalendar.jsx`,
+  `SubstitutionsPanel.jsx`, `CoursesAvailablePanel.jsx` (5s), `StaffingPanel.jsx`,
+  `CancellationRequestsPanel.jsx`, `MyCancellationRequests.jsx` (10s), `HoursStats.jsx` (60s) —
+  nessuna modifica alla logica di fetch/mutazione già esistente in questi componenti, solo
+  aggiunta della chiamata al nuovo hook accanto all'`useEffect` già presente. Backend:
+  `shiftExpansion.getExpandedShifts`/`courseExpansion.getExpandedCourses` parallelizzano con
+  `Promise.all` le due query indipendenti (istanze vs turni/corsi fissi, prima sequenziali);
+  `shiftController.listAvailableShifts` non itera più con una query di sovrapposizione sequenziale
+  per ogni Sostituzione candidata (N+1), batchata in un'unica `getExpandedShifts` sull'intervallo
+  di date coperto + confronto in memoria, stesso identico predicato/output di prima (verificato
+  esplicitamente che continui a controllare la sovrapposizione su tutte le aree del dipendente, non
+  solo quella del turno). Aggiunto indice mancante `idx_cancellation_requests_shift_id`. Verificato
+  in locale via curl/browser: migrazione idempotente (2x), polling osservato nel traffico di rete
+  (richieste periodiche 200 OK), pausa del polling confermata mentre un modale è aperto (nessuna
+  nuova richiesta `/api/calendar` per 7s con modale aperto) e refetch immediato confermato alla
+  chiusura (nuova richiesta entro 400ms), aggiornamento automatico in tab già aperta di una
+  modifica fatta "da un altro utente" (chiamata API diretta, non passata dalla UI) rilevato entro
+  un tick di polling senza alcun refresh manuale, fix N+1 verificato con un dipendente di prova
+  (Sostituzione sovrapposta a un turno assegnato correttamente esclusa, una libera correttamente
+  mostrata) — dati di test rimossi al termine. Nessuna regressione riscontrata sui flussi esistenti.
+  Migrazione produzione (solo l'indice): da eseguire solo dopo conferma esplicita dell'utente.

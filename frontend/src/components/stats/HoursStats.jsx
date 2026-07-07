@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { usePolling } from '../../hooks/usePolling';
 
 export default function HoursStats() {
   const { token } = useAuth();
@@ -8,12 +9,16 @@ export default function HoursStats() {
   const [error, setError] = useState('');
   const [expandedUserId, setExpandedUserId] = useState(null);
 
-  useEffect(() => {
+  function load() {
     api
       .getHoursStats(token)
       .then(({ stats }) => setStats(stats))
       .catch((err) => setError(err.message));
-  }, [token]);
+  }
+
+  useEffect(load, [token]);
+
+  usePolling(load, { intervalMs: 60000 });
 
   return (
     <section className="card">

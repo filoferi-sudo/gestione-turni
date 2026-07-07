@@ -43,15 +43,6 @@ async function getExpandedShifts({ start, end, targetUserId, companyId, areaId }
     instanceAreaFilter = ` AND s.area_id = $${instanceParams.length}`;
   }
 
-  const { rows: instanceRows } = await pool.query(
-    `SELECT s.*, u.username
-       FROM shifts s
-       LEFT JOIN users u ON u.id = s.user_id
-      WHERE s.type IN ('mobile', 'volante') AND s.date BETWEEN $1 AND $2
-        AND s.company_id = $3 AND s.status = 'active'${instanceUserFilter}${instanceAreaFilter}`,
-    instanceParams
-  );
-
   const fixedParams = [companyId];
   let fixedUserFilter = '';
   if (targetUserId) {
@@ -64,13 +55,25 @@ async function getExpandedShifts({ start, end, targetUserId, companyId, areaId }
     fixedAreaFilter = ` AND s.area_id = $${fixedParams.length}`;
   }
 
-  const { rows: fixedRows } = await pool.query(
-    `SELECT s.*, u.username
-       FROM shifts s
-       JOIN users u ON u.id = s.user_id
-      WHERE s.type = 'fixed' AND s.company_id = $1 AND s.status = 'active'${fixedUserFilter}${fixedAreaFilter}`,
-    fixedParams
-  );
+  // Le due query sono indipendenti (parametri e tabelle filtrate diversamente): eseguite in
+  // parallelo invece che in sequenza per ridurre la latenza percepita di una round-trip DB.
+  const [{ rows: instanceRows }, { rows: fixedRows }] = await Promise.all([
+    pool.query(
+      `SELECT s.*, u.username
+         FROM shifts s
+         LEFT JOIN users u ON u.id = s.user_id
+        WHERE s.type IN ('mobile', 'volante') AND s.date BETWEEN $1 AND $2
+          AND s.company_id = $3 AND s.status = 'active'${instanceUserFilter}${instanceAreaFilter}`,
+      instanceParams
+    ),
+    pool.query(
+      `SELECT s.*, u.username
+         FROM shifts s
+         JOIN users u ON u.id = s.user_id
+        WHERE s.type = 'fixed' AND s.company_id = $1 AND s.status = 'active'${fixedUserFilter}${fixedAreaFilter}`,
+      fixedParams
+    ),
+  ]);
 
   const fixedIds = fixedRows.map((row) => row.id);
   const excludedDatesByShift = {};

@@ -3,6 +3,7 @@ import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { addDays, formatRangeLabel, getSingleDay, getWeekDays } from '../../utils/dates';
 import { DEFAULT_TIME_WINDOW } from '../../utils/timeWindow';
+import { usePolling } from '../../hooks/usePolling';
 import CoursesGrid from './CoursesGrid';
 import CourseFormModal from './CourseFormModal';
 
@@ -53,6 +54,10 @@ export default function CoursesCalendar({ mode, areaId, timeWindow = DEFAULT_TIM
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start, end, selectedInstructorId, areaId]);
 
+  // Aggiornamenti quasi in tempo reale: sospeso mentre un modale è aperto, refetch immediato alla
+  // chiusura (vedi handleModalClose sotto), stesso principio di CalendarPage.
+  usePolling(loadCourses, { intervalMs: 5000, enabled: !modalState });
+
   const coursesByDate = courses.reduce((acc, course) => {
     (acc[course.date] = acc[course.date] || []).push(course);
     return acc;
@@ -81,6 +86,13 @@ export default function CoursesCalendar({ mode, areaId, timeWindow = DEFAULT_TIM
   async function handleDelete(course) {
     if (!window.confirm('Eliminare questo corso? Se è un corso fisso verranno rimosse tutte le occorrenze.')) return;
     await api.deleteCourse(course.courseId, token);
+    setModalState(null);
+    loadCourses();
+  }
+
+  // Chiusura del modale senza salvare: il polling resta sospeso finché il modale è aperto, quindi
+  // eventuali modifiche fatte nel frattempo da altri utenti vanno recuperate subito alla chiusura.
+  function handleModalClose() {
     setModalState(null);
     loadCourses();
   }
@@ -170,7 +182,7 @@ export default function CoursesCalendar({ mode, areaId, timeWindow = DEFAULT_TIM
           defaultDate={modalState.defaultDate}
           onSave={handleSave}
           onDelete={handleDelete}
-          onClose={() => setModalState(null)}
+          onClose={handleModalClose}
         />
       )}
     </div>

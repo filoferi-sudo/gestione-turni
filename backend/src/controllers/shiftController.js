@@ -103,15 +103,34 @@ async function listAvailableShifts(req, res) {
   let visibleRows = rows;
   if (req.user.role === 'user') {
     visibleRows = [];
-    if (await isUserAssignedToArea(req.user.id, areaId)) {
+    if (await isUserAssignedToArea(req.user.id, areaId) && rows.length > 0) {
+      // Stesso controllo di sovrapposizione di hasOverlappingShift, ma calcolato una sola volta
+      // per l'intero batch di righe candidate invece che con una query sequenziale per riga
+      // (prima: N chiamate a hasOverlappingShift, ognuna con la propria getExpandedShifts).
+      // areaId NON passato qui: la sovrapposizione va controllata su TUTTI i turni dell'utente,
+      // in qualunque area (stesso comportamento di hasOverlappingShift), non solo su quest'area.
+      const dates = rows.map((row) => toDateOnly(row.date));
+      const minDate = dates.reduce((a, b) => (a < b ? a : b));
+      const maxDate = dates.reduce((a, b) => (a > b ? a : b));
+
+      const userShifts = await getExpandedShifts({
+        start: minDate,
+        end: maxDate,
+        targetUserId: req.user.id,
+        companyId: req.user.companyId,
+      });
+      const userShiftsByDate = {};
+      for (const s of userShifts) {
+        (userShiftsByDate[s.date] = userShiftsByDate[s.date] || []).push(s);
+      }
+
       for (const row of rows) {
-        const overlapping = await hasOverlappingShift({
-          userId: req.user.id,
-          companyId: req.user.companyId,
-          date: toDateOnly(row.date),
-          startTime: row.start_time.slice(0, 5),
-          endTime: row.end_time.slice(0, 5),
-        });
+        const date = toDateOnly(row.date);
+        const startTime = row.start_time.slice(0, 5);
+        const endTime = row.end_time.slice(0, 5);
+        const overlapping = (userShiftsByDate[date] || []).some(
+          (s) => s.startTime < endTime && startTime < s.endTime
+        );
         if (overlapping) continue;
         visibleRows.push(row);
       }

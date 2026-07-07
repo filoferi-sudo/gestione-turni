@@ -3,6 +3,7 @@ import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { addDays, formatRangeLabel, getSingleDay, getWeekDays } from '../../utils/dates';
 import { DEFAULT_TIME_WINDOW } from '../../utils/timeWindow';
+import { usePolling } from '../../hooks/usePolling';
 import CalendarGrid from './CalendarGrid';
 import ShiftFormModal from './ShiftFormModal';
 
@@ -52,6 +53,11 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start, end, selectedUserId, areaId]);
 
+  // Aggiornamenti quasi in tempo reale: altri utenti collegati possono creare/modificare turni in
+  // ogni momento. Sospeso mentre un modale è aperto (evita ridisegni della griglia sotto al
+  // modale); il refetch riprende comunque subito alla chiusura, vedi handleModalClose sotto.
+  usePolling(loadCalendar, { intervalMs: 5000, enabled: !modalState });
+
   const shiftsByDate = shifts.reduce((acc, shift) => {
     (acc[shift.date] = acc[shift.date] || []).push(shift);
     return acc;
@@ -73,6 +79,14 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
     } else {
       await api.createShift({ ...payload, areaId }, token);
     }
+    setModalState(null);
+    loadCalendar();
+  }
+
+  // Chiusura del modale senza salvare (Annulla/click fuori): il polling resta sospeso finché il
+  // modale è aperto (vedi usePolling sopra), quindi eventuali modifiche fatte nel frattempo da
+  // altri utenti vanno recuperate subito alla chiusura, senza aspettare il prossimo tick.
+  function handleModalClose() {
     setModalState(null);
     loadCalendar();
   }
@@ -180,7 +194,7 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
           defaultDate={modalState.defaultDate}
           onSave={handleSave}
           onDelete={handleDelete}
-          onClose={() => setModalState(null)}
+          onClose={handleModalClose}
         />
       )}
     </div>
