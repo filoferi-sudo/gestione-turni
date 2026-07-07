@@ -886,3 +886,16 @@ Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cos
   (Sostituzione sovrapposta a un turno assegnato correttamente esclusa, una libera correttamente
   mostrata) — dati di test rimossi al termine. Nessuna regressione riscontrata sui flussi esistenti.
   Migrazione produzione (solo l'indice): da eseguire solo dopo conferma esplicita dell'utente.
+- **2026-07-07** — **Fix regressione post-deploy: sfarfallio del calendario durante il polling**.
+  Segnalato dall'utente in produzione subito dopo il deploy della modifica precedente: la griglia
+  del calendario turni/corsi si ridisegnava visibilmente ogni pochi secondi. Causa:
+  `CalendarPage.loadCalendar`/`CoursesCalendar.loadCourses` impostavano `loading=true` ad ogni
+  chiamata, comprese quelle silenziose innescate dal polling — la griglia veniva quindi sostituita
+  dal messaggio "Caricamento..." e poi ridisegnata ad ogni tick. Fix: entrambe le funzioni
+  accettano ora un parametro `{ silent }`; `usePolling` le richiama sempre con `silent: true`, così
+  il polling aggiorna i dati senza toggling di `loading` (il fetch iniziale e i cambi di area/data/
+  utente selezionato, che devono restare visibili come caricamento reale, non sono stati toccati).
+  Verificato in locale osservando ~190 richieste di polling consecutive senza mai vedere ricomparire
+  il messaggio di caricamento. **Attenzione per il futuro**: qualunque nuovo componente che riceva
+  polling e usi uno stato `loading` per nascondere il contenuto deve seguire lo stesso pattern
+  `{ silent }`, altrimenti si ripresenta lo stesso sfarfallio.

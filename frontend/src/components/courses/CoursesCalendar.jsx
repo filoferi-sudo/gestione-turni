@@ -40,13 +40,18 @@ export default function CoursesCalendar({ mode, areaId, timeWindow = DEFAULT_TIM
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areaId]);
 
-  function loadCourses() {
-    setLoading(true);
+  // silent=true (usato dal polling in background) aggiorna i dati senza mostrare "Caricamento...":
+  // altrimenti ogni tick sostituirebbe la griglia con il messaggio di caricamento, causando uno
+  // sfarfallio visibile ogni pochi secondi anche quando l'utente non ha fatto nulla.
+  function loadCourses({ silent = false } = {}) {
+    if (!silent) setLoading(true);
     api
       .listCourses(token, { start, end, areaId, instructorId: isManage ? selectedInstructorId || undefined : undefined })
       .then(({ courses }) => setCourses(courses))
       .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!silent) setLoading(false);
+      });
   }
 
   useEffect(() => {
@@ -55,8 +60,9 @@ export default function CoursesCalendar({ mode, areaId, timeWindow = DEFAULT_TIM
   }, [start, end, selectedInstructorId, areaId]);
 
   // Aggiornamenti quasi in tempo reale: sospeso mentre un modale è aperto, refetch immediato alla
-  // chiusura (vedi handleModalClose sotto), stesso principio di CalendarPage.
-  usePolling(loadCourses, { intervalMs: 5000, enabled: !modalState });
+  // chiusura (vedi handleModalClose sotto), stesso principio di CalendarPage. silent: true evita
+  // di rimostrare "Caricamento..." ad ogni tick.
+  usePolling(() => loadCourses({ silent: true }), { intervalMs: 5000, enabled: !modalState });
 
   const coursesByDate = courses.reduce((acc, course) => {
     (acc[course.date] = acc[course.date] || []).push(course);

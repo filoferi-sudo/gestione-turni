@@ -39,13 +39,18 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areaId]);
 
-  function loadCalendar() {
-    setLoading(true);
+  // silent=true (usato dal polling in background) aggiorna i dati senza mostrare "Caricamento...":
+  // altrimenti ogni tick sostituirebbe la griglia con il messaggio di caricamento, causando uno
+  // sfarfallio visibile ogni pochi secondi anche quando l'utente non ha fatto nulla.
+  function loadCalendar({ silent = false } = {}) {
+    if (!silent) setLoading(true);
     api
       .getCalendar(token, { start, end, areaId, userId: isAdmin ? selectedUserId || undefined : undefined })
       .then(({ shifts }) => setShifts(shifts))
       .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!silent) setLoading(false);
+      });
   }
 
   useEffect(() => {
@@ -56,7 +61,8 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
   // Aggiornamenti quasi in tempo reale: altri utenti collegati possono creare/modificare turni in
   // ogni momento. Sospeso mentre un modale è aperto (evita ridisegni della griglia sotto al
   // modale); il refetch riprende comunque subito alla chiusura, vedi handleModalClose sotto.
-  usePolling(loadCalendar, { intervalMs: 5000, enabled: !modalState });
+  // silent: true evita di rimostrare "Caricamento..." ad ogni tick (vedi loadCalendar sopra).
+  usePolling(() => loadCalendar({ silent: true }), { intervalMs: 5000, enabled: !modalState });
 
   const shiftsByDate = shifts.reduce((acc, shift) => {
     (acc[shift.date] = acc[shift.date] || []).push(shift);
