@@ -14,6 +14,7 @@ function toSafeUser(user) {
     phone: user.phone,
     role: user.role,
     category: user.category,
+    companyId: user.company_id,
     mustChangePassword: user.must_change_password,
   };
 }
@@ -28,11 +29,23 @@ async function login(req, res) {
     return res.status(400).json({ error: 'Username e password/codice sono obbligatori' });
   }
 
-  const { rows } = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+  const { rows } = await pool.query(
+    `SELECT u.*, c.is_active AS company_is_active
+       FROM users u
+       LEFT JOIN companies c ON c.id = u.company_id
+      WHERE u.username = $1`,
+    [username]
+  );
   const user = rows[0];
 
   if (!user) {
     return res.status(401).json({ error: 'Credenziali non valide' });
+  }
+
+  // Blocca solo i nuovi login: le sessioni già aperte restano valide fino alla scadenza del
+  // token (max 8h), coerente con il resto del sistema (nessun controllo a DB ad ogni richiesta).
+  if (user.company_id && user.company_is_active === false) {
+    return res.status(403).json({ error: 'La società collegata a questo account è stata disattivata' });
   }
 
   // Primo accesso: l'utente non ha ancora una password, deve usare il codice iniziale
@@ -61,7 +74,7 @@ async function login(req, res) {
   }
 
   const token = jwt.sign(
-    { id: user.id, username: user.username, role: user.role, type: 'session' },
+    { id: user.id, username: user.username, role: user.role, companyId: user.company_id, type: 'session' },
     JWT_SECRET,
     { expiresIn: SESSION_EXPIRES_IN }
   );
@@ -99,7 +112,13 @@ async function firstLoginSetup(req, res) {
   const updatedUser = updatedRows[0];
 
   const token = jwt.sign(
-    { id: updatedUser.id, username: updatedUser.username, role: updatedUser.role, type: 'session' },
+    {
+      id: updatedUser.id,
+      username: updatedUser.username,
+      role: updatedUser.role,
+      companyId: updatedUser.company_id,
+      type: 'session',
+    },
     JWT_SECRET,
     { expiresIn: SESSION_EXPIRES_IN }
   );

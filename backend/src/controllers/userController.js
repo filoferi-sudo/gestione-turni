@@ -11,6 +11,7 @@ function toSafeUser(user) {
     phone: user.phone,
     role: user.role,
     category: user.category,
+    companyId: user.company_id,
     mustChangePassword: user.must_change_password,
     // Il codice iniziale è visibile solo finché non è stato consumato al primo accesso
     initialCode: user.must_change_password ? user.initial_code : null,
@@ -23,6 +24,12 @@ function toSafeUser(user) {
 function canManageTargetRole(actorRole, targetRole) {
   if (targetRole === 'user') return actorRole === 'admin' || actorRole === 'dirigente';
   return actorRole === 'dirigente';
+}
+
+// Un dirigente/responsabile può gestire solo account della propria società: anche indovinando
+// l'id di un utente di un'altra società, l'operazione va bloccata qui.
+function sameCompany(req, target) {
+  return target.company_id === req.user.companyId;
 }
 
 // POST /api/users (responsabile o dirigente)
@@ -66,10 +73,10 @@ async function createUser(req, res) {
   const initialCode = generateInitialCode();
 
   const { rows } = await pool.query(
-    `INSERT INTO users (username, email, phone, initial_code, role, category, must_change_password)
-     VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+    `INSERT INTO users (username, email, phone, initial_code, role, category, company_id, must_change_password)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
      RETURNING *`,
-    [username, email, phone, initialCode, targetRole, targetCategory]
+    [username, email, phone, initialCode, targetRole, targetCategory, req.user.companyId]
   );
   const user = rows[0];
 
@@ -79,9 +86,12 @@ async function createUser(req, res) {
   });
 }
 
-// GET /api/users (responsabile o dirigente) - elenco utenti per la gestione
+// GET /api/users (responsabile o dirigente) - elenco utenti della propria società
 async function listUsers(req, res) {
-  const { rows } = await pool.query('SELECT * FROM users ORDER BY created_at DESC');
+  const { rows } = await pool.query(
+    'SELECT * FROM users WHERE company_id = $1 ORDER BY created_at DESC',
+    [req.user.companyId]
+  );
   return res.json({ users: rows.map(toSafeUser) });
 }
 
@@ -106,6 +116,9 @@ async function resetPassword(req, res) {
   const target = await fetchUserOr404(id, res);
   if (!target) return;
 
+  if (!sameCompany(req, target)) {
+    return res.status(404).json({ error: 'Utente non trovato' });
+  }
   if (!canManageTargetRole(req.user.role, target.role)) {
     return res.status(403).json({ error: 'Non autorizzato a gestire questo account' });
   }
@@ -128,6 +141,9 @@ async function regenerateCode(req, res) {
   const target = await fetchUserOr404(id, res);
   if (!target) return;
 
+  if (!sameCompany(req, target)) {
+    return res.status(404).json({ error: 'Utente non trovato' });
+  }
   if (!canManageTargetRole(req.user.role, target.role)) {
     return res.status(403).json({ error: 'Non autorizzato a gestire questo account' });
   }
@@ -154,14 +170,20 @@ async function deleteUser(req, res) {
     return res.status(400).json({ error: 'Non puoi eliminare il tuo stesso account' });
   }
 
+  if (!sameCompany(req, target)) {
+    return res.status(404).json({ error: 'Utente non trovato' });
+  }
   if (!canManageTargetRole(req.user.role, target.role)) {
     return res.status(403).json({ error: 'Non autorizzato a gestire questo account' });
   }
 
   if (target.role === 'dirigente') {
-    const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM users WHERE role = 'dirigente'");
+    const { rows } = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM users WHERE role = 'dirigente' AND company_id = $1",
+      [target.company_id]
+    );
     if (rows[0].count <= 1) {
-      return res.status(400).json({ error: "Non è possibile eliminare l'unico account dirigente" });
+      return res.status(400).json({ error: "Non è possibile eliminare l'unico account dirigente della società" });
     }
   }
 

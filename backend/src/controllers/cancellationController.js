@@ -19,14 +19,14 @@ function toSafeRequest(row) {
   };
 }
 
-// GET /api/cancellation-requests?status=pending (responsabile o dirigente)
+// GET /api/cancellation-requests?status=pending (responsabile o dirigente, propria società)
 async function listRequests(req, res) {
   const { status } = req.query;
-  const params = [];
+  const params = [req.user.companyId];
   let statusFilter = '';
   if (status) {
     params.push(status);
-    statusFilter = ` WHERE cr.status = $${params.length}`;
+    statusFilter = ` AND cr.status = $${params.length}`;
   }
 
   const { rows } = await pool.query(
@@ -34,7 +34,7 @@ async function listRequests(req, res) {
        FROM cancellation_requests cr
        JOIN users requester ON requester.id = cr.requested_by
        LEFT JOIN users decider ON decider.id = cr.decided_by
-       ${statusFilter}
+      WHERE cr.company_id = $1${statusFilter}
       ORDER BY cr.created_at DESC`,
     params
   );
@@ -57,10 +57,10 @@ async function listMyRequests(req, res) {
   return res.json({ requests: rows.map(toSafeRequest) });
 }
 
-async function fetchPendingRequestOr404(id, res) {
+async function fetchPendingRequestOr404(id, companyId, res) {
   const { rows } = await pool.query('SELECT * FROM cancellation_requests WHERE id = $1', [id]);
   const request = rows[0];
-  if (!request) {
+  if (!request || request.company_id !== companyId) {
     res.status(404).json({ error: 'Richiesta non trovata' });
     return null;
   }
@@ -77,7 +77,7 @@ async function fetchPendingRequestOr404(id, res) {
 // (altrimenti si cancellerebbero tutte le occorrenze passate e future del turno).
 async function approveRequest(req, res) {
   const { id } = req.params;
-  const request = await fetchPendingRequestOr404(id, res);
+  const request = await fetchPendingRequestOr404(id, req.user.companyId, res);
   if (!request) return;
 
   const { rows } = await pool.query(
@@ -109,7 +109,7 @@ async function approveRequest(req, res) {
 // POST /api/cancellation-requests/:id/reject (responsabile o dirigente)
 async function rejectRequest(req, res) {
   const { id } = req.params;
-  const request = await fetchPendingRequestOr404(id, res);
+  const request = await fetchPendingRequestOr404(id, req.user.companyId, res);
   if (!request) return;
 
   const { rows } = await pool.query(

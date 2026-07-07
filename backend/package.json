@@ -12,7 +12,8 @@
     "migrate": "node -e \"require('dotenv').config(); const fs=require('fs'); const pool=require('./src/config/db'); pool.query(fs.readFileSync('./src/db/schema.sql','utf8')).then(()=>{console.log('Migrazione completata'); return pool.end();}).catch(e=>{console.error(e); process.exit(1);})\"",
     "db:reset": "node src/db/reset.js",
     "seed:dirigente": "node src/db/seedDirigente.js",
-    "setup": "npm run migrate && npm run db:reset && npm run seed:dirigente"
+    "seed:superadmin": "node src/db/seedSuperAdmin.js",
+    "setup": "npm run migrate && npm run db:reset && npm run seed:dirigente && npm run seed:superadmin"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

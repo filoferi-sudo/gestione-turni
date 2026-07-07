@@ -21,12 +21,15 @@ async function getCalendar(req, res) {
     targetUserId = req.user.id;
   }
 
-  const shifts = await getExpandedShifts({ start, end, targetUserId });
+  const shifts = await getExpandedShifts({ start, end, targetUserId, companyId: req.user.companyId });
   return res.json({ shifts });
 }
 
-async function assertUserExists(userId) {
-  const { rows } = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
+// Verifica che l'utente esista E appartenga alla stessa società di chi sta operando: evita che un
+// dirigente/responsabile assegni un turno a un dipendente di un'altra società (anche indovinando
+// l'id).
+async function assertUserExists(userId, companyId) {
+  const { rows } = await pool.query('SELECT id FROM users WHERE id = $1 AND company_id = $2', [userId, companyId]);
   return rows.length > 0;
 }
 
@@ -35,15 +38,15 @@ function todayDateString() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
-// GET /api/shifts/available - turni volanti non ancora accettati da nessuno (tutti gli utenti autenticati)
+// GET /api/shifts/available - turni volanti non ancora accettati da nessuno, della propria società
 async function listAvailableShifts(req, res) {
   const { rows } = await pool.query(
     `SELECT s.*, creator.username AS created_by_username
        FROM shifts s
        JOIN users creator ON creator.id = s.created_by
-      WHERE s.type = 'volante' AND s.user_id IS NULL AND s.date >= $1
+      WHERE s.type = 'volante' AND s.user_id IS NULL AND s.date >= $1 AND s.company_id = $2
       ORDER BY s.date, s.start_time`,
-    [todayDateString()]
+    [todayDateString(), req.user.companyId]
   );
 
   return res.json({
@@ -64,9 +67,9 @@ async function claimShift(req, res) {
 
   const { rows, rowCount } = await pool.query(
     `UPDATE shifts SET user_id = $1
-      WHERE id = $2 AND type = 'volante' AND user_id IS NULL
+      WHERE id = $2 AND type = 'volante' AND user_id IS NULL AND company_id = $3
       RETURNING *`,
-    [req.user.id, id]
+    [req.user.id, id, req.user.companyId]
   );
 
   if (rowCount === 0) {
@@ -108,7 +111,7 @@ async function createShift(req, res) {
     return res.status(400).json({ error: 'Orario non valido: deve essere compreso tra 07:30 e 23:00' });
   }
 
-  if (userId && !(await assertUserExists(userId))) {
+  if (userId && !(await assertUserExists(userId, req.user.companyId))) {
     return res.status(404).json({ error: 'Utente non trovato' });
   }
 
@@ -119,10 +122,20 @@ async function createShift(req, res) {
   const finalUserId = type === 'volante' ? null : userId;
 
   const { rows } = await pool.query(
-    `INSERT INTO shifts (user_id, start_time, end_time, date, type, note, created_by, recurrence_rule)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO shifts (user_id, company_id, start_time, end_time, date, type, note, created_by, recurrence_rule)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
-    [finalUserId, startTime, endTime, result.finalDate, type, note || null, req.user.id, result.finalRecurrenceRule]
+    [
+      finalUserId,
+      req.user.companyId,
+      startTime,
+      endTime,
+      result.finalDate,
+      type,
+      note || null,
+      req.user.id,
+      result.finalRecurrenceRule,
+    ]
   );
 
   return res.status(201).json({ shift: toSafeShift(rows[0]) });
@@ -135,7 +148,7 @@ async function updateShift(req, res) {
 
   const { rows: existingRows } = await pool.query('SELECT * FROM shifts WHERE id = $1', [id]);
   const existing = existingRows[0];
-  if (!existing) {
+  if (!existing || existing.company_id !== req.user.companyId) {
     return res.status(404).json({ error: 'Turno non trovato' });
   }
 
@@ -152,7 +165,7 @@ async function updateShift(req, res) {
     return res.status(400).json({ error: 'Orario non valido: deve essere compreso tra 07:30 e 23:00' });
   }
 
-  if (finalUserId && finalUserId !== existing.user_id && !(await assertUserExists(finalUserId))) {
+  if (finalUserId && finalUserId !== existing.user_id && !(await assertUserExists(finalUserId, req.user.companyId))) {
     return res.status(404).json({ error: 'Utente non trovato' });
   }
 
@@ -185,7 +198,10 @@ async function updateShift(req, res) {
 // DELETE /api/shifts/:id (responsabile o dirigente: cancellazione forzata, qualunque tipo)
 async function deleteShift(req, res) {
   const { id } = req.params;
-  const { rowCount } = await pool.query('DELETE FROM shifts WHERE id = $1', [id]);
+  const { rowCount } = await pool.query('DELETE FROM shifts WHERE id = $1 AND company_id = $2', [
+    id,
+    req.user.companyId,
+  ]);
   if (rowCount === 0) {
     return res.status(404).json({ error: 'Turno non trovato' });
   }
@@ -232,10 +248,10 @@ async function deleteShiftSelf(req, res) {
 
   const { rows: requestRows } = await pool.query(
     `INSERT INTO cancellation_requests
-       (shift_id, requested_by, shift_date, shift_start_time, shift_end_time, shift_note, status)
-     VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+       (shift_id, company_id, requested_by, shift_date, shift_start_time, shift_end_time, shift_note, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
      RETURNING *`,
-    [id, req.user.id, shiftDate, shift.start_time, shift.end_time, shift.note]
+    [id, req.user.companyId, req.user.id, shiftDate, shift.start_time, shift.end_time, shift.note]
   );
 
   const request = requestRows[0];

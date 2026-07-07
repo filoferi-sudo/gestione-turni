@@ -7,8 +7,9 @@ import AdminDashboard from './pages/AdminDashboard';
 import DirigenteDashboard from './pages/DirigenteDashboard';
 import EmployeeDashboardRouter from './pages/employee/EmployeeDashboardRouter';
 import CreateUser from './pages/CreateUser';
+import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard';
 
-const ROLE_HOME = { admin: '/admin', dirigente: '/dirigente', user: '/dashboard' };
+const ROLE_HOME = { admin: '/admin', dirigente: '/dirigente', user: '/dashboard', superadmin: '/superadmin' };
 
 function RoleHome() {
   const { user } = useAuth();
@@ -63,6 +64,15 @@ export default function App() {
         element={
           <ProtectedRoute requireRole="dirigente">
             <CreateUser />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/superadmin"
+        element={
+          <ProtectedRoute requireRole="superadmin">
+            <SuperAdminDashboard />
           </ProtectedRoute>
         }
       />

@@ -3,13 +3,14 @@ const { expandRecurrenceDates } = require('../utils/recurrence');
 const { toHHMM, toDateOnly, isValidDateString } = require('./shiftExpansion');
 
 // Espande tutti i corsi (singolo, disponibile/assegnato, fisso ricorrente) in istanze concrete
-// nell'intervallo [start, end]. Stessa logica di getExpandedShifts (vedi shiftExpansion.js), con
-// instructor_id al posto di user_id. Se targetInstructorId è indicato, filtra solo i corsi di
-// quell'istruttore (i corsi disponibili non ancora accettati, con instructor_id NULL, vengono
-// così esclusi: restano visibili tramite /api/courses/available). Se targetInstructorId è null
-// vengono restituiti tutti i corsi (vista amministratore/istruttore), inclusi i disponibili.
-async function getExpandedCourses({ start, end, targetInstructorId }) {
-  const instanceParams = [start, end];
+// nell'intervallo [start, end], filtrati sempre per società (companyId, obbligatorio). Stessa
+// logica di getExpandedShifts (vedi shiftExpansion.js), con instructor_id al posto di user_id.
+// Se targetInstructorId è indicato, filtra solo i corsi di quell'istruttore (i corsi disponibili
+// non ancora accettati, con instructor_id NULL, vengono così esclusi: restano visibili tramite
+// /api/courses/available). Se targetInstructorId è null vengono restituiti tutti i corsi della
+// società (vista amministratore/istruttore), inclusi i disponibili.
+async function getExpandedCourses({ start, end, targetInstructorId, companyId }) {
+  const instanceParams = [start, end, companyId];
   let instanceFilter = '';
   if (targetInstructorId) {
     instanceParams.push(targetInstructorId);
@@ -20,16 +21,24 @@ async function getExpandedCourses({ start, end, targetInstructorId }) {
     `SELECT c.*, u.username AS instructor_username
        FROM courses c
        LEFT JOIN users u ON u.id = c.instructor_id
-      WHERE c.type IN ('mobile', 'volante') AND c.date BETWEEN $1 AND $2${instanceFilter}`,
+      WHERE c.type IN ('mobile', 'volante') AND c.date BETWEEN $1 AND $2
+        AND c.company_id = $3${instanceFilter}`,
     instanceParams
   );
+
+  const fixedParams = [companyId];
+  let fixedFilter = '';
+  if (targetInstructorId) {
+    fixedParams.push(targetInstructorId);
+    fixedFilter = ` AND c.instructor_id = $${fixedParams.length}`;
+  }
 
   const { rows: fixedRows } = await pool.query(
     `SELECT c.*, u.username AS instructor_username
        FROM courses c
        JOIN users u ON u.id = c.instructor_id
-      WHERE c.type = 'fixed'${targetInstructorId ? ' AND c.instructor_id = $1' : ''}`,
-    targetInstructorId ? [targetInstructorId] : []
+      WHERE c.type = 'fixed' AND c.company_id = $1${fixedFilter}`,
+    fixedParams
   );
 
   const instanceCourses = instanceRows.map((row) => ({

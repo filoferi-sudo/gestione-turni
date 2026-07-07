@@ -90,4 +90,11 @@ export const api = {
   deleteCourse: (id, token) => request(`/courses/${id}`, { method: 'DELETE', token }),
   listAvailableCourses: (token) => request('/courses/available', { token }),
   claimCourse: (id, token) => request(`/courses/${id}/claim`, { method: 'POST', token }),
+
+  listCompanies: (token) => request('/companies', { token }),
+  createCompany: (payload, token) => request('/companies', { method: 'POST', body: payload, token }),
+  updateCompany: (id, payload, token) => request(`/companies/${id}`, { method: 'PUT', body: payload, token }),
+  createCompanyDirigente: (companyId, payload, token) =>
+    request(`/companies/${companyId}/dirigente`, { method: 'POST', body: payload, token }),
+  getPlatformStats: (token) => request('/companies/stats', { token }),
 };

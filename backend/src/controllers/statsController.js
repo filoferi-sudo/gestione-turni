@@ -48,12 +48,23 @@ async function getHoursStats(req, res) {
   // filtrano per userId tramite query string.
   const filterUserId = req.user.role === 'user' ? req.user.id : req.query.userId ? Number(req.query.userId) : null;
 
-  const allShifts = await getExpandedShifts({ start: fetchStart, end: fetchEnd, targetUserId: filterUserId });
+  const allShifts = await getExpandedShifts({
+    start: fetchStart,
+    end: fetchEnd,
+    targetUserId: filterUserId,
+    companyId: req.user.companyId,
+  });
   const assignedShifts = allShifts.filter((s) => s.userId);
 
+  const params = [req.user.companyId];
+  let userFilter = '';
+  if (filterUserId) {
+    params.push(filterUserId);
+    userFilter = ` AND id = $${params.length}`;
+  }
   const { rows: users } = await pool.query(
-    `SELECT id, username FROM users WHERE role = 'user'${filterUserId ? ' AND id = $1' : ''} ORDER BY username`,
-    filterUserId ? [filterUserId] : []
+    `SELECT id, username FROM users WHERE role = 'user' AND company_id = $1${userFilter} ORDER BY username`,
+    params
   );
 
   const shiftsByUser = new Map();

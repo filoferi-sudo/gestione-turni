@@ -18,14 +18,14 @@ async function listCourses(req, res) {
   }
 
   const targetInstructorId = req.query.instructorId ? Number(req.query.instructorId) : null;
-  const courses = await getExpandedCourses({ start, end, targetInstructorId });
+  const courses = await getExpandedCourses({ start, end, targetInstructorId, companyId: req.user.companyId });
   return res.json({ courses });
 }
 
-async function assertInstructorExists(instructorId) {
+async function assertInstructorExists(instructorId, companyId) {
   const { rows } = await pool.query(
-    `SELECT id FROM users WHERE id = $1 AND role = 'user' AND category = 'istruttore'`,
-    [instructorId]
+    `SELECT id FROM users WHERE id = $1 AND role = 'user' AND category = 'istruttore' AND company_id = $2`,
+    [instructorId, companyId]
   );
   return rows.length > 0;
 }
@@ -43,9 +43,9 @@ async function listAvailableCourses(req, res) {
     `SELECT c.*, creator.username AS created_by_username
        FROM courses c
        JOIN users creator ON creator.id = c.created_by
-      WHERE c.type = 'volante' AND c.instructor_id IS NULL AND c.date >= $1
+      WHERE c.type = 'volante' AND c.instructor_id IS NULL AND c.date >= $1 AND c.company_id = $2
       ORDER BY c.date, c.start_time`,
-    [todayDateString()]
+    [todayDateString(), req.user.companyId]
   );
 
   return res.json({
@@ -74,9 +74,9 @@ async function claimCourse(req, res) {
 
   const { rows, rowCount } = await pool.query(
     `UPDATE courses SET instructor_id = $1
-      WHERE id = $2 AND type = 'volante' AND instructor_id IS NULL
+      WHERE id = $2 AND type = 'volante' AND instructor_id IS NULL AND company_id = $3
       RETURNING *, (SELECT username FROM users WHERE id = $1) AS instructor_username`,
-    [req.user.id, id]
+    [req.user.id, id, req.user.companyId]
   );
 
   if (rowCount === 0) {
@@ -118,7 +118,7 @@ async function createCourse(req, res) {
   if (!isWithinDailyWindow(startTime, endTime)) {
     return res.status(400).json({ error: 'Orario non valido: deve essere compreso tra 07:30 e 23:00' });
   }
-  if (instructorId && !(await assertInstructorExists(instructorId))) {
+  if (instructorId && !(await assertInstructorExists(instructorId, req.user.companyId))) {
     return res.status(400).json({ error: 'Istruttore non valido' });
   }
 
@@ -129,10 +129,21 @@ async function createCourse(req, res) {
   const finalInstructorId = type === 'volante' ? null : instructorId;
 
   const { rows } = await pool.query(
-    `INSERT INTO courses (name, instructor_id, start_time, end_time, date, type, note, created_by, recurrence_rule)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `INSERT INTO courses (name, instructor_id, company_id, start_time, end_time, date, type, note, created_by, recurrence_rule)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING *, (SELECT username FROM users WHERE id = $2) AS instructor_username`,
-    [name.trim(), finalInstructorId, startTime, endTime, result.finalDate, type, note || null, req.user.id, result.finalRecurrenceRule]
+    [
+      name.trim(),
+      finalInstructorId,
+      req.user.companyId,
+      startTime,
+      endTime,
+      result.finalDate,
+      type,
+      note || null,
+      req.user.id,
+      result.finalRecurrenceRule,
+    ]
   );
 
   return res.status(201).json({ course: toSafeCourse(rows[0]) });
@@ -146,7 +157,7 @@ async function updateCourse(req, res) {
 
   const { rows: existingRows } = await pool.query('SELECT * FROM courses WHERE id = $1', [id]);
   const existing = existingRows[0];
-  if (!existing) {
+  if (!existing || existing.company_id !== req.user.companyId) {
     return res.status(404).json({ error: 'Corso non trovato' });
   }
 
@@ -165,7 +176,11 @@ async function updateCourse(req, res) {
   if (!isWithinDailyWindow(finalStartTime, finalEndTime)) {
     return res.status(400).json({ error: 'Orario non valido: deve essere compreso tra 07:30 e 23:00' });
   }
-  if (finalInstructorId && finalInstructorId !== existing.instructor_id && !(await assertInstructorExists(finalInstructorId))) {
+  if (
+    finalInstructorId &&
+    finalInstructorId !== existing.instructor_id &&
+    !(await assertInstructorExists(finalInstructorId, req.user.companyId))
+  ) {
     return res.status(400).json({ error: 'Istruttore non valido' });
   }
 
@@ -201,7 +216,10 @@ async function updateCourse(req, res) {
 // DELETE /api/courses/:id (responsabile o dirigente: cancellazione forzata, qualunque tipo)
 async function deleteCourse(req, res) {
   const { id } = req.params;
-  const { rowCount } = await pool.query('DELETE FROM courses WHERE id = $1', [id]);
+  const { rowCount } = await pool.query('DELETE FROM courses WHERE id = $1 AND company_id = $2', [
+    id,
+    req.user.companyId,
+  ]);
   if (rowCount === 0) {
     return res.status(404).json({ error: 'Corso non trovato' });
   }

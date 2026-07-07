@@ -23,12 +23,12 @@ function isValidDateString(value) {
 }
 
 // Espande tutti i turni (singolo, volante assegnati/non assegnati, fixed ricorrenti) in istanze
-// concrete nell'intervallo [start, end]. Se targetUserId è indicato, filtra solo i turni di quel
-// dipendente (i turni volanti non ancora accettati, con user_id NULL, vengono così esclusi).
-// Se targetUserId è null vengono restituiti i turni di tutti gli utenti (vista amministratore),
-// inclusi i volanti ancora disponibili (username null).
-async function getExpandedShifts({ start, end, targetUserId }) {
-  const instanceParams = [start, end];
+// concrete nell'intervallo [start, end], filtrati sempre per società (companyId, obbligatorio).
+// Se targetUserId è indicato, filtra solo i turni di quel dipendente (i turni volanti non ancora
+// accettati, con user_id NULL, vengono così esclusi). Se targetUserId è null vengono restituiti
+// i turni di tutti gli utenti della società (vista amministratore), inclusi i volanti disponibili.
+async function getExpandedShifts({ start, end, targetUserId, companyId }) {
+  const instanceParams = [start, end, companyId];
   let instanceUserFilter = '';
   if (targetUserId) {
     instanceParams.push(targetUserId);
@@ -39,16 +39,24 @@ async function getExpandedShifts({ start, end, targetUserId }) {
     `SELECT s.*, u.username
        FROM shifts s
        LEFT JOIN users u ON u.id = s.user_id
-      WHERE s.type IN ('mobile', 'volante') AND s.date BETWEEN $1 AND $2${instanceUserFilter}`,
+      WHERE s.type IN ('mobile', 'volante') AND s.date BETWEEN $1 AND $2
+        AND s.company_id = $3${instanceUserFilter}`,
     instanceParams
   );
+
+  const fixedParams = [companyId];
+  let fixedUserFilter = '';
+  if (targetUserId) {
+    fixedParams.push(targetUserId);
+    fixedUserFilter = ` AND s.user_id = $${fixedParams.length}`;
+  }
 
   const { rows: fixedRows } = await pool.query(
     `SELECT s.*, u.username
        FROM shifts s
        JOIN users u ON u.id = s.user_id
-      WHERE s.type = 'fixed'${targetUserId ? ' AND s.user_id = $1' : ''}`,
-    targetUserId ? [targetUserId] : []
+      WHERE s.type = 'fixed' AND s.company_id = $1${fixedUserFilter}`,
+    fixedParams
   );
 
   const fixedIds = fixedRows.map((row) => row.id);

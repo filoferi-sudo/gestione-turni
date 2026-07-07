@@ -16,7 +16,7 @@ function authenticate(req, res, next) {
     if (payload.type !== 'session') {
       return res.status(401).json({ error: 'Token non valido per questa operazione' });
     }
-    req.user = payload; // { id, username, role, type }
+    req.user = payload; // { id, username, role, companyId, type }
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Token non valido o scaduto' });
@@ -69,11 +69,21 @@ function requireDirigente(req, res, next) {
   next();
 }
 
+// Solo il super admin: gestione società, non entra mai nei dati operativi di una società
+// specifica (turni/corsi/dipendenti restano di esclusiva competenza di quella società).
+function requireSuperAdmin(req, res, next) {
+  if (!req.user || req.user.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Accesso riservato al super admin' });
+  }
+  next();
+}
+
 module.exports = {
   authenticate,
   authenticateFirstAccess,
   requireAdmin,
   requireManager,
   requireDirigente,
+  requireSuperAdmin,
   MANAGER_ROLES,
 };
