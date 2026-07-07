@@ -39,7 +39,13 @@ async function request(path, { method = 'GET', body, token } = {}) {
 
   if (!res.ok) {
     console.error(`[api] Risposta di errore: ${method} ${url} → ${res.status}`, data);
-    throw new Error(data.error || `Errore del server (${res.status})`);
+    const err = new Error(data.error || `Errore del server (${res.status})`);
+    // Alcuni endpoint (es. conflitti di fabbisogno duplicato) restituiscono campi aggiuntivi nel
+    // corpo dell'errore (es. `conflict`, `conflictingRequirement`): copiati sull'oggetto Error
+    // così i chiamanti possono leggerli senza ri-parsare la risposta.
+    Object.assign(err, data);
+    err.status = res.status;
+    throw err;
   }
 
   return data;
@@ -110,4 +116,20 @@ export const api = {
   deleteArea: (id, token) => request(`/areas/${id}`, { method: 'DELETE', token }),
   reorderAreas: (sedeId, areaIds, token) =>
     request(`/sedi/${sedeId}/areas/reorder`, { method: 'PUT', body: { areaIds }, token }),
+
+  listStaffingRequirements: (areaId, token) => request(`/staffing/requirements?areaId=${areaId}`, { token }),
+  upsertWeeklyStaffing: (payload, token) =>
+    request('/staffing/requirements/weekly', { method: 'PUT', body: payload, token }),
+  createSingleStaffingRequirement: (payload, token) =>
+    request('/staffing/requirements/single', { method: 'POST', body: payload, token }),
+  updateSingleStaffingRequirement: (id, payload, token) =>
+    request(`/staffing/requirements/single/${id}`, { method: 'PUT', body: payload, token }),
+  deleteSingleStaffingRequirement: (id, token) =>
+    request(`/staffing/requirements/single/${id}`, { method: 'DELETE', token }),
+  editStaffingOccurrence: (id, payload, token) =>
+    request(`/staffing/requirements/${id}/occurrence`, { method: 'PUT', body: payload, token }),
+  getStaffingCoverage: (token, { areaId, start, end }) =>
+    request(`/staffing/coverage?${new URLSearchParams({ areaId, start, end }).toString()}`, { token }),
+  generateStaffingGap: (requirementId, date, token) =>
+    request(`/staffing/requirements/${requirementId}/generate-gap`, { method: 'POST', body: { date }, token }),
 };

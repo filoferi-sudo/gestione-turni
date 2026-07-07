@@ -12,6 +12,7 @@ const courseRoutes = require('./routes/courses');
 const companyRoutes = require('./routes/companies');
 const sedeRoutes = require('./routes/sedi');
 const areaRoutes = require('./routes/areas');
+const staffingRoutes = require('./routes/staffing');
 
 const app = express();
 
@@ -31,6 +32,7 @@ app.use('/api/courses', courseRoutes);
 app.use('/api/companies', companyRoutes);
 app.use('/api/sedi', sedeRoutes);
 app.use('/api/areas', areaRoutes);
+app.use('/api/staffing', staffingRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

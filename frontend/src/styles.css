@@ -42,6 +42,11 @@ body {
   background: #2f6f4f;
 }
 
+.badge-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .link-button {
   background: none;
   border: none;
@@ -322,8 +327,6 @@ button:disabled {
 
 .shift-block {
   position: absolute;
-  left: 3px;
-  right: 3px;
   border-radius: 6px;
   padding: 4px 6px;
   font-size: 11px;
@@ -434,6 +437,31 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   gap: 10px 20px;
+}
+
+.weekday-count {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 52px;
+}
+
+.weekday-count label {
+  margin-top: 0;
+}
+
+.weekday-count input {
+  width: 100%;
+  text-align: center;
+  padding: 8px 4px;
+}
+
+.staffing-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
 }
 
 .time-row {

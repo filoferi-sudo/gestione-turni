@@ -22,10 +22,12 @@ all'interno di ogni sede (ognuna con il proprio calendario, generato automaticam
 turni dei dipendenti (fissi ricorrenti, singoli, "Sostituzioni" da accettare — turni pubblicati
 senza dipendente assegnato, creati manualmente o generati automaticamente da una cancellazione
 approvata), calendario corsi (stessa logica fisso/singolo/disponibile, ma con possibilità di corsi
-sovrapposti nello stesso orario), richieste di cancellazione turno con approvazione del
-responsabile, statistiche ore lavorate, gestione utenti a più livelli gerarchici con assegnazione
-a una o più aree operative, personalizzazione dell'intervallo orario del calendario per sede, e
-amministrazione delle società da parte di un Super Admin di piattaforma.
+sovrapposti nello stesso orario), **fabbisogno di personale per area operativa** (quante persone
+servono in una fascia oraria, confrontato automaticamente con i turni già assegnati), richieste di
+cancellazione turno con approvazione del responsabile, statistiche ore lavorate, gestione utenti a
+più livelli gerarchici con assegnazione a una o più aree operative, personalizzazione
+dell'intervallo orario del calendario per sede, e amministrazione delle società da parte di un
+Super Admin di piattaforma.
 
 ## Obiettivo del progetto
 
@@ -59,13 +61,17 @@ turni-app/
                                 sedeController.js, areaController.js
       routes/                  un file per dominio, wiring middleware + controller, incluso
                                 sedi.js (annidate: /api/sedi/:sedeId/areas), areas.js (flat:
-                                /api/areas/:id)
+                                /api/areas/:id), staffing.js (tutte le rotte requireManager)
       services/                 shiftExpansion.js, courseExpansion.js: espansione ricorrenze
                                 (entrambe filtrano anche per area_id); userAreas.js: unica fonte
                                 di verità per le aree operative assegnate a un utente (usata sia
-                                da authController sia da userController)
+                                da authController sia da userController); staffingCoverage.js:
+                                calcolo copertura fabbisogno (riusa getExpandedShifts) + guardia
+                                duplicati (findConflictingRequirement)
       utils/                    helper puri: date/ore (isWithinDailyWindow ora accetta la
-                                finestra oraria della sede), generazione codici, ricorrenza
+                                finestra oraria della sede), generazione codici, ricorrenza,
+                                staffingOccurrences.js (espansione occorrenze fabbisogno fisso/
+                                singolo, applicazione eccezioni)
       db/
         schema.sql              SCHEMA + MIGRAZIONI IDEMPOTENTI, unica fonte di verità del DB
         seedDirigente.js        bootstrap locale/dev: crea società demo + dirigente
@@ -80,13 +86,19 @@ turni-app/
       hooks/useSedeSelection.js  stato "sede selezionata" per le dashboard manager (elenco sedi
                                 della società + sede attiva, persistita in localStorage)
       components/
-        calendar/               CalendarPage (turni, richiede areaId+timeWindow), CalendarGrid,
-                                ShiftBlock, ShiftFormModal (senza più "ruolo richiesto"),
-                                TabbedCalendar (contenitore generico multi-vista, usato ora per
-                                costruire dinamicamente una tab per area)
+        calendar/               CalendarPage (turni, richiede areaId+timeWindow), CalendarGrid
+                                (turni sovrapposti affiancati via utils/courseLayout.layoutCourses,
+                                riusato invariato), ShiftBlock (lane/laneCount come CourseBlock),
+                                ShiftFormModal (senza più "ruolo richiesto"), TabbedCalendar
+                                (contenitore generico multi-vista, usato ora per costruire
+                                dinamicamente una tab per area)
         courses/                CoursesCalendar (richiede areaId+timeWindow), CoursesGrid,
                                 CourseBlock, CourseFormModal, CoursesAvailablePanel
         shifts/SubstitutionsPanel.jsx   "Sostituzioni" (ex "turni volanti"), scoped per area
+        staffing/               StaffingPanel.jsx (copertura fabbisogno, pannello separato dal
+                                calendario), StaffingScheduleModal.jsx (editor settimanale),
+                                StaffingSingleModal.jsx (fabbisogno singolo), StaffingOccurrenceModal.jsx
+                                (le 4 modalità di modifica occorrenza)
         cancellation/           CancellationRequestsPanel (manager), MyCancellationRequests (self)
         management/UserManagementSection.jsx   colonna "Aree" + azione "Modifica aree"
         areas/AreasManagement.jsx   CRUD aree operative di una sede (solo Dirigente)
@@ -170,7 +182,18 @@ vedi changelog).
   per `fixed`), `date` (per `mobile`/`volante`). `status` (`active` | `cancelled_approved`),
   `required_category` (**legacy, non più scritta per le nuove Sostituzioni**: superata da
   `area_id`, vedi sezione dedicata), `origin_shift_id` (turno originale sostituito, NULL per
-  creazione manuale).
+  creazione manuale), `requirement_id` (NULL, valorizzato solo per le Sostituzioni generate da
+  `POST /api/staffing/requirements/:id/generate-gap` per coprire un buco di fabbisogno — vedi
+  sezione dedicata "Fabbisogno di personale").
+- `staffing_requirements` — regole di fabbisogno di personale per area operativa (solo aree
+  `calendar_mode='shifts'`): `req_type` (`fixed` ricorrente per giorno della settimana | `single`
+  una sola data), `weekday`/`date` a seconda del tipo, `start_time`/`end_time`, `required_count`,
+  `effective_from`/`effective_until` (solo `fixed`: finestra di validità della regola, usata per
+  gli split "questa occorrenza e le future").
+- `staffing_requirement_exceptions` — eccezione puntuale a una singola occorrenza di una regola
+  `fixed`: `is_deleted` (occorrenza esclusa) oppure `override_count` (persone richieste diverse
+  solo quel giorno), mai entrambi. Stesso principio di `shift_exceptions`, esteso con un override
+  numerico.
 - `shift_exceptions` — singole occorrenze escluse da un turno `fixed` ricorrente (quando una
   richiesta di cancellazione per quella data viene approvata). Non ha `company_id`: si accede
   sempre tramite `shift_id` (mai NULL), la società si eredita per JOIN.
@@ -370,10 +393,98 @@ Una Sostituzione nasce in due modi:
   (area + sovrapposizione) prima di assegnare, per non fidarsi di chi chiama l'endpoint
   direttamente bypassando la UI.
 
+## Fabbisogno di personale per area operativa
+
+Livello superiore ai turni: esprime "quante persone servono" in un'area/fascia oraria a
+prescindere da chi sia già assegnato, e confronta automaticamente questo fabbisogno con la
+copertura reale (turni fissi/singoli/Sostituzioni accettate). Solo per aree con
+`calendar_mode='shifts'` (nessun caso d'uso per le aree Corsi).
+
+### Modello
+
+- **Fabbisogno fisso** (`req_type='fixed'`): regola ricorrente per giorno della settimana, una
+  riga per giorno (il numero di persone può variare giorno per giorno). L'intera programmazione
+  settimanale di un'area si gestisce con un solo editor (`StaffingScheduleModal`,
+  `PUT /api/staffing/requirements/weekly`): un orario condiviso da tutti i giorni, un conteggio
+  per giorno (0 = nessun fabbisogno quel giorno), una data di decorrenza. **Ogni chiamata
+  sostituisce l'intera programmazione precedente dell'area** da quella data in poi (chiude le
+  regole aperte esistenti, ne crea di nuove): non esistono pattern settimanali paralleli per la
+  stessa area.
+- **Fabbisogno singolo** (`req_type='single'`): esigenza straordinaria per una sola data, non
+  tocca la programmazione ricorrente.
+- **Eccezioni su un fabbisogno fisso** (`staffing_requirement_exceptions` + endpoint
+  `PUT /api/staffing/requirements/:id/occurrence`): 4 modalità, scelte dal dirigente occorrenza
+  per occorrenza (`StaffingOccurrenceModal`):
+  1. *Modifica solo questa occorrenza* → scrive un'eccezione con `override_count`.
+  2. *Modifica questa occorrenza e tutte le future* → "spezza" la regola: chiude quella corrente
+     (`effective_until = data-1`) e ne crea una nuova identica da quella data con il nuovo conteggio
+     (stesso principio già usato per i turni fissi con `recurrence_rule`, qui a granularità di
+     singolo giorno della settimana).
+  3. *Elimina solo questa occorrenza* → scrive un'eccezione con `is_deleted=true`.
+  4. *Elimina questa occorrenza e tutte le future* → chiude la regola senza crearne una nuova.
+  Se la data coincide con l'inizio della regola (nessuna occorrenza precedente da preservare), le
+  modalità 2/4 agiscono direttamente sulla regola esistente invece di spezzarla.
+
+### Calcolo della copertura (`staffingCoverage.computeCoverage`)
+
+Per ogni occorrenza nell'intervallo richiesto: espande le regole (`utils/staffingOccurrences.js`,
+applica le eccezioni), poi riusa **invariato** `shiftExpansion.getExpandedShifts` per i turni
+assegnati dell'area/periodo, e conta come copertura ogni turno che si **sovrappone** (non
+corrispondenza esatta) alla fascia del fabbisogno — stesso criterio di `hasOverlappingShift`.
+`missingSlots = requiredCount - assegnati - Sostituzioni già pubblicate e non reclamate`.
+
+**Limite noto, scelta deliberata**: se due fabbisogni della stessa area/data si sovrappongono
+nella fascia oraria (es. un fabbisogno singolo lo stesso giorno di un'occorrenza fissa, o due
+fasce diverse ma sovrapposte), lo stesso turno assegnato può contare come copertura di entrambi
+contemporaneamente (nessuna "prenotazione esclusiva" di un turno da parte di un'occorrenza). Una
+logica di assegnazione esclusiva (priorità al fabbisogno con fascia oraria più ristretta, un
+turno mai conteggiato due volte) è stata progettata e poi scartata per questa prima versione, su
+richiesta esplicita dell'utente, per tenere il calcolo semplice — può essere reintrodotta in
+futuro senza cambi allo schema dati se il caso d'uso reale lo richiede. Non implementarla "di
+nascosto" in una modifica futura senza discuterne: cambierebbe il significato dei numeri mostrati.
+
+### Slot scoperti → Sostituzioni (`POST /api/staffing/requirements/:id/generate-gap`)
+
+**Generazione sempre manuale** (bottone "Genera sostituzioni disponibili" nel pannello, mai
+automatica): crea tante righe `shifts` (`type='volante'`, `user_id=NULL`, `requirement_id`
+valorizzato) quante ne mancano per coprire il fabbisogno di quella specifica occorrenza — stesso
+pattern di INSERT già collaudato in `cancellationController.approveRequest`. **Idempotente**:
+rieseguito dopo che alcuni posti sono stati accettati, genera solo la differenza residua (il
+conteggio delle Sostituzioni già aperte e non reclamate, collegate via `requirement_id`, evita
+duplicati). Una volta create, queste Sostituzioni entrano nel flusso già esistente e **invariato**
+di `SubstitutionsPanel`/`listAvailableShifts`/`claimShift`: nessuna logica di claim separata per
+il fabbisogno.
+
+### Prevenzione fabbisogni duplicati
+
+Non si possono creare due regole (fisse o singole) con fascia oraria **esattamente identica**
+sulla stessa area/data-o-giorno (`findConflictingRequirement`): due fasce diverse anche se si
+sovrappongono (es. 08:00-14:00 e 10:00-12:00) restano sempre legittime. In caso di conflitto
+l'endpoint risponde `409` senza scrivere nulla; il frontend mostra `window.confirm` con il
+dettaglio e, se confermato, ripete la chiamata con `confirmDuplicate: true`. Stesso meccanismo per
+`upsertWeeklySchedule` (per giorno) e `createSingleRequirement`/`updateSingleRequirement`.
+
+### Turni sovrapposti affiancati nel calendario
+
+Conseguenza diretta del fabbisogno: più dipendenti assegnati alla stessa area/fascia oraria sono
+ora un caso normale (prima raro). `CalendarGrid.jsx`/`ShiftBlock.jsx` riusano **invariato**
+l'algoritmo di layout a corsie già usato per i corsi (`utils/courseLayout.layoutCourses`, generico
+su `startTime`/`endTime`): turni sovrapposti si affiancano invece di nascondersi a vicenda
+(prima: `left:3px;right:3px` fisso, un turno copriva l'altro). Con un solo turno per fascia
+(`laneCount=1`) la larghezza resta 100%, identica al comportamento storico: nessuna regressione
+per l'uso esistente. Nessuna modifica a `courseLayout.js`/`CoursesGrid.jsx`/`CourseBlock.jsx`.
+
 ## Funzionalità già completate
 
 - Autenticazione JWT con primo accesso via codice iniziale + impostazione password personale.
 - Gestione utenti gerarchica con permessi differenziati per ruolo (`canManageTargetRole`).
+- **Fabbisogno di personale per area operativa** (solo aree Turni): regole fisse (ricorrenti per
+  giorno della settimana, con le 4 modalità di modifica per singola occorrenza) e singole
+  (esigenza straordinaria per una data), calcolo automatico della copertura confrontando il
+  fabbisogno con i turni già assegnati (sovrapposizione oraria), generazione manuale delle
+  Sostituzioni mancanti (riusa il flusso Sostituzioni esistente), prevenzione di fabbisogni
+  duplicati con conferma esplicita. Turni sovrapposti nello stesso orario/area ora si affiancano
+  nel calendario invece di nascondersi (layout a corsie riusato dai corsi).
 - **Sedi e aree operative configurabili dal Dirigente**: CRUD sedi (con orari calendario
   personalizzati), CRUD aree operative per sede (con motore di calendario a scelta, riordino),
   assegnazione dipendenti a una o più aree, dashboard dipendente/manager costruite dinamicamente
@@ -409,8 +520,8 @@ Una Sostituzione nasce in due modi:
 
 ## Funzionalità in sviluppo
 
-Nessuna al momento: l'ultima funzionalità (Sedi/Aree operative configurabili) è stata completata,
-testata (locale, in attesa di verifica produzione) e documentata.
+Nessuna al momento: l'ultima funzionalità (Fabbisogno di personale per area operativa) è stata
+completata, testata (locale, in attesa di verifica produzione) e documentata.
 
 ## Funzionalità future previste
 
@@ -430,6 +541,12 @@ testata (locale, in attesa di verifica produzione) e documentata.
   società — oggi non esiste un endpoint DELETE per `companies`, la disattivazione è l'unico
   meccanismo "soft" previsto, deliberatamente (coerente con l'assenza di hard-delete altrove nel
   sistema).
+- **Assegnazione esclusiva della copertura del fabbisogno**: oggi un turno può coprire più
+  fabbisogni sovrapposti contemporaneamente (vedi sezione "Fabbisogno di personale", limite noto
+  accettato deliberatamente). Se emergono casi reali problematici, introdurre una logica di
+  assegnazione esclusiva con priorità alla fascia più ristretta (già progettata, non implementata).
+- **Fabbisogno di personale anche per aree Corsi**: oggi limitato alle aree `calendar_mode='shifts'`
+  (nessun caso d'uso richiesto per gli istruttori). Estendibile in futuro se richiesto.
 
 ## Decisioni architetturali prese
 
@@ -446,6 +563,17 @@ testata (locale, in attesa di verifica produzione) e documentata.
   appartiene sempre a un'area, non serve più un campo separato per "chi può accettare una
   Sostituzione" (vedi sezione dedicata). Non reintrodurre un campo `requiredCategory`/
   `requiredArea` esplicito: sarebbe ridondante con `area_id`.
+- **Fabbisogno di personale come livello puramente additivo sopra i turni**: `staffing_requirements`/
+  `staffing_requirement_exceptions` sono tabelle nuove e isolate, `shifts.requirement_id` è
+  nullable senza alcun vincolo NOT NULL/backfill. Nessuna modifica al comportamento di
+  `createShift`/`updateShift`/`claimShift`/`listAvailableShifts`/`approveRequest`: il fabbisogno
+  *legge* la copertura riusando `getExpandedShifts` e *scrive* nuove Sostituzioni riusando lo
+  stesso pattern di INSERT già in `cancellationController.approveRequest`, non introduce percorsi
+  di scrittura alternativi sui turni.
+- **Algoritmo di layout a corsie (`utils/courseLayout.layoutCourses`) riusato invariato tra corsi e
+  turni**: era già generico (opera solo su `startTime`/`endTime`), non è stato duplicato né
+  modificato. Se serve un domani differenziare il comportamento tra i due domini, valutare prima
+  se estendere la funzione con parametri opzionali piuttosto che biforcarla.
 - **JWT stateless, nessuna verifica a DB ad ogni richiesta**: `role`, `companyId` (e per i
   session token anche `username`) sono presi per buoni dal JWT in ogni middleware/controller.
   Le eccezioni deliberate sono verifiche puntuali dove il dato non può stare nel JWT (es.
@@ -494,6 +622,17 @@ testata (locale, in attesa di verifica produzione) e documentata.
 - **Il filtro di disponibilità delle Sostituzioni (area + sovrapposizione) è solo UX**:
   `claimShift`/`claimCourse` devono sempre riverificare entrambi i controlli lato server prima di
   assegnare. Non rimuovere questo doppio controllo per "semplificare".
+- **Generazione delle Sostituzioni da un buco di fabbisogno è sempre manuale**: nessuna creazione
+  automatica al solo apparire di uno scoperto, decisione esplicita dell'utente. Non aggiungere un
+  cron/trigger automatico senza riconferma.
+- **Copertura del fabbisogno non esclusiva tra regole sovrapposte** (decisione esplicita
+  dell'utente per questa versione): un turno può contare come copertura di più fabbisogni
+  sovrapposti nello stesso orario/area. Non introdurre "di nascosto" un'assegnazione esclusiva in
+  una modifica futura: cambierebbe il significato dei numeri già mostrati al dirigente, va
+  discusso prima.
+- **Fabbisogni duplicati (stessa area/data-o-giorno/orario esatto) bloccati salvo conferma
+  esplicita**: non rimuovere questo controllo per "semplificare" la creazione — è un requisito
+  esplicito dell'utente per evitare fabbisogni doppi creati per errore.
 - **Gestione sedi/aree riservata al Dirigente**: i Responsabili possono selezionare/leggere ma
   non creare/modificare/eliminare sedi o aree. Non allargare questo permesso senza riconferma
   esplicita (decisione presa insieme all'utente durante la progettazione).
@@ -611,3 +750,35 @@ Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cos
   aree, dipendente multi-area con dashboard dinamica a due tab, creazione e claim di una
   Sostituzione). Migrazione produzione ed eventuale smoke test: vedi voce successiva se già
   eseguiti al momento della lettura.
+- **2026-07-07** — **Fabbisogno di personale per area operativa**: nuovo livello sopra i turni,
+  puramente additivo (vedi sezione dedicata "Fabbisogno di personale per area operativa" per il
+  dettaglio completo). Nuove tabelle `staffing_requirements` (regole fisse per giorno della
+  settimana o singole per data, con split "chiudi e ricrea" per le modifiche "questa occorrenza e
+  le future") e `staffing_requirement_exceptions` (override/esclusione di una singola occorrenza);
+  nuova colonna nullable `shifts.requirement_id` (nessun backfill, nessun vincolo NOT NULL). Nuovi
+  `backend/src/utils/staffingOccurrences.js` (espansione occorrenze), `services/staffingCoverage.js`
+  (calcolo copertura riusando `getExpandedShifts` invariato + guardia duplicati
+  `findConflictingRequirement`), `controllers/staffingController.js` + `routes/staffing.js` (tutte
+  le rotte `requireManager`, nessun endpoint per il dipendente). `shiftExpansion.js`: aggiunto solo
+  il campo additivo `requirementId` a `toSafeShift`/`getExpandedShifts`; **nessuna modifica** a
+  `createShift`/`updateShift`/`claimShift`/`listAvailableShifts`/`approveRequest`. Frontend: nuovo
+  `components/staffing/` (`StaffingPanel.jsx`, pannello riepilogativo separato dal calendario;
+  `StaffingScheduleModal.jsx`, editor settimanale; `StaffingSingleModal.jsx`; `StaffingOccurrenceModal.jsx`,
+  le 4 modalità di modifica occorrenza), innestato in `DirigenteDashboard.jsx`/`AdminDashboard.jsx`
+  accanto a `SubstitutionsPanel`. Cambio collaterale richiesto esplicitamente dall'utente:
+  `CalendarGrid.jsx`/`ShiftBlock.jsx` riusano invariato l'algoritmo di layout a corsie già usato
+  per i corsi (`utils/courseLayout.layoutCourses`, generico), così turni sovrapposti nello stesso
+  orario/area (ora un caso comune, prima raro) si affiancano invece di nascondersi — nessuna
+  modifica a `courseLayout.js`/`CoursesGrid.jsx`/`CourseBlock.jsx`, verificato che il caso "un
+  solo turno" resti a larghezza 100% (nessuna regressione). Decisioni prese esplicitamente con
+  l'utente durante l'implementazione (non nella pianificazione iniziale): niente assegnazione
+  esclusiva della copertura tra fabbisogni sovrapposti (un turno può coprire più fabbisogni
+  contemporaneamente, scelta deliberata per semplicità); blocco di fabbisogni duplicati (stessa
+  area/data-o-giorno/orario esatto) con conferma esplicita richiesta (`409` + `confirmDuplicate`).
+  Verificato a fondo via curl (creazione regola settimanale con split corretto per data, tutte e 4
+  le modalità di modifica occorrenza, copertura calcolata correttamente su turni fissi/Sostituzioni
+  assegnate, generazione slot mancanti idempotente, guardia duplicati con e senza conferma,
+  isolamento per area `calendar_mode`, accesso negato al ruolo `user`) e nel browser end-to-end
+  (pannello fabbisogno, generazione e claim di una Sostituzione da un buco, verifica visiva di
+  turni sovrapposti affiancati nel calendario). Migrazione produzione: da eseguire solo dopo
+  conferma esplicita dell'utente (stesso protocollo delle feature precedenti).

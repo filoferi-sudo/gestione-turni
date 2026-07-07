@@ -383,3 +383,67 @@ CREATE INDEX IF NOT EXISTS idx_shifts_sede_id ON shifts(sede_id);
 CREATE INDEX IF NOT EXISTS idx_shifts_area_id ON shifts(area_id);
 CREATE INDEX IF NOT EXISTS idx_courses_sede_id ON courses(sede_id);
 CREATE INDEX IF NOT EXISTS idx_courses_area_id ON courses(area_id);
+
+-- Fabbisogno di personale: livello superiore ai turni, esprime "quante persone servono" in
+-- un'area/fascia oraria a prescindere da chi sia già assegnato. 'fixed' = regola ricorrente per
+-- giorno della settimana (una riga per giorno, perché il numero di persone può variare
+-- giorno per giorno); 'single' = esigenza straordinaria per una sola data, non tocca la
+-- programmazione ricorrente. Una regola 'fixed' è un pattern "split": modificarla "da questa
+-- occorrenza in poi" chiude la riga corrente (effective_until = data-1) e ne crea una nuova da
+-- quella data, stesso principio dei turni fissi con recurrence_rule ma con granularità per
+-- giorno della settimana. Solo per aree con calendar_mode='shifts' (verificato in
+-- staffingController.js, non imponibile con un CHECK cross-tabella in Postgres).
+CREATE TABLE IF NOT EXISTS staffing_requirements (
+  id                SERIAL PRIMARY KEY,
+  company_id        INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  area_id           INTEGER NOT NULL REFERENCES operational_areas(id) ON DELETE CASCADE,
+  req_type          VARCHAR(10) NOT NULL CHECK (req_type IN ('fixed', 'single')),
+  weekday           VARCHAR(3) CHECK (weekday IN ('MON','TUE','WED','THU','FRI','SAT','SUN')),
+  date              DATE,
+  start_time        TIME NOT NULL,
+  end_time          TIME NOT NULL,
+  required_count    INTEGER NOT NULL CHECK (required_count >= 0),
+  effective_from    DATE NOT NULL,
+  effective_until   DATE,
+  note              TEXT,
+  created_by        INTEGER NOT NULL REFERENCES users(id),
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (end_time > start_time),
+  CHECK (
+    (req_type = 'fixed' AND weekday IS NOT NULL AND date IS NULL)
+    OR
+    (req_type = 'single' AND date IS NOT NULL AND weekday IS NULL AND effective_until IS NULL)
+  )
+);
+
+CREATE INDEX IF NOT EXISTS idx_staffing_requirements_area_id ON staffing_requirements(area_id);
+
+-- Eccezione a una singola occorrenza di una regola 'fixed': sovrascrive il numero di persone
+-- richieste oppure elimina l'occorrenza per quella sola data, senza toccare la regola generale
+-- (stesso principio di shift_exceptions, esteso con un override numerico invece della sola
+-- esclusione, perché qui serve anche poter cambiare il numero di persone per un solo giorno).
+CREATE TABLE IF NOT EXISTS staffing_requirement_exceptions (
+  id               SERIAL PRIMARY KEY,
+  requirement_id   INTEGER NOT NULL REFERENCES staffing_requirements(id) ON DELETE CASCADE,
+  exception_date   DATE NOT NULL,
+  is_deleted       BOOLEAN NOT NULL DEFAULT FALSE,
+  override_count   INTEGER CHECK (override_count IS NULL OR override_count >= 0),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (requirement_id, exception_date),
+  CHECK (
+    (is_deleted = TRUE AND override_count IS NULL)
+    OR
+    (is_deleted = FALSE AND override_count IS NOT NULL)
+  )
+);
+
+CREATE INDEX IF NOT EXISTS idx_staffing_req_exceptions_requirement_id
+  ON staffing_requirement_exceptions(requirement_id);
+
+-- Collega una Sostituzione generata per coprire un buco di fabbisogno alla regola che l'ha
+-- generata (NULL per tutte le Sostituzioni create manualmente o da cancellazione approvata, come
+-- oggi): nullable, nessun backfill, nessun vincolo NOT NULL — additivo puro, zero rischio sulle
+-- righe esistenti e sui flussi che non lo leggono/scrivono (createShift, updateShift, claimShift).
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS requirement_id
+  INTEGER REFERENCES staffing_requirements(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_shifts_requirement_id ON shifts(requirement_id);

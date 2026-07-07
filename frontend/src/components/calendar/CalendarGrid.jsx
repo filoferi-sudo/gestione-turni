@@ -1,4 +1,5 @@
 import { DEFAULT_TIME_WINDOW } from '../../utils/timeWindow';
+import { layoutCourses } from '../../utils/courseLayout';
 import ShiftBlock from './ShiftBlock';
 
 // days: [{ date, label }]
@@ -6,6 +7,10 @@ import ShiftBlock from './ShiftBlock';
 // timeWindow: { GRID_HEIGHT, getHourMarks, minutesToTop } da createTimeWindow
 // (utils/timeWindow.js), costruita con gli orari calendario della sede attiva; ricade sui valori
 // storici se omessa.
+// layoutCourses (utils/courseLayout.js) è generico: opera solo su startTime/endTime, nessun
+// riferimento a campi specifici dei corsi. Riusato invariato anche per i turni, per affiancare
+// turni sovrapposti nello stesso orario invece di nasconderli (stesso pattern del calendario
+// corsi) — es. più dipendenti assegnati allo stesso fabbisogno di personale nella stessa fascia.
 export default function CalendarGrid({ days, shiftsByDate, showUsername, onShiftClick, timeWindow = DEFAULT_TIME_WINDOW }) {
   const hourMarks = timeWindow.getHourMarks();
 
@@ -26,16 +31,19 @@ export default function CalendarGrid({ days, shiftsByDate, showUsername, onShift
         ))}
       </div>
 
-      {days.map((day) => (
-        <div key={day.date} className="calendar-day-col" style={{ height: timeWindow.GRID_HEIGHT }}>
-          {hourMarks.map((mark) => (
-            <div key={mark.minutes} className="calendar-hour-line" style={{ top: timeWindow.minutesToTop(mark.minutes) }} />
-          ))}
-          {(shiftsByDate[day.date] || []).map((shift) => (
-            <ShiftBlock key={shift.id} shift={shift} showUsername={showUsername} onClick={onShiftClick} timeWindow={timeWindow} />
-          ))}
-        </div>
-      ))}
+      {days.map((day) => {
+        const dayShifts = layoutCourses(shiftsByDate[day.date] || []);
+        return (
+          <div key={day.date} className="calendar-day-col" style={{ height: timeWindow.GRID_HEIGHT }}>
+            {hourMarks.map((mark) => (
+              <div key={mark.minutes} className="calendar-hour-line" style={{ top: timeWindow.minutesToTop(mark.minutes) }} />
+            ))}
+            {dayShifts.map((shift) => (
+              <ShiftBlock key={shift.id} shift={shift} showUsername={showUsername} onClick={onShiftClick} timeWindow={timeWindow} />
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }

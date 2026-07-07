@@ -14,6 +14,7 @@ import CoursesCalendar from '../components/courses/CoursesCalendar';
 import CoursesAvailablePanel from '../components/courses/CoursesAvailablePanel';
 import SediManagement from './dirigente/SediManagement';
 import AreasManagement from '../components/areas/AreasManagement';
+import StaffingPanel from '../components/staffing/StaffingPanel';
 
 // Il calendario non è più una coppia fissa "Turni Bagnini"/"Corsi Istruttori": le tab si
 // costruiscono dinamicamente dalle aree operative della sede selezionata (vedi
@@ -116,6 +117,10 @@ export default function DirigenteDashboard() {
         />
 
         <HoursStats />
+
+        {shiftAreas.map((area) => (
+          <StaffingPanel key={`staffing-${area.id}`} areaId={area.id} areaName={shiftAreas.length > 1 ? area.name : undefined} />
+        ))}
 
         {shiftAreas.map((area) => (
           <SubstitutionsPanel

@@ -12,6 +12,7 @@ import SubstitutionsPanel from '../components/shifts/SubstitutionsPanel';
 import CancellationRequestsPanel from '../components/cancellation/CancellationRequestsPanel';
 import CoursesCalendar from '../components/courses/CoursesCalendar';
 import CoursesAvailablePanel from '../components/courses/CoursesAvailablePanel';
+import StaffingPanel from '../components/staffing/StaffingPanel';
 
 // Il Responsabile opera dentro le sedi/aree già configurate dal Dirigente: può selezionare quale
 // sede vedere ma non crearle/modificarle (vedi DirigenteDashboard per la gestione struttura).
@@ -108,6 +109,10 @@ export default function AdminDashboard() {
         />
 
         <HoursStats />
+
+        {shiftAreas.map((area) => (
+          <StaffingPanel key={`staffing-${area.id}`} areaId={area.id} areaName={shiftAreas.length > 1 ? area.name : undefined} />
+        ))}
 
         {shiftAreas.map((area) => (
           <SubstitutionsPanel

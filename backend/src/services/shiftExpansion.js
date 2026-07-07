@@ -98,6 +98,7 @@ async function getExpandedShifts({ start, end, targetUserId, companyId, areaId }
     createdBy: row.created_by,
     areaId: row.area_id,
     sedeId: row.sede_id,
+    requirementId: row.requirement_id,
   }));
 
   const fixedShifts = [];
@@ -163,6 +164,7 @@ function toSafeShift(row) {
     originShiftId: row.origin_shift_id,
     areaId: row.area_id,
     sedeId: row.sede_id,
+    requirementId: row.requirement_id,
   };
 }
 

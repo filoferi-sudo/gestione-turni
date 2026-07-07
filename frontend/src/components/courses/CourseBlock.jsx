@@ -1,8 +1,8 @@
 import { timeToMinutes, PX_PER_MIN, DEFAULT_TIME_WINDOW } from '../../utils/timeWindow';
 
-// A differenza di ShiftBlock (larghezza fissa, un solo turno per volta), la posizione orizzontale
-// qui dipende da `lane`/`laneCount` calcolati da utils/courseLayout: corsi sovrapposti nello
-// stesso orario si affiancano invece di nascondersi a vicenda.
+// Stesso principio di ShiftBlock.jsx (che riusa lo stesso utils/courseLayout): la posizione
+// orizzontale dipende da `lane`/`laneCount`, corsi sovrapposti nello stesso orario si affiancano
+// invece di nascondersi a vicenda.
 export default function CourseBlock({ course, draggable, onClick, onDragStart, timeWindow = DEFAULT_TIME_WINDOW }) {
   const top = timeWindow.minutesToTop(timeToMinutes(course.startTime));
   const height = (timeToMinutes(course.endTime) - timeToMinutes(course.startTime)) * PX_PER_MIN;
