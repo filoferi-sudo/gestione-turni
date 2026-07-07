@@ -356,6 +356,107 @@ button:disabled {
   opacity: 0.9;
 }
 
+/* Fabbisogno di personale integrato nel calendario: livello di pianificazione separato dai
+   turni (ShiftBlock), non un turno aggiuntivo. Riga propria con sfondo neutro e bordo di
+   separazione dalla griglia oraria sottostante, chip in stile badge/etichetta (mai un
+   rettangolo pieno colorato come .shift-block, per non essere confusi con la legenda tipi-turno). */
+.calendar-staffing-row {
+  display: contents;
+}
+
+.calendar-staffing-corner {
+  background: #eef0f3;
+  border-bottom: 2px solid #d1d5db;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+}
+
+.calendar-staffing-cell {
+  background: #eef0f3;
+  border-bottom: 2px solid #d1d5db;
+  border-left: 1px solid #e5e7eb;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.staffing-chip {
+  background: white;
+  border: 1px solid #d1d5db;
+  border-left: 3px solid #9ca3af;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 10px;
+  color: #374151;
+}
+
+.staffing-chip-covered {
+  border-left-color: #2f6f4f;
+}
+
+.staffing-chip-warning {
+  border-left-color: #d97706;
+}
+
+.staffing-chip-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.staffing-chip-time {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.staffing-chip-coverage {
+  white-space: nowrap;
+}
+
+.staffing-chip-warning .staffing-chip-coverage {
+  color: #92400e;
+}
+
+.staffing-chip-generate {
+  margin: 0;
+  padding: 1px 5px;
+  font-size: 10px;
+  background: #d97706;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.staffing-chip-expanded {
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px dashed #e5e7eb;
+  font-size: 10px;
+  color: #4b5563;
+}
+
+.staffing-chip-expanded ul {
+  margin: 2px 0;
+  padding-left: 14px;
+}
+
+.staffing-chip-edit {
+  margin: 4px 0 0;
+  padding: 2px 8px;
+  font-size: 10px;
+  background: #e5e7eb;
+  color: #1f2430;
+}
+
 /* Modale */
 
 .modal-overlay {

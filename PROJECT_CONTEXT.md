@@ -89,19 +89,24 @@ turni-app/
                                 immediato al ritorno di focus) per aggiornamenti quasi in tempo
                                 reale sui dati condivisi tra utenti (vedi sezione dedicata)
       components/
-        calendar/               CalendarPage (turni, richiede areaId+timeWindow), CalendarGrid
-                                (turni sovrapposti affiancati via utils/courseLayout.layoutCourses,
-                                riusato invariato), ShiftBlock (lane/laneCount come CourseBlock),
-                                ShiftFormModal (senza più "ruolo richiesto"), TabbedCalendar
-                                (contenitore generico multi-vista, usato ora per costruire
-                                dinamicamente una tab per area)
+        calendar/               CalendarPage (turni, richiede areaId+timeWindow; per mode='admin'
+                                carica anche la copertura fabbisogno e i 3 modali fabbisogno, vedi
+                                sezione dedicata), CalendarGrid (turni sovrapposti affiancati via
+                                utils/courseLayout.layoutCourses, riusato invariato; riga
+                                `.calendar-staffing-row` opzionale con gli indicatori di copertura
+                                per giorno, resa da StaffingChip), StaffingChip.jsx (indicatore di
+                                copertura di una singola occorrenza, compatto/espandibile),
+                                ShiftBlock (lane/laneCount come CourseBlock), ShiftFormModal (senza
+                                più "ruolo richiesto"), TabbedCalendar (contenitore generico
+                                multi-vista, usato ora per costruire dinamicamente una tab per area)
         courses/                CoursesCalendar (richiede areaId+timeWindow), CoursesGrid,
                                 CourseBlock, CourseFormModal, CoursesAvailablePanel
         shifts/SubstitutionsPanel.jsx   "Sostituzioni" (ex "turni volanti"), scoped per area
-        staffing/               StaffingPanel.jsx (copertura fabbisogno, pannello separato dal
-                                calendario), StaffingScheduleModal.jsx (editor settimanale),
-                                StaffingSingleModal.jsx (fabbisogno singolo), StaffingOccurrenceModal.jsx
-                                (le 4 modalità di modifica occorrenza)
+        staffing/               StaffingScheduleModal.jsx (editor settimanale), StaffingSingleModal.jsx
+                                (fabbisogno singolo), StaffingOccurrenceModal.jsx (le 4 modalità di
+                                modifica occorrenza) — riusati invariati, aperti ora direttamente da
+                                CalendarPage/CalendarGrid (vedi sotto); StaffingPanel.jsx (il vecchio
+                                pannello riepilogativo separato dal calendario) è stato rimosso
         cancellation/           CancellationRequestsPanel (manager), MyCancellationRequests (self)
         management/UserManagementSection.jsx   colonna "Aree" + azione "Modifica aree"
         areas/AreasManagement.jsx   CRUD aree operative di una sede (solo Dirigente)
@@ -448,7 +453,7 @@ nascosto" in una modifica futura senza discuterne: cambierebbe il significato de
 
 ### Slot scoperti → Sostituzioni (`POST /api/staffing/requirements/:id/generate-gap`)
 
-**Generazione sempre manuale** (bottone "Genera sostituzioni disponibili" nel pannello, mai
+**Generazione sempre manuale** (bottone "Genera" sul chip di copertura nel calendario, mai
 automatica): crea tante righe `shifts` (`type='volante'`, `user_id=NULL`, `requirement_id`
 valorizzato) quante ne mancano per coprire il fabbisogno di quella specifica occorrenza — stesso
 pattern di INSERT già collaudato in `cancellationController.approveRequest`. **Idempotente**:
@@ -476,6 +481,51 @@ su `startTime`/`endTime`): turni sovrapposti si affiancano invece di nascondersi
 (prima: `left:3px;right:3px` fisso, un turno copriva l'altro). Con un solo turno per fascia
 (`laneCount=1`) la larghezza resta 100%, identica al comportamento storico: nessuna regressione
 per l'uso esistente. Nessuna modifica a `courseLayout.js`/`CoursesGrid.jsx`/`CourseBlock.jsx`.
+
+### Copertura integrata direttamente nel calendario turni (non più un pannello separato)
+
+Evoluzione richiesta esplicitamente dall'utente: inizialmente la copertura viveva solo in
+`StaffingPanel.jsx`, un pannello riepilogativo montato sotto al calendario. **Rimosso**: il
+dirigente deve vedere "quanto serve / quanto è coperto / chi manca" direttamente nella stessa
+vista calendario, senza aprire pannelli secondari. Nessuna modifica al backend: l'integrazione è
+puramente frontend, riusa `GET /api/staffing/coverage` e `GET /api/staffing/requirements` così
+come già utilizzati dal vecchio pannello.
+
+**Dove vive nel codice**: `CalendarPage.jsx` (solo `mode='admin'`, le rotte `/staffing/*` sono
+`requireManager`) carica `coverage` in parallelo a `shifts` nello stesso `loadCalendar`/polling a
+5s (prima il pannello aveva un polling separato a 10s, unificato per semplicità — nessun impatto
+di carico atteso, la query riusa `getExpandedShifts` già ottimizzato). `CalendarGrid.jsx` riceve
+`coverageByDate` (raggruppato per data, come `shiftsByDate`) e inserisce una riga aggiuntiva nella
+griglia CSS, tra l'header giorni e la griglia oraria, con un chip (`StaffingChip.jsx`) per ogni
+occorrenza del giorno — **mai accorpati**, un'area può avere più fasce indipendenti lo stesso
+giorno (es. mattina+sera), ognuna il proprio chip.
+
+**Design deliberato: chip in riga, non overlay sull'asse del tempo.** Si è scelto di non
+posizionare gli indicatori di copertura sovrapposti alla griglia oraria (come fa `layoutCourses`
+per i turni) per due motivi: (1) evitare collisioni visive con gli `ShiftBlock` sottostanti quando
+più fasce di fabbisogno si sovrappongono nello stesso orario/area (caso già noto e legittimo, vedi
+"Limite noto" sopra); (2) rinforzare la gerarchia di lettura richiesta esplicitamente dall'utente
+— **sopra = quanto personale serve (pianificazione)**, **sotto = chi lavora davvero (turni
+assegnati, invariati)**. Per questo il chip usa uno stile "badge/etichetta" (bordo sottile, sfondo
+chiaro, indicatore di stato a barra laterale verde/ambra) deliberatamente diverso dal rettangolo
+pieno colorato di `ShiftBlock`, per non essere confuso con un turno; la riga chip ha inoltre uno
+sfondo neutro proprio con un bordo di separazione dalla griglia sottostante. Non fondere i due
+stili in una futura modifica: la distinzione visiva è un requisito esplicito, non un dettaglio
+estetico.
+
+**Chip compatto di default, dettaglio a richiesta**: mostra sempre orario + `copertura/richiesto`
++ bottone "Genera" (se `missingSlots > 0`, l'azione più frequente). Click sul corpo del chip
+espande inline (stato locale del componente, nessun modale) l'elenco nominale di `assignedUsers` e
+il conteggio `openSlots`, più un bottone "Modifica" che apre `StaffingOccurrenceModal` (regola
+fissa) o `StaffingSingleModal` (fabbisogno singolo) — stesso routing per `reqType` che prima era in
+`StaffingPanel.handleOccurrenceClick`, ora in `CalendarPage.handleEditOccurrence`. I nomi degli
+assegnati restano comunque visibili anche senza espandere il chip, guardando gli `ShiftBlock`
+nella stessa fascia oraria sottostante: nessuna duplicazione obbligatoria delle informazioni.
+
+**Gestione del fabbisogno** (creazione/modifica piano settimanale, nuovo fabbisogno singolo): i
+bottoni "Gestisci fabbisogno settimanale" e "+ Fabbisogno singolo", prima nell'header di
+`StaffingPanel`, sono ora nella toolbar di `CalendarPage` (solo `isAdmin`), accanto a "+ Nuovo
+turno". Aprono gli stessi `StaffingScheduleModal`/`StaffingSingleModal` riusati invariati.
 
 ## Aggiornamenti quasi in tempo reale (polling leggero)
 
@@ -513,9 +563,8 @@ non lo hanno, deliberatamente):
 
 | Componente | Intervallo |
 |---|---|
-| `CalendarPage` (turni), `CoursesCalendar` (corsi) | 5s |
+| `CalendarPage` (turni, incluso il fabbisogno integrato per `mode='admin'`), `CoursesCalendar` (corsi) | 5s |
 | `SubstitutionsPanel`, `CoursesAvailablePanel` | 5s |
-| `StaffingPanel` (Fabbisogno) | 10s |
 | `CancellationRequestsPanel`, `MyCancellationRequests` | 10s |
 | `HoursStats` | 60s |
 
@@ -543,7 +592,10 @@ l'indice mancante `idx_cancellation_requests_shift_id`.
   fabbisogno con i turni già assegnati (sovrapposizione oraria), generazione manuale delle
   Sostituzioni mancanti (riusa il flusso Sostituzioni esistente), prevenzione di fabbisogni
   duplicati con conferma esplicita. Turni sovrapposti nello stesso orario/area ora si affiancano
-  nel calendario invece di nascondersi (layout a corsie riusato dai corsi).
+  nel calendario invece di nascondersi (layout a corsie riusato dai corsi). **Copertura integrata
+  direttamente nel calendario turni** (chip per occorrenza in una riga dedicata sopra la griglia
+  oraria, stile visivo distinto dai turni, espandibile per vedere gli assegnati ed accedere alla
+  modifica): non più un pannello separato, vedi sezione dedicata.
 - **Sedi e aree operative configurabili dal Dirigente**: CRUD sedi (con orari calendario
   personalizzati), CRUD aree operative per sede (con motore di calendario a scelta, riordino),
   assegnazione dipendenti a una o più aree, dashboard dipendente/manager costruite dinamicamente
@@ -899,3 +951,37 @@ Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cos
   il messaggio di caricamento. **Attenzione per il futuro**: qualunque nuovo componente che riceva
   polling e usi uno stato `loading` per nascondere il contenuto deve seguire lo stesso pattern
   `{ silent }`, altrimenti si ripresenta lo stesso sfarfallio.
+- **2026-07-08** — **Fabbisogno integrato direttamente nel calendario turni** (non più un pannello
+  separato). Richiesta esplicita dell'utente: il dirigente deve vedere quanto personale serve,
+  quanto è coperto e chi manca senza aprire pannelli secondari, con ogni fascia oraria sempre
+  visibile e mai accorpata — vedi la sezione dedicata "Copertura integrata direttamente nel
+  calendario turni" dentro "Fabbisogno di personale per area operativa" per il dettaglio completo
+  di design e motivazioni. **Nessuna modifica al backend**: l'infrastruttura del fabbisogno
+  (`staffing_requirements`/`staffing_requirement_exceptions`, calcolo copertura, generazione
+  Sostituzioni) era già completa e corrispondeva quasi 1:1 a quanto richiesto; il lavoro è stato
+  interamente di rewiring frontend. File principali: nuovo
+  `frontend/src/components/calendar/StaffingChip.jsx` (chip di copertura per occorrenza, compatto
+  con dettaglio espandibile a richiesta — nomi assegnati, `openSlots`, bottone "Modifica"); esteso
+  `CalendarGrid.jsx` (nuova riga `.calendar-staffing-row` tra header giorni e griglia oraria, uno
+  stile deliberatamente "badge/etichetta" e non un rettangolo pieno come `.shift-block`, per
+  rinforzare la gerarchia "sopra = fabbisogno pianificato, sotto = turni assegnati" richiesta
+  esplicitamente dall'utente); esteso `CalendarPage.jsx` (fetch di `coverage`/`requirements` in
+  parallelo a `shifts` solo per `mode='admin'`, tre modali fabbisogno riusati **invariati**
+  `StaffingScheduleModal`/`StaffingSingleModal`/`StaffingOccurrenceModal`, due nuovi bottoni in
+  toolbar "Gestisci fabbisogno settimanale"/"+ Fabbisogno singolo"); rimosso
+  `frontend/src/components/staffing/StaffingPanel.jsx` e i suoi montaggi in
+  `DirigenteDashboard.jsx`/`AdminDashboard.jsx` — rimozione fatta **solo dopo** aver verificato in
+  browser che la nuova integrazione funzionasse end-to-end (richiesta esplicita dell'utente
+  durante la pianificazione, per non perdere la possibilità di gestire il fabbisogno se qualcosa
+  non avesse funzionato subito). Nuove classi CSS in `styles.css` (`.calendar-staffing-*`,
+  `.staffing-chip*`), nessuna modifica a `.shift-block*`/`.calendar-grid`/`.legend-*` esistenti.
+  Polling della copertura unificato nel ciclo a 5s già usato da `CalendarPage` per i turni (prima
+  10s in `StaffingPanel`, ora assorbito: query già ottimizzata, nessun impatto atteso). Verificato
+  a fondo in locale via browser: chip corretti per giorno/fascia con copertura live (assegnati +
+  Sostituzioni pubblicate), espansione con nomi corretti, generazione Sostituzioni da un chip
+  scoperto (nuovi blocchi turno visibili subito nella stessa colonna), tutti e 4 i modali fabbisogno
+  (settimanale, singolo, le 4 modalità di modifica occorrenza) aperti e funzionanti dalla toolbar/
+  dal chip espanso, **nessuna chiamata a `/api/staffing/*` per un account Dipendente** (`mode='user'`,
+  verificato via network tab), dashboard Dirigente e Responsabile entrambe funzionanti dopo la
+  rimozione di `StaffingPanel.jsx` (grep di conferma: nessun import residuo). Migrazione DB: non
+  necessaria, nessuna modifica allo schema.

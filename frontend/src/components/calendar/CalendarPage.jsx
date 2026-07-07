@@ -6,6 +6,9 @@ import { DEFAULT_TIME_WINDOW } from '../../utils/timeWindow';
 import { usePolling } from '../../hooks/usePolling';
 import CalendarGrid from './CalendarGrid';
 import ShiftFormModal from './ShiftFormModal';
+import StaffingScheduleModal from '../staffing/StaffingScheduleModal';
+import StaffingSingleModal from '../staffing/StaffingSingleModal';
+import StaffingOccurrenceModal from '../staffing/StaffingOccurrenceModal';
 
 // mode: 'admin' (CRUD completo, tutti i dipendenti dell'area) | 'user' (sola lettura, solo il
 // proprio calendario). areaId: area operativa a cui appartiene questo calendario (obbligatoria,
@@ -25,15 +28,33 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
   const [modalState, setModalState] = useState(null); // { shift } | null
   const [actionNotice, setActionNotice] = useState('');
 
+  // Fabbisogno di personale, integrato direttamente nel calendario (vedi CalendarGrid/StaffingChip):
+  // solo per mode='admin', le rotte /staffing/* sono tutte requireManager. requirements serve solo
+  // a instradare il click "Modifica" di un'occorrenza verso il modale giusto (fixed vs single),
+  // stessa logica che prima viveva in StaffingPanel.jsx.
+  const [requirements, setRequirements] = useState([]);
+  const [coverage, setCoverage] = useState([]);
+  const [staffingNotice, setStaffingNotice] = useState('');
+  const [generateBusyKey, setGenerateBusyKey] = useState(null);
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [singleModalState, setSingleModalState] = useState(null); // { requirement } | null
+  const [occurrenceModalState, setOccurrenceModalState] = useState(null); // { requirement, occurrence }
+
   const days = viewType === 'week' ? getWeekDays(referenceDate) : getSingleDay(referenceDate);
   const start = days[0].date;
   const end = days[days.length - 1].date;
+
+  const anyStaffingModalOpen = scheduleModalOpen || !!singleModalState || !!occurrenceModalState;
 
   useEffect(() => {
     if (isAdmin) {
       api
         .listUsers(token)
         .then(({ users: all }) => setUsers(all.filter((u) => u.areas?.some((a) => a.id === areaId))))
+        .catch((err) => setError(err.message));
+      api
+        .listStaffingRequirements(areaId, token)
+        .then(({ requirements: all }) => setRequirements(all))
         .catch((err) => setError(err.message));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -44,9 +65,14 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
   // sfarfallio visibile ogni pochi secondi anche quando l'utente non ha fatto nulla.
   function loadCalendar({ silent = false } = {}) {
     if (!silent) setLoading(true);
-    api
-      .getCalendar(token, { start, end, areaId, userId: isAdmin ? selectedUserId || undefined : undefined })
-      .then(({ shifts }) => setShifts(shifts))
+    Promise.all([
+      api.getCalendar(token, { start, end, areaId, userId: isAdmin ? selectedUserId || undefined : undefined }),
+      isAdmin ? api.getStaffingCoverage(token, { areaId, start, end }) : Promise.resolve({ coverage: [] }),
+    ])
+      .then(([{ shifts }, { coverage }]) => {
+        setShifts(shifts);
+        setCoverage(coverage);
+      })
       .catch((err) => setError(err.message))
       .finally(() => {
         if (!silent) setLoading(false);
@@ -58,16 +84,60 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start, end, selectedUserId, areaId]);
 
-  // Aggiornamenti quasi in tempo reale: altri utenti collegati possono creare/modificare turni in
-  // ogni momento. Sospeso mentre un modale è aperto (evita ridisegni della griglia sotto al
-  // modale); il refetch riprende comunque subito alla chiusura, vedi handleModalClose sotto.
+  // Aggiornamenti quasi in tempo reale: altri utenti collegati possono creare/modificare turni (o
+  // accettare Sostituzioni che coprono il fabbisogno) in ogni momento. Sospeso mentre un modale è
+  // aperto (evita ridisegni della griglia sotto al modale, sia il modale turno sia quelli
+  // fabbisogno); il refetch riprende comunque subito alla chiusura, vedi handleModalClose sotto.
   // silent: true evita di rimostrare "Caricamento..." ad ogni tick (vedi loadCalendar sopra).
-  usePolling(() => loadCalendar({ silent: true }), { intervalMs: 5000, enabled: !modalState });
+  usePolling(() => loadCalendar({ silent: true }), { intervalMs: 5000, enabled: !modalState && !anyStaffingModalOpen });
 
   const shiftsByDate = shifts.reduce((acc, shift) => {
     (acc[shift.date] = acc[shift.date] || []).push(shift);
     return acc;
   }, {});
+
+  const coverageByDate = coverage.reduce((acc, occ) => {
+    (acc[occ.date] = acc[occ.date] || []).push(occ);
+    return acc;
+  }, {});
+
+  const requirementsById = new Map(requirements.map((r) => [r.id, r]));
+
+  async function handleGenerateGap(occ) {
+    setStaffingNotice('');
+    const key = `${occ.requirementId}-${occ.date}`;
+    setGenerateBusyKey(key);
+    try {
+      const { created } = await api.generateStaffingGap(occ.requirementId, occ.date, token);
+      setStaffingNotice(
+        created > 0
+          ? `Create ${created} sostituzioni disponibili per il ${occ.date}.`
+          : 'Nessuna sostituzione da creare: il fabbisogno risulta già coperto o già pubblicato.'
+      );
+      loadCalendar();
+    } catch (err) {
+      setStaffingNotice(err.message);
+    } finally {
+      setGenerateBusyKey(null);
+    }
+  }
+
+  function handleEditOccurrence(occ) {
+    const requirement = requirementsById.get(occ.requirementId);
+    if (!requirement) return;
+    if (requirement.reqType === 'single') {
+      setSingleModalState({ requirement });
+    } else {
+      setOccurrenceModalState({ requirement, occurrence: occ });
+    }
+  }
+
+  function reloadStaffingRequirements() {
+    api
+      .listStaffingRequirements(areaId, token)
+      .then(({ requirements: all }) => setRequirements(all))
+      .catch((err) => setError(err.message));
+  }
 
   function goPrev() {
     setReferenceDate((d) => addDays(d, viewType === 'week' ? -7 : -1));
@@ -156,6 +226,12 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
             >
               + Nuovo turno
             </button>
+            <button className="button-secondary" onClick={() => setScheduleModalOpen(true)}>
+              Gestisci fabbisogno settimanale
+            </button>
+            <button className="button-secondary" onClick={() => setSingleModalState({ requirement: null })}>
+              + Fabbisogno singolo
+            </button>
           </div>
         )}
       </div>
@@ -180,6 +256,7 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
 
       {error && <div className="error">{error}</div>}
       {actionNotice && <div className="notice">{actionNotice}</div>}
+      {staffingNotice && <div className="notice">{staffingNotice}</div>}
       {loading ? (
         <div className="calendar-loading">Caricamento calendario...</div>
       ) : (
@@ -189,6 +266,10 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
           showUsername={isAdmin && !selectedUserId}
           onShiftClick={isAdmin ? (shift) => setModalState({ shift }) : handleUserShiftClick}
           timeWindow={timeWindow}
+          coverageByDate={isAdmin ? coverageByDate : undefined}
+          onGenerateGap={handleGenerateGap}
+          onEditOccurrence={handleEditOccurrence}
+          generateBusyKey={generateBusyKey}
         />
       )}
 
@@ -201,6 +282,61 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={handleModalClose}
+        />
+      )}
+
+      {scheduleModalOpen && (
+        <StaffingScheduleModal
+          areaId={areaId}
+          onClose={() => {
+            setScheduleModalOpen(false);
+            reloadStaffingRequirements();
+            loadCalendar();
+          }}
+          onSaved={() => {
+            setScheduleModalOpen(false);
+            reloadStaffingRequirements();
+            loadCalendar();
+          }}
+        />
+      )}
+
+      {singleModalState && (
+        <StaffingSingleModal
+          areaId={areaId}
+          requirement={singleModalState.requirement}
+          onClose={() => {
+            setSingleModalState(null);
+            reloadStaffingRequirements();
+            loadCalendar();
+          }}
+          onSaved={() => {
+            setSingleModalState(null);
+            reloadStaffingRequirements();
+            loadCalendar();
+          }}
+          onDeleted={() => {
+            setSingleModalState(null);
+            reloadStaffingRequirements();
+            loadCalendar();
+          }}
+        />
+      )}
+
+      {occurrenceModalState && (
+        <StaffingOccurrenceModal
+          requirement={occurrenceModalState.requirement}
+          occurrence={occurrenceModalState.occurrence}
+          onClose={() => {
+            setOccurrenceModalState(null);
+            reloadStaffingRequirements();
+            loadCalendar();
+          }}
+          onSaved={() => {
+            setOccurrenceModalState(null);
+            reloadStaffingRequirements();
+            loadCalendar();
+          }}
         />
       )}
     </div>
