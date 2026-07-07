@@ -689,6 +689,18 @@ completata, testata (locale, in attesa di verifica produzione) e documentata.
 - **Nessuna UI di storico** per i turni con `status='cancelled_approved'`: il dato persiste nel
   DB (non viene più eliminato) ma oggi è consultabile solo via query diretta, non da una schermata
   dedicata. Possibile estensione futura se il cliente lo richiede esplicitamente.
+- **Sostituzione generata da cancellazione approvata non collegata a `requirement_id`**: trovato
+  durante lo smoke test in produzione del fabbisogno. Se un dipendente il cui turno copriva un
+  fabbisogno cancella (approvato) e il fabbisogno di quell'occorrenza aveva già delle Sostituzioni
+  generate via "genera sostituzioni" (`openSlots`), la nuova Sostituzione creata da
+  `cancellationController.approveRequest` (collegata via `origin_shift_id`, non `requirement_id`)
+  **non** viene conteggiata in `openSlots`: `missingSlots` risulta quindi sovrastimato di 1 in
+  questo scenario specifico (occorrenza con sia una copertura da fabbisogno sia una cancellazione
+  sulla stessa occorrenza). Cliccare di nuovo "Genera sostituzioni" in quel caso crea un posto in
+  più del reale necessario (nessuna perdita dati, solo un'eventuale Sostituzione in eccesso che il
+  dirigente può eliminare manualmente). Non collegato di proposito in questa versione per non
+  accoppiare `cancellationController` alla logica di fabbisogno senza discuterne prima con
+  l'utente; da valutare se longevo/frequente nell'uso reale.
 
 ## Come continuare lo sviluppo
 
