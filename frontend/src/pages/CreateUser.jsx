@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { EMPLOYEE_CATEGORIES } from '../constants/employeeCategories';
 
 const ROLE_LABELS = { admin: 'Responsabile', dirigente: 'Dirigente', user: 'Dipendente' };
 
@@ -11,7 +12,13 @@ export default function CreateUser() {
   const isDirigente = user.role === 'dirigente';
   const defaultRole = location.state?.defaultRole === 'admin' ? 'admin' : 'user';
 
-  const [form, setForm] = useState({ username: '', email: '', phone: '', role: defaultRole });
+  const [form, setForm] = useState({
+    username: '',
+    email: '',
+    phone: '',
+    role: defaultRole,
+    category: EMPLOYEE_CATEGORIES[0].value,
+  });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState(null);
@@ -27,9 +34,10 @@ export default function CreateUser() {
     setError('');
     setSubmitting(true);
     try {
-      const result = await api.createUser(form, token);
+      const payload = { ...form, category: form.role === 'user' ? form.category : undefined };
+      const result = await api.createUser(payload, token);
       setCreated(result);
-      setForm({ username: '', email: '', phone: '', role: form.role });
+      setForm({ username: '', email: '', phone: '', role: form.role, category: form.category });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -71,6 +79,27 @@ export default function CreateUser() {
                   Responsabile
                 </button>
               </div>
+            </>
+          )}
+
+          {form.role === 'user' && (
+            <>
+              <label>Categoria</label>
+              <div className="segmented">
+                {EMPLOYEE_CATEGORIES.map((c) => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    className={form.category === c.value ? 'active' : ''}
+                    onClick={() => setForm((f) => ({ ...f, category: c.value }))}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+              <p className="hint">
+                Determina quale dashboard e quali funzionalità vedrà il dipendente dopo l'accesso.
+              </p>
             </>
           )}
 

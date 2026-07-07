@@ -8,6 +8,7 @@ const calendarRoutes = require('./routes/calendar');
 const shiftRoutes = require('./routes/shifts');
 const cancellationRequestRoutes = require('./routes/cancellationRequests');
 const statsRoutes = require('./routes/stats');
+const courseRoutes = require('./routes/courses');
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use('/api/calendar', calendarRoutes);
 app.use('/api/shifts', shiftRoutes);
 app.use('/api/cancellation-requests', cancellationRequestRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/courses', courseRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

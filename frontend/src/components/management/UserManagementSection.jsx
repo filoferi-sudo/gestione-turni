@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { EMPLOYEE_CATEGORY_LABELS } from '../../constants/employeeCategories';
 
 const ROLE_LABELS = { admin: 'Responsabile', dirigente: 'Dirigente', user: 'Dipendente' };
 
@@ -15,6 +16,7 @@ function canManage(currentRole, targetRole) {
 // roles: elenco di ruoli da mostrare in questa sezione (es. ['user'] oppure ['admin'])
 // createHref/createLabel: opzionali, mostrano un link per creare un nuovo account di quel tipo
 export default function UserManagementSection({ roles, title, createHref, createLabel }) {
+  const showCategory = roles.includes('user');
   const { token, user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [error, setError] = useState('');
@@ -74,6 +76,7 @@ export default function UserManagementSection({ roles, title, createHref, create
             <th>Email</th>
             <th>Telefono</th>
             <th>Ruolo</th>
+            {showCategory && <th>Categoria</th>}
             <th>Codice primo accesso</th>
             <th>Stato</th>
             <th>Azioni</th>
@@ -88,6 +91,7 @@ export default function UserManagementSection({ roles, title, createHref, create
                 <td>{u.email}</td>
                 <td>{u.phone || '-'}</td>
                 <td>{ROLE_LABELS[u.role] || u.role}</td>
+                {showCategory && <td>{EMPLOYEE_CATEGORY_LABELS[u.category] || '-'}</td>}
                 <td>{u.initialCode || '-'}</td>
                 <td>{u.mustChangePassword ? 'In attesa di primo accesso' : 'Attivo'}</td>
                 <td className="actions-cell">
@@ -114,7 +118,7 @@ export default function UserManagementSection({ roles, title, createHref, create
           })}
           {users.length === 0 && (
             <tr>
-              <td colSpan={7} className="hint">
+              <td colSpan={showCategory ? 8 : 7} className="hint">
                 Nessun utente in questa categoria.
               </td>
             </tr>

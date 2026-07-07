@@ -79,4 +79,12 @@ export const api = {
     request(`/cancellation-requests/${id}/reject`, { method: 'POST', token }),
 
   getHoursStats: (token, userId) => request(`/stats/hours${userId ? `?userId=${userId}` : ''}`, { token }),
+
+  listCourses: (token, { start, end }) => {
+    const params = new URLSearchParams({ start, end });
+    return request(`/courses?${params.toString()}`, { token });
+  },
+  createCourse: (payload, token) => request('/courses', { method: 'POST', body: payload, token }),
+  updateCourse: (id, payload, token) => request(`/courses/${id}`, { method: 'PUT', body: payload, token }),
+  deleteCourse: (id, token) => request(`/courses/${id}`, { method: 'DELETE', token }),
 };

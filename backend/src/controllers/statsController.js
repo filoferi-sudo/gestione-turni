@@ -44,7 +44,9 @@ async function getHoursStats(req, res) {
   const fetchStart = yearStart;
   const fetchEnd = monthEnd >= weekEnd ? monthEnd : weekEnd;
 
-  const filterUserId = req.query.userId ? Number(req.query.userId) : null;
+  // Un dipendente vede sempre e solo le proprie ore; responsabile/dirigente vedono tutti o
+  // filtrano per userId tramite query string.
+  const filterUserId = req.user.role === 'user' ? req.user.id : req.query.userId ? Number(req.query.userId) : null;
 
   const allShifts = await getExpandedShifts({ start: fetchStart, end: fetchEnd, targetUserId: filterUserId });
   const assignedShifts = allShifts.filter((s) => s.userId);

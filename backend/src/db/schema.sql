@@ -1,5 +1,9 @@
 -- Schema minimo per il sistema di autenticazione e gestione utenti
 
+-- category: si applica solo ai dipendenti (role = 'user'); definisce quale dashboard e quali
+-- funzionalità vede. NULL per dirigente/responsabile, che non sono "categorie di dipendente".
+-- Nuove categorie (reception, segreteria, personal trainer, ...) si aggiungono qui e nel
+-- corrispondente registro frontend, senza toccare il resto del sistema.
 CREATE TABLE IF NOT EXISTS users (
   id                    SERIAL PRIMARY KEY,
   username              VARCHAR(50) UNIQUE NOT NULL,
@@ -8,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash         VARCHAR(255),
   initial_code          VARCHAR(20),
   role                  VARCHAR(10) NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user', 'dirigente')),
+  category              VARCHAR(20) CHECK (category IS NULL OR category IN ('bagnino', 'istruttore')),
   must_change_password  BOOLEAN NOT NULL DEFAULT TRUE,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -69,6 +74,24 @@ CREATE TABLE IF NOT EXISTS cancellation_requests (
 CREATE INDEX IF NOT EXISTS idx_cancellation_requests_status ON cancellation_requests(status);
 CREATE INDEX IF NOT EXISTS idx_cancellation_requests_requested_by ON cancellation_requests(requested_by);
 
+-- Corsi (categoria "istruttore"): a differenza dei turni, più corsi possono sovrapporsi nello
+-- stesso orario (es. Corso Bambini e Corso Adulti entrambi 08:00-09:00) perché li tengono
+-- istruttori diversi in spazi diversi: non c'è quindi alcun vincolo di esclusività sull'orario.
+CREATE TABLE IF NOT EXISTS courses (
+  id             SERIAL PRIMARY KEY,
+  name           VARCHAR(100) NOT NULL,
+  date           DATE NOT NULL,
+  start_time     TIME NOT NULL,
+  end_time       TIME NOT NULL,
+  instructor_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  note           TEXT,
+  created_by     INTEGER NOT NULL REFERENCES users(id),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_courses_date ON courses(date);
+CREATE INDEX IF NOT EXISTS idx_courses_instructor_id ON courses(instructor_id);
+
 -- Migrazioni idempotenti per database creati con versioni precedenti dello schema
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'user', 'dirigente'));
@@ -94,3 +117,8 @@ ALTER TABLE cancellation_requests ADD CONSTRAINT cancellation_requests_requested
 ALTER TABLE cancellation_requests DROP CONSTRAINT IF EXISTS cancellation_requests_decided_by_fkey;
 ALTER TABLE cancellation_requests ADD CONSTRAINT cancellation_requests_decided_by_fkey
   FOREIGN KEY (decided_by) REFERENCES users(id) ON DELETE SET NULL;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS category VARCHAR(20);
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_category_check;
+ALTER TABLE users ADD CONSTRAINT users_category_check
+  CHECK (category IS NULL OR category IN ('bagnino', 'istruttore'));

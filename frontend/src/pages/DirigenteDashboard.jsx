@@ -5,6 +5,7 @@ import UserManagementSection from '../components/management/UserManagementSectio
 import HoursStats from '../components/stats/HoursStats';
 import VolanteShiftsPanel from '../components/shifts/VolanteShiftsPanel';
 import CancellationRequestsPanel from '../components/cancellation/CancellationRequestsPanel';
+import CoursesCalendar from '../components/courses/CoursesCalendar';
 
 export default function DirigenteDashboard() {
   const { user, logout } = useAuth();
@@ -53,6 +54,11 @@ export default function DirigenteDashboard() {
         <VolanteShiftsPanel mode="manage" />
 
         <CancellationRequestsPanel />
+
+        <section className="card">
+          <h2>Gestione corsi</h2>
+          <CoursesCalendar mode="manage" />
+        </section>
       </main>
     </div>
   );

@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const pool = require('../config/db');
 const { generateInitialCode } = require('../utils/generateCode');
+const { EMPLOYEE_CATEGORIES } = require('../constants/employeeCategories');
 
 function toSafeUser(user) {
   return {
@@ -9,6 +10,7 @@ function toSafeUser(user) {
     email: user.email,
     phone: user.phone,
     role: user.role,
+    category: user.category,
     mustChangePassword: user.must_change_password,
     // Il codice iniziale è visibile solo finché non è stato consumato al primo accesso
     initialCode: user.must_change_password ? user.initial_code : null,
@@ -28,7 +30,7 @@ function canManageTargetRole(actorRole, targetRole) {
 // Solo il dirigente può creare account con ruolo 'admin' (responsabile); il ruolo 'dirigente'
 // non è creabile da API (esiste un solo account dirigente, creato via seed).
 async function createUser(req, res) {
-  const { username, email, phone, role } = req.body;
+  const { username, email, phone, role, category } = req.body;
   const targetRole = role || 'user';
 
   if (!username || !email || !phone) {
@@ -43,6 +45,16 @@ async function createUser(req, res) {
     return res.status(403).json({ error: 'Solo il dirigente può creare account responsabile' });
   }
 
+  // La categoria (bagnino, istruttore, ...) esiste solo per i dipendenti: determina quale
+  // dashboard e quali funzionalità vedrà. Responsabili e dirigente non ne hanno una.
+  let targetCategory = null;
+  if (targetRole === 'user') {
+    if (!EMPLOYEE_CATEGORIES.includes(category)) {
+      return res.status(400).json({ error: `category deve essere una tra ${EMPLOYEE_CATEGORIES.join(', ')}` });
+    }
+    targetCategory = category;
+  }
+
   const existing = await pool.query(
     'SELECT id FROM users WHERE username = $1 OR email = $2',
     [username, email]
@@ -54,10 +66,10 @@ async function createUser(req, res) {
   const initialCode = generateInitialCode();
 
   const { rows } = await pool.query(
-    `INSERT INTO users (username, email, phone, initial_code, role, must_change_password)
-     VALUES ($1, $2, $3, $4, $5, TRUE)
+    `INSERT INTO users (username, email, phone, initial_code, role, category, must_change_password)
+     VALUES ($1, $2, $3, $4, $5, $6, TRUE)
      RETURNING *`,
-    [username, email, phone, initialCode, targetRole]
+    [username, email, phone, initialCode, targetRole, targetCategory]
   );
   const user = rows[0];
 

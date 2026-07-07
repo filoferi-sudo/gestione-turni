@@ -13,6 +13,7 @@ function toSafeUser(user) {
     email: user.email,
     phone: user.phone,
     role: user.role,
+    category: user.category,
     mustChangePassword: user.must_change_password,
   };
 }

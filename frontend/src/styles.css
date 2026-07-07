@@ -536,3 +536,61 @@ textarea {
   background: #fee2e2;
   color: #991b1b;
 }
+
+/* Calendario Corsi: a differenza di .shift-block (larghezza fissa), la larghezza e la
+   posizione orizzontale sono calcolate in JS (vedi utils/courseLayout) per affiancare corsi
+   sovrapposti invece di nasconderli. */
+
+.course-block {
+  position: absolute;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: white;
+  overflow: hidden;
+  cursor: default;
+  background: #0ea5a4;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.course-block[role='button'] {
+  cursor: grab;
+}
+
+.course-block-name {
+  font-weight: 600;
+}
+
+.course-block-time,
+.course-block-instructor,
+.course-block-note {
+  opacity: 0.9;
+}
+
+/* Profilo personale */
+
+.profile-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profile-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  background: #f9fafb;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.profile-row dt {
+  color: #6b7280;
+}
+
+.profile-row dd {
+  margin: 0;
+  font-weight: 600;
+}
