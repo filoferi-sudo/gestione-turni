@@ -102,11 +102,15 @@ turni-app/
         courses/                CoursesCalendar (richiede areaId+timeWindow), CoursesGrid,
                                 CourseBlock, CourseFormModal, CoursesAvailablePanel
         shifts/SubstitutionsPanel.jsx   "Sostituzioni" (ex "turni volanti"), scoped per area
-        staffing/               StaffingScheduleModal.jsx (editor settimanale), StaffingSingleModal.jsx
+        staffing/               StaffingWeeklySlotsModal.jsx (lista delle fasce fisse indipendenti
+                                di un'area, entry point di "Gestisci fabbisogno settimanale"),
+                                StaffingScheduleModal.jsx (form di UNA fascia fissa, creazione o
+                                modifica, apre da StaffingWeeklySlotsModal), StaffingSingleModal.jsx
                                 (fabbisogno singolo), StaffingOccurrenceModal.jsx (le 4 modalità di
-                                modifica occorrenza) — riusati invariati, aperti ora direttamente da
-                                CalendarPage/CalendarGrid (vedi sotto); StaffingPanel.jsx (il vecchio
-                                pannello riepilogativo separato dal calendario) è stato rimosso
+                                modifica occorrenza) — questi ultimi due riusati invariati, aperti
+                                direttamente da CalendarPage/CalendarGrid (vedi sotto);
+                                StaffingPanel.jsx (il vecchio pannello riepilogativo separato dal
+                                calendario) è stato rimosso
         cancellation/           CancellationRequestsPanel (manager), MyCancellationRequests (self)
         management/UserManagementSection.jsx   colonna "Aree" + azione "Modifica aree"
         areas/AreasManagement.jsx   CRUD aree operative di una sede (solo Dirigente)
@@ -411,13 +415,26 @@ copertura reale (turni fissi/singoli/Sostituzioni accettate). Solo per aree con
 ### Modello
 
 - **Fabbisogno fisso** (`req_type='fixed'`): regola ricorrente per giorno della settimana, una
-  riga per giorno (il numero di persone può variare giorno per giorno). L'intera programmazione
-  settimanale di un'area si gestisce con un solo editor (`StaffingScheduleModal`,
-  `PUT /api/staffing/requirements/weekly`): un orario condiviso da tutti i giorni, un conteggio
-  per giorno (0 = nessun fabbisogno quel giorno), una data di decorrenza. **Ogni chiamata
-  sostituisce l'intera programmazione precedente dell'area** da quella data in poi (chiude le
-  regole aperte esistenti, ne crea di nuove): non esistono pattern settimanali paralleli per la
-  stessa area.
+  riga per giorno (il numero di persone può variare giorno per giorno). Un'area può avere **più
+  fasce fisse indipendenti in parallelo** (es. mattina 08-14 e sera 18-22, o "cucina pranzo" e
+  "cucina cena" nello stesso giorno): ogni fascia è identificata dal proprio orario
+  (`start_time`/`end_time`) ed è gestita indipendentemente dalle altre. Editor:
+  `StaffingWeeklySlotsModal` (lista delle fasce esistenti dell'area, raggruppate lato frontend per
+  `(startTime, endTime)` — nessuna colonna/tabella dedicata al concetto di "fascia", è solo un
+  raggruppamento di visualizzazione) + `StaffingScheduleModal` (form di UNA fascia: orario
+  condiviso dai giorni selezionati, un conteggio per giorno, 0 = nessun fabbisogno quel giorno in
+  quella fascia, data di decorrenza). `PUT /api/staffing/requirements/weekly` accetta ora
+  gli opzionali `originalStartTime`/`originalEndTime`: se presenti (modifica di una fascia
+  esistente) chiude/ricrea **solo** le righe con quell'orario esatto; se assenti (nuova fascia) non
+  chiude/tocca nulla, crea soltanto le nuove righe. Così facendo una fascia non sostituisce mai le
+  altre fasce della stessa area — solo se stessa. "Eliminare" una fascia dall'editor equivale a
+  salvarla con tutti i giorni a 0 (nessuna riga da ricreare, quelle esistenti vengono chiuse).
+  **Prima di questa modifica** un solo editor gestiva un unico orario condiviso da tutti i giorni
+  e ogni salvataggio sostituiva sempre l'intera programmazione fissa dell'area: causava la perdita
+  silenziosa di una fascia già configurata quando se ne creava una seconda con orario diverso
+  (bug segnalato dall'utente subito dopo il primo deploy dell'integrazione calendario, vedi
+  changelog). Non tornare al modello "un solo editor/un solo orario per area": è insufficiente per
+  i casi d'uso del prodotto (ristoranti, magazzini con più turni giornalieri).
 - **Fabbisogno singolo** (`req_type='single'`): esigenza straordinaria per una sola data, non
   tocca la programmazione ricorrente.
 - **Eccezioni su un fabbisogno fisso** (`staffing_requirement_exceptions` + endpoint
@@ -985,3 +1002,40 @@ Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cos
   verificato via network tab), dashboard Dirigente e Responsabile entrambe funzionanti dopo la
   rimozione di `StaffingPanel.jsx` (grep di conferma: nessun import residuo). Migrazione DB: non
   necessaria, nessuna modifica allo schema.
+- **2026-07-08** — **Migrazione produzione eseguita** (tabelle `staffing_requirements`/
+  `staffing_requirement_exceptions` + indice `idx_cancellation_requests_shift_id`, pendenti dalle
+  sessioni precedenti) e primo deploy in produzione dell'integrazione fabbisogno-calendario. Subito
+  dopo il deploy l'utente ha segnalato due problemi in produzione:
+  1. **Chip di copertura illeggibili**: font troppo piccolo (10px). Fix immediato in `styles.css`
+     (font-size, padding e spaziatura aumentati per chip, corner label, bottone "Genera", dettaglio
+     espanso) — nessuna modifica strutturale.
+  2. **"Viene visualizzato solo un fabbisogno, non tutti quelli della giornata"**: non era un bug
+     di rendering (verificato: fabbisogno fisso + singolo sullo stesso giorno si mostravano già
+     entrambi correttamente), ma un limite architetturale reale del modello precedente — vedi il
+     dettaglio ora corretto in "Fabbisogno di personale per area operativa" → "Fabbisogno fisso".
+     In sintesi: `upsertWeeklySchedule` chiudeva **tutte** le regole fisse aperte dell'area ad ogni
+     salvataggio (non solo quelle della fascia in modifica), quindi creare una seconda fascia fissa
+     con orario diverso cancellava silenziosamente la prima. Root cause isolata riproducendo il
+     caso in locale (creazione di una fascia 18:00-22:00 dopo una già esistente 08:00-14:00,
+     osservata la sostituzione tramite query dirette sul DB locale). Deciso con l'utente di
+     risolvere subito estendendo il modello a fasce fisse multiple indipendenti per area (coerente
+     con gli esempi ristorante/magazzino della richiesta originale), non di limitarsi ad
+     aggirare il problema con "Fabbisogno singolo" ripetuto. File toccati:
+     `backend/src/controllers/staffingController.js` (`upsertWeeklySchedule` accetta ora
+     `originalStartTime`/`originalEndTime` opzionali per scopare chiusura/sostituzione alla sola
+     fascia in modifica, chiusura vuota per una fascia nuova — nessuna modifica a schema/migrazioni,
+     nessun'altra funzione del controller toccata); nuovo
+     `frontend/src/components/staffing/StaffingWeeklySlotsModal.jsx` (lista fasce esistenti,
+     raggruppate per `(startTime,endTime)` solo lato frontend, con "+ Nuova fascia fissa" e
+     "Modifica" per fascia); `StaffingScheduleModal.jsx` esteso con prop opzionale `slot` (form
+     riusato identico per creazione/modifica di una fascia, più bottone "Elimina fascia" quando in
+     modifica — equivalente a salvare con tutti i giorni a 0); `CalendarPage.jsx` aggiornata per
+     montare `StaffingWeeklySlotsModal` al posto del vecchio `StaffingScheduleModal` diretto.
+     Verificato a fondo in locale: due fasce fisse indipendenti (08-14 e 18-22) sullo stesso
+     giorno/area coesistono ed entrambe visibili come chip separati nel calendario; modifica di una
+     fascia (conteggio persone, aggiunta di un nuovo giorno) non altera l'altra (verificato via
+     lista "Fasce fisse settimanali" prima/dopo); prevenzione duplicati (`findConflictingRequirement`)
+     ancora attiva correttamente tra fasce diverse (tentativo di ricreare una fascia identica a
+     un'altra esistente risponde `409` come atteso, verificato via chiamata diretta all'API).
+     Nessuna migrazione DB necessaria (nessuna modifica a schema.sql). Deploy: push su `origin/main`
+     dopo la verifica locale, stesso protocollo delle modifiche precedenti.

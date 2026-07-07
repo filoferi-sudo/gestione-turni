@@ -66,11 +66,16 @@ async function listRequirements(req, res) {
   return res.json({ requirements: rows.map(toSafeRequirement) });
 }
 
-// PUT /api/staffing/requirements/weekly - sostituisce l'intera programmazione settimanale fissa
-// dell'area da effectiveFrom in poi: chiude le regole aperte esistenti (qualunque fosse il loro
-// orario) e ne crea di nuove solo per i giorni con conteggio > 0.
+// PUT /api/staffing/requirements/weekly - crea o modifica UNA fascia fissa settimanale
+// indipendente dell'area (identificata dal proprio orario): un'area può avere più fasce fisse
+// parallele (es. mattina 08-14 e sera 18-22), ognuna gestita da questo stesso endpoint senza
+// toccare le altre. `originalStartTime`/`originalEndTime` (opzionali) identificano la fascia
+// esistente da modificare — se assenti si crea sempre una fascia nuova, senza chiudere/sostituire
+// nulla di già esistente. Se presenti, si chiudono (o eliminano, se mai state attive) solo le
+// regole aperte con quell'orario esatto, poi si ricreano per i giorni con conteggio > 0 (stesso
+// pattern "chiudi e ricrea" già usato per le occorrenze singole, qui applicato all'intera fascia).
 async function upsertWeeklySchedule(req, res) {
-  const { areaId, startTime, endTime, counts, note, confirmDuplicate } = req.body;
+  const { areaId, startTime, endTime, counts, note, confirmDuplicate, originalStartTime, originalEndTime } = req.body;
   const area = await assertAreaExists(Number(areaId), req.user.companyId);
   if (!area) return res.status(400).json({ error: "areaId non valido per questa società (o non è un'area di tipo Turni)" });
 
@@ -83,10 +88,15 @@ async function upsertWeeklySchedule(req, res) {
 
   const effectiveFrom = isValidDateString(req.body.effectiveFrom) ? req.body.effectiveFrom : todayDateString();
 
-  const { rows: openRows } = await pool.query(
-    `SELECT * FROM staffing_requirements WHERE area_id = $1 AND req_type = 'fixed' AND effective_until IS NULL`,
-    [area.id]
-  );
+  const isEditingExistingSlot = isValidTimeString(originalStartTime) && isValidTimeString(originalEndTime);
+  const { rows: openRows } = isEditingExistingSlot
+    ? await pool.query(
+        `SELECT * FROM staffing_requirements
+          WHERE area_id = $1 AND req_type = 'fixed' AND effective_until IS NULL
+            AND start_time = $2 AND end_time = $3`,
+        [area.id, originalStartTime, originalEndTime]
+      )
+    : { rows: [] };
   const openByWeekday = new Map(openRows.map((r) => [r.weekday, r]));
 
   const activeWeekdays = WEEKDAYS.filter((wd) => Number(counts[wd] || 0) > 0);

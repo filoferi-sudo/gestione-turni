@@ -6,7 +6,7 @@ import { DEFAULT_TIME_WINDOW } from '../../utils/timeWindow';
 import { usePolling } from '../../hooks/usePolling';
 import CalendarGrid from './CalendarGrid';
 import ShiftFormModal from './ShiftFormModal';
-import StaffingScheduleModal from '../staffing/StaffingScheduleModal';
+import StaffingWeeklySlotsModal from '../staffing/StaffingWeeklySlotsModal';
 import StaffingSingleModal from '../staffing/StaffingSingleModal';
 import StaffingOccurrenceModal from '../staffing/StaffingOccurrenceModal';
 
@@ -36,7 +36,7 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
   const [coverage, setCoverage] = useState([]);
   const [staffingNotice, setStaffingNotice] = useState('');
   const [generateBusyKey, setGenerateBusyKey] = useState(null);
-  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [weeklySlotsModalOpen, setWeeklySlotsModalOpen] = useState(false);
   const [singleModalState, setSingleModalState] = useState(null); // { requirement } | null
   const [occurrenceModalState, setOccurrenceModalState] = useState(null); // { requirement, occurrence }
 
@@ -44,7 +44,7 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
   const start = days[0].date;
   const end = days[days.length - 1].date;
 
-  const anyStaffingModalOpen = scheduleModalOpen || !!singleModalState || !!occurrenceModalState;
+  const anyStaffingModalOpen = weeklySlotsModalOpen || !!singleModalState || !!occurrenceModalState;
 
   useEffect(() => {
     if (isAdmin) {
@@ -226,7 +226,7 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
             >
               + Nuovo turno
             </button>
-            <button className="button-secondary" onClick={() => setScheduleModalOpen(true)}>
+            <button className="button-secondary" onClick={() => setWeeklySlotsModalOpen(true)}>
               Gestisci fabbisogno settimanale
             </button>
             <button className="button-secondary" onClick={() => setSingleModalState({ requirement: null })}>
@@ -285,16 +285,11 @@ export default function CalendarPage({ mode, areaId, timeWindow = DEFAULT_TIME_W
         />
       )}
 
-      {scheduleModalOpen && (
-        <StaffingScheduleModal
+      {weeklySlotsModalOpen && (
+        <StaffingWeeklySlotsModal
           areaId={areaId}
           onClose={() => {
-            setScheduleModalOpen(false);
-            reloadStaffingRequirements();
-            loadCalendar();
-          }}
-          onSaved={() => {
-            setScheduleModalOpen(false);
+            setWeeklySlotsModalOpen(false);
             reloadStaffingRequirements();
             loadCalendar();
           }}
