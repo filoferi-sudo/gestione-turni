@@ -8,6 +8,7 @@ import CoursesAvailablePanel from '../../components/courses/CoursesAvailablePane
 import MyCancellationRequests from '../../components/cancellation/MyCancellationRequests';
 import MyProfile from '../../components/profile/MyProfile';
 import HoursStats from '../../components/stats/HoursStats';
+import NotificationsBell from '../../components/notifications/NotificationsBell';
 import { createTimeWindow } from '../../utils/timeWindow';
 
 // Dashboard unica per qualunque dipendente, qualunque sia la sua mansione: le tab del calendario
@@ -50,9 +51,12 @@ export default function EmployeeDashboard() {
         <div>
           <strong>Gestione Turni</strong> <span className="badge">Dipendente</span>
         </div>
-        <button className="link-button" onClick={handleLogout}>
-          Esci
-        </button>
+        <div className="topbar-actions">
+          <NotificationsBell />
+          <button className="link-button" onClick={handleLogout}>
+            Esci
+          </button>
+        </div>
       </header>
 
       <main className="content content-wide">

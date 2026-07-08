@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { usePolling } from '../../hooks/usePolling';
+import FindReplacementModal from './FindReplacementModal';
 
 // mode 'claim' (dipendente: può accettare, lista già filtrata dal backend per area/disponibilità)
 // | 'manage' (responsabile/dirigente: vede tutte le sostituzioni pendenti di quest'area, può
@@ -13,6 +14,7 @@ export default function SubstitutionsPanel({ mode, areaId, areaName }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busyId, setBusyId] = useState(null);
+  const [candidatesShift, setCandidatesShift] = useState(null); // Sostituzione per cui cercare candidati
 
   function load() {
     api
@@ -87,17 +89,26 @@ export default function SubstitutionsPanel({ mode, areaId, areaName }) {
                   {busyId === shift.id ? 'Attendere...' : 'Accetta'}
                 </button>
               ) : (
-                <button
-                  className="button-danger"
-                  disabled={busyId === shift.id}
-                  onClick={() => handleDelete(shift)}
-                >
-                  Elimina
-                </button>
+                <span className="shift-item-actions">
+                  <button className="table-action" onClick={() => setCandidatesShift(shift)}>
+                    Trova sostituzione
+                  </button>
+                  <button
+                    className="button-danger"
+                    disabled={busyId === shift.id}
+                    onClick={() => handleDelete(shift)}
+                  >
+                    Elimina
+                  </button>
+                </span>
               )}
             </li>
           ))}
         </ul>
+      )}
+
+      {candidatesShift && (
+        <FindReplacementModal shift={candidatesShift} onClose={() => setCandidatesShift(null)} />
       )}
     </section>
   );

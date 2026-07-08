@@ -451,3 +451,104 @@ CREATE INDEX IF NOT EXISTS idx_shifts_requirement_id ON shifts(requirement_id);
 -- Usato da shiftController.deleteShiftSelf per il controllo di richieste pendenti duplicate sullo
 -- stesso turno; mancava rispetto agli altri indici già presenti su cancellation_requests.
 CREATE INDEX IF NOT EXISTS idx_cancellation_requests_shift_id ON cancellation_requests(shift_id);
+
+-- ============================================================================
+-- Contratti dei dipendenti (Fase 1 - sistema avanzato di sostituzioni)
+-- ============================================================================
+-- Configurazione contrattuale per dipendente: tipologia, massimali di ore e vincoli.
+-- In una fase successiva il "motore di compatibilità" li leggerà per ORDINARE i candidati
+-- a una sostituzione (mai per escluderli in automatico: la decisione resta del responsabile).
+-- Additivo puro: nessuna modifica a tabelle/flussi esistenti, nessun backfill.
+--
+-- 1:1 con users (UNIQUE user_id): la riga rappresenta il contratto CORRENTE del dipendente.
+-- Struttura pensata per essere estesa senza migrazioni distruttive:
+--   * contract_type è testo libero (i preset sono solo suggerimenti lato UI): nuove tipologie
+--     non richiedono modifiche allo schema;
+--   * custom_config JSONB raccoglie vincoli aziendali specifici/futuri senza aggiungere colonne;
+--   * i campi di audit (created_by/updated_by/created_at/updated_at) permettono di introdurre
+--     in futuro una tabella di storico (es. user_contract_history) come modifica puramente
+--     additiva, senza toccare questa tabella.
+-- company_id NON è duplicato qui: a differenza di shifts/courses (dove user_id può essere NULL),
+-- un contratto ha sempre un user_id valorizzato, quindi la società si ricava per JOIN su users;
+-- l'isolamento è verificato nel controller (target.company_id === req.user.companyId).
+-- Tutti i massimali sono nullable = "non configurato, nessun vincolo".
+CREATE TABLE IF NOT EXISTS user_contracts (
+  id                    SERIAL PRIMARY KEY,
+  user_id               INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  contract_type         VARCHAR(60),
+  max_weekly_hours      NUMERIC(5,2) CHECK (max_weekly_hours  IS NULL OR max_weekly_hours  >= 0),
+  max_monthly_hours     NUMERIC(6,2) CHECK (max_monthly_hours IS NULL OR max_monthly_hours >= 0),
+  min_weekly_hours      NUMERIC(5,2) CHECK (min_weekly_hours  IS NULL OR min_weekly_hours  >= 0),
+  max_daily_hours       NUMERIC(4,2) CHECK (max_daily_hours   IS NULL OR max_daily_hours   >= 0),
+  max_consecutive_days  INTEGER      CHECK (max_consecutive_days IS NULL OR max_consecutive_days >= 0),
+  weekly_rest_days      INTEGER      CHECK (weekly_rest_days IS NULL OR weekly_rest_days >= 0),
+  note                  TEXT,
+  custom_config         JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_by            INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_by            INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+-- Nessun indice separato su user_id: il vincolo UNIQUE ne crea già uno implicito.
+
+-- ============================================================================
+-- Disponibilità dichiarate dei dipendenti (Fase 2 - sistema avanzato di sostituzioni)
+-- ============================================================================
+-- Fasce di disponibilità ricorrenti per giorno della settimana dichiarate dal dipendente stesso
+-- (es. "lunedì 08:00-14:00", "mercoledì 18:00-22:00"). Più righe per utente (anche più fasce lo
+-- stesso giorno). Le userà (Fase 4) il motore di compatibilità per ORDINARE i candidati, mai per
+-- escluderli: in particolare l'ASSENZA di righe per un utente significa disponibilità "ignota"
+-- (non incompatibile) — il candidato resta in classifica con la motivazione "necessaria verifica
+-- disponibilità". Additivo puro: nessuna modifica a tabelle/flussi esistenti.
+-- weekday usa la stessa convenzione MON..SUN già adottata da staffing_requirements e
+-- utils/recurrence.js (DAY_CODES), così i confronti col giorno di un turno restano omogenei.
+-- Nessun company_id: user_id è sempre valorizzato (la società si ricava per JOIN), l'isolamento è
+-- verificato nel controller. Il dipendente modifica solo le proprie righe; il responsabile le legge.
+CREATE TABLE IF NOT EXISTS user_availability (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  weekday     VARCHAR(3) NOT NULL CHECK (weekday IN ('MON','TUE','WED','THU','FRI','SAT','SUN')),
+  start_time  TIME NOT NULL,
+  end_time    TIME NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (end_time > start_time)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_availability_user_id ON user_availability(user_id);
+
+-- ============================================================================
+-- Notifiche in-app (Fase 3 - sistema avanzato di sostituzioni)
+-- ============================================================================
+-- Notifiche per utente, visibili nella campanella dell'header. Generate "in coda" ai flussi già
+-- esistenti (creazione/claim di una Sostituzione, richiesta/decisione di cancellazione, generazione
+-- da fabbisogno) tramite services/notificationService.js, in modo best-effort: un errore di invio
+-- non deve mai far fallire l'azione principale. Additivo puro.
+--   * user_id = DESTINATARIO della notifica.
+--   * type = categoria (es. 'substitution_available', 'substitution_claimed', ...), usata lato
+--     frontend per l'icona/il raggruppamento; testo libero versionabile senza migrazioni.
+--   * payload JSONB = riferimenti per il collegamento diretto alla funzione (shiftId/areaId/sedeId/
+--     date/proposalId...), senza aggiungere colonne quando serviranno nuovi tipi.
+--   * dedupe_key (nullable) = chiave di deduplica per le notifiche generate in modo idempotente
+--     (es. l'escalation "nessuno ha accettato" della Fase 7, rilevata al polling): un indice unico
+--     PARZIALE su (user_id, dedupe_key) evita di re-inserire la stessa notifica ad ogni tick.
+-- company_id è diretto qui (a differenza di user_contracts/user_availability): le notifiche sono
+-- una tabella trasversale ad alto volume, il valore arriva sempre dal contesto dell'evento (che ha
+-- già companyId) e permette scoping/pulizia per società senza JOIN.
+CREATE TABLE IF NOT EXISTS notifications (
+  id          SERIAL PRIMARY KEY,
+  company_id  INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type        VARCHAR(40) NOT NULL,
+  message     TEXT NOT NULL,
+  payload     JSONB NOT NULL DEFAULT '{}'::jsonb,
+  is_read     BOOLEAN NOT NULL DEFAULT FALSE,
+  dedupe_key  VARCHAR(200),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at DESC);
+-- Indice parziale per il conteggio veloce delle non lette (badge campanella).
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id) WHERE is_read = FALSE;
+-- Deduplica idempotente solo per le notifiche con dedupe_key valorizzata (escalation lazy, Fase 7).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_dedupe
+  ON notifications(user_id, dedupe_key) WHERE dedupe_key IS NOT NULL;

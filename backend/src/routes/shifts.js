@@ -6,6 +6,7 @@ const {
   deleteShiftSelf,
   listAvailableShifts,
   claimShift,
+  getShiftCandidates,
 } = require('../controllers/shiftController');
 const { authenticate, requireManager } = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
@@ -13,6 +14,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const router = express.Router();
 
 router.get('/available', authenticate, asyncHandler(listAvailableShifts));
+router.get('/:id/candidates', authenticate, requireManager, asyncHandler(getShiftCandidates));
 router.post('/:id/claim', authenticate, asyncHandler(claimShift));
 router.delete('/:id/self', authenticate, asyncHandler(deleteShiftSelf));
 

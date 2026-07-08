@@ -8,6 +8,12 @@ const {
   isValidDateString,
   toSafeShift,
 } = require('../services/shiftExpansion');
+const {
+  notifySubstitutionAvailable,
+  notifySubstitutionClaimed,
+  notifyCancellationRequested,
+} = require('../services/notificationService');
+const { rankCandidates } = require('../services/substitutionMatcher');
 
 const SHIFT_TYPES = ['fixed', 'mobile', 'volante'];
 
@@ -193,7 +199,51 @@ async function claimShift(req, res) {
     return res.status(409).json({ error: 'La sostituzione non è più disponibile' });
   }
 
-  return res.json({ shift: toSafeShift(rows[0]) });
+  const claimed = rows[0];
+  // Notifica ai responsabili che la Sostituzione è stata coperta (best-effort, non blocca la risposta).
+  await notifySubstitutionClaimed({
+    companyId: req.user.companyId,
+    areaId: claimed.area_id,
+    sedeId: claimed.sede_id,
+    shiftId: claimed.id,
+    date: toDateOnly(claimed.date),
+    startTime: claimed.start_time.slice(0, 5),
+    endTime: claimed.end_time.slice(0, 5),
+    claimantUsername: req.user.username,
+    claimantUserId: req.user.id,
+  });
+
+  return res.json({ shift: toSafeShift(claimed) });
+}
+
+// GET /api/shifts/:id/candidates (responsabile o dirigente) - classifica dei dipendenti interni
+// più compatibili per coprire una Sostituzione scoperta. Solo suggerimento (sola lettura): non
+// assegna nulla. La Sostituzione deve essere ancora aperta (volante non accettato) della società.
+async function getShiftCandidates(req, res) {
+  const { id } = req.params;
+
+  const { rows } = await pool.query(
+    `SELECT * FROM shifts
+      WHERE id = $1 AND type = 'volante' AND user_id IS NULL AND status = 'active' AND company_id = $2`,
+    [id, req.user.companyId]
+  );
+  const shift = rows[0];
+  if (!shift) {
+    return res.status(404).json({ error: 'Sostituzione non trovata o non più disponibile' });
+  }
+
+  const candidates = await rankCandidates({ shift, companyId: req.user.companyId });
+  return res.json({
+    shift: {
+      id: shift.id,
+      date: toDateOnly(shift.date),
+      startTime: shift.start_time.slice(0, 5),
+      endTime: shift.end_time.slice(0, 5),
+      areaId: shift.area_id,
+      note: shift.note,
+    },
+    candidates,
+  });
 }
 
 function validateTypeFields({ type, date, recurrenceRule }) {
@@ -266,7 +316,22 @@ async function createShift(req, res) {
     ]
   );
 
-  return res.status(201).json({ shift: toSafeShift(rows[0]) });
+  const createdShift = rows[0];
+  // Se è una Sostituzione (volante), avvisa dipendenti dell'area + responsabili (best-effort).
+  if (createdShift.type === 'volante') {
+    await notifySubstitutionAvailable({
+      companyId: req.user.companyId,
+      areaId: createdShift.area_id,
+      sedeId: createdShift.sede_id,
+      shiftId: createdShift.id,
+      date: toDateOnly(createdShift.date),
+      startTime: createdShift.start_time.slice(0, 5),
+      endTime: createdShift.end_time.slice(0, 5),
+      actorUserId: req.user.id,
+    });
+  }
+
+  return res.status(201).json({ shift: toSafeShift(createdShift) });
 }
 
 // PUT /api/shifts/:id (responsabile o dirigente)
@@ -408,6 +473,18 @@ async function deleteShiftSelf(req, res) {
   );
 
   const request = requestRows[0];
+
+  // Avvisa i responsabili che c'è una richiesta di cancellazione da approvare (best-effort).
+  await notifyCancellationRequested({
+    companyId: req.user.companyId,
+    areaId: shift.area_id,
+    requestId: request.id,
+    date: toDateOnly(request.shift_date),
+    startTime: request.shift_start_time.slice(0, 5),
+    endTime: request.shift_end_time.slice(0, 5),
+    requesterUsername: req.user.username,
+  });
+
   return res.status(202).json({
     pending: true,
     request: {
@@ -430,4 +507,5 @@ module.exports = {
   deleteShiftSelf,
   listAvailableShifts,
   claimShift,
+  getShiftCandidates,
 };

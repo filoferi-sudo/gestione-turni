@@ -70,11 +70,17 @@ export const api = {
     request(`/shifts/${id}/self`, { method: 'DELETE', token, body: date ? { date } : undefined }),
   listAvailableShifts: (token, areaId) => request(`/shifts/available?areaId=${areaId}`, { token }),
   claimShift: (id, token) => request(`/shifts/${id}/claim`, { method: 'POST', token }),
+  getShiftCandidates: (id, token) => request(`/shifts/${id}/candidates`, { token }),
 
   resetPassword: (id, newPassword, token) =>
     request(`/users/${id}/reset-password`, { method: 'POST', body: { newPassword }, token }),
   regenerateCode: (id, token) => request(`/users/${id}/regenerate-code`, { method: 'POST', token }),
   updateUserAreas: (id, areaIds, token) => request(`/users/${id}/areas`, { method: 'PUT', body: { areaIds }, token }),
+  getUserContract: (id, token) => request(`/users/${id}/contract`, { token }),
+  saveUserContract: (id, payload, token) => request(`/users/${id}/contract`, { method: 'PUT', body: payload, token }),
+  getUserAvailability: (id, token) => request(`/users/${id}/availability`, { token }),
+  saveUserAvailability: (id, slots, token) =>
+    request(`/users/${id}/availability`, { method: 'PUT', body: { slots }, token }),
   deleteUser: (id, token) => request(`/users/${id}`, { method: 'DELETE', token }),
 
   listCancellationRequests: (token, status) =>
@@ -86,6 +92,10 @@ export const api = {
     request(`/cancellation-requests/${id}/reject`, { method: 'POST', token }),
 
   getHoursStats: (token, userId) => request(`/stats/hours${userId ? `?userId=${userId}` : ''}`, { token }),
+
+  listNotifications: (token) => request('/notifications', { token }),
+  markNotificationRead: (id, token) => request(`/notifications/${id}/read`, { method: 'POST', token }),
+  markAllNotificationsRead: (token) => request('/notifications/read-all', { method: 'POST', token }),
 
   listCourses: (token, { start, end, areaId, instructorId }) => {
     const params = new URLSearchParams({ start, end, areaId });

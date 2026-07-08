@@ -215,6 +215,30 @@ vedi changelog).
 - `courses` — corsi, stessa logica di `shifts` ma con `instructor_id` al posto di `user_id` e
   **nessun vincolo di esclusività sull'orario** (più corsi possono sovrapporsi, istruttori/spazi
   diversi). `company_id` diretto, `area_id`/`sede_id` obbligatori (area con `calendar_mode='courses'`).
+- `user_contracts` — configurazione contrattuale del dipendente, **1:1 con `users`** (`UNIQUE
+  user_id`): `contract_type` (testo libero, i preset sono solo suggerimenti UI), massimali tutti
+  *nullable* (`max_weekly_hours`, `max_monthly_hours`, `min_weekly_hours`, `max_daily_hours`,
+  `max_consecutive_days`, `weekly_rest_days`; nullable = "nessun vincolo su questo parametro"),
+  `note` (vincoli aziendali liberi), `custom_config` JSONB (vincoli specifici/futuri senza nuove
+  colonne), audit (`created_by`/`updated_by`/`created_at`/`updated_at`). **Nessun `company_id`
+  duplicato**: qui `user_id` è sempre valorizzato (a differenza di `shifts`/`courses`), la società
+  si ricava per JOIN e l'isolamento è verificato nel controller. Prima tabella del **sistema
+  avanzato di sostituzioni** (vedi sezione dedicata); il futuro motore di compatibilità la leggerà
+  per *ordinare* i candidati, mai per escluderli in automatico.
+- `user_availability` — disponibilità dichiarate dal dipendente, ricorrenti per giorno della
+  settimana (**righe multiple** per utente, anche più fasce lo stesso giorno): `user_id`, `weekday`
+  (MON..SUN, stessa convenzione di `staffing_requirements`/`recurrence.js`), `start_time`/`end_time`
+  (`CHECK end_time > start_time`). **Nessun `company_id`** (come `user_contracts`: `user_id` sempre
+  valorizzato, isolamento nel controller). **Assenza di righe = disponibilità "ignota"**, non
+  incompatibile: il futuro motore di compatibilità (Fase 4) la userà per *ordinare*, mai per
+  escludere. Il dipendente modifica solo le proprie righe; il responsabile le legge in sola lettura.
+- `notifications` — notifiche in-app per utente: `company_id` (**diretto**, tabella trasversale ad
+  alto volume, valorizzato dal contesto dell'evento), `user_id` (**destinatario**), `type`
+  (categoria, es. `substitution_available`/`substitution_claimed`/`cancellation_requested`...),
+  `message`, `payload` JSONB (riferimenti per il collegamento diretto: `shiftId`/`areaId`/`sedeId`/
+  `date`/...), `is_read`, `dedupe_key` (nullable, per la deduplica idempotente dell'escalation lazy
+  della Fase 7 — indice unico parziale su `(user_id, dedupe_key)`). Generate **in coda** ai flussi
+  esistenti in modo best-effort (vedi sezione "Sistema avanzato di sostituzioni" → Fase 3).
 
 **Perché `company_id` è diretto su `shifts`/`courses`/`cancellation_requests` e non dedotto da
 `user_id`/`instructor_id`**: un turno o corso `volante`/disponibile nasce **senza** utente
@@ -544,6 +568,158 @@ bottoni "Gestisci fabbisogno settimanale" e "+ Fabbisogno singolo", prima nell'h
 `StaffingPanel`, sono ora nella toolbar di `CalendarPage` (solo `isAdmin`), accanto a "+ Nuovo
 turno". Aprono gli stessi `StaffingScheduleModal`/`StaffingSingleModal` riusati invariati.
 
+## Sistema avanzato di sostituzioni (in costruzione, per fasi)
+
+Estensione del sistema di copertura dei turni scoperti: le due modalità **non si sostituiscono, si
+integrano** — (1) autonomia dei dipendenti sulle Sostituzioni disponibili (già esistente, vedi
+"Logica delle Sostituzioni"), (2) supporto intelligente al responsabile con classifica dei migliori
+candidati interni + proposte mirate + notifiche + escalation. **Ambito esclusivamente interno**: il
+pool di candidati è sempre e solo `users` della società (mai candidati esterni). Costruito come
+livello **additivo** sopra i turni, riusando tutto ciò che esiste (`user_areas` come "ruolo
+compatibile", `getExpandedShifts`/`hasOverlappingShift`, il claim atomico di `claimShift`, il
+polling `usePolling`), senza modificare la logica di
+`claimShift`/`listAvailableShifts`/`approveRequest` (solo aggiunte in coda).
+
+**Piano a fasi** (ognuna testabile e deployabile da sola; migrazioni idempotenti, produzione solo
+dopo conferma esplicita dell'utente):
+1. **Contratti dei dipendenti** ✅ *completata (2026-07-08)* — vedi sotto.
+2. **Disponibilità dichiarate** ✅ *completata (2026-07-08)* — vedi sotto.
+3. **Notifiche in-app** ✅ *completata (2026-07-08)* — vedi sotto.
+4. **Motore di compatibilità + "Trova sostituzione"** ✅ *completata (2026-07-08)* — vedi sotto.
+5. Proposte mirate (terzo livello: il responsabile invia la richiesta solo ai più compatibili).
+6. Opt-out "Non partecipare" del dipendente + storico per il motore.
+7. Escalation lazy (rilevamento "nessuno ha accettato" al polling notifiche, **senza cron**:
+   vincolo hosting serverless, tempo configurabile per società `substitution_escalation_hours`).
+
+**Decisioni prese con l'utente all'avvio**:
+- *Destinatari notifiche responsabili*: struttura predisposta per collegare in futuro responsabili
+  specifici alle aree; in v1, in mancanza di quel legame, prioritariamente i responsabili dell'area
+  coinvolta se individuabili, altrimenti tutti gli `admin`/`dirigente` della società.
+- *Contratti*: testo libero + preset suggeriti, struttura estendibile (`custom_config` JSONB, campi
+  di audit) per future evoluzioni (storico modifiche, configurazioni personalizzate).
+- *Escalation*: rilevamento lazy tramite polling notifiche, nessun cron/infrastruttura aggiuntiva.
+
+### Fase 1 — Contratti dei dipendenti ✅
+
+Configurazione contrattuale per dipendente (tabella `user_contracts`, vedi "Tabelle principali").
+Additivo puro: nessuna modifica a tabelle/flussi esistenti, nessun backfill.
+- **Backend**: `controllers/contractController.js` (dominio separato, coerente con la modularità
+  richiesta) — `getUserContract` + `upsertUserContract` (INSERT … ON CONFLICT `(user_id)`), con
+  verifica società (404 fuori società, non si rivela l'esistenza) e ruolo `user` (400 altrimenti:
+  il contratto ha senso solo per chi lavora i turni, stessa restrizione delle aree), validazione
+  dei massimali (numeri ≥ 0, tutti opzionali; vuoto → `null`). Route `GET`/`PUT
+  /api/users/:id/contract` in `routes/users.js` (`requireManager`).
+- **Frontend**: `components/management/ContractModal.jsx` (form: tipo con `<datalist>` di preset,
+  6 massimali in griglia a due colonne, note/vincoli; carica il contratto esistente e fa upsert);
+  bottone "Contratto" per riga dipendente in `UserManagementSection.jsx`; `api.getUserContract`/
+  `api.saveUserContract` in `client.js`; classi `.modal-card-wide`/`.contract-grid` in `styles.css`.
+- **Perché estendibile**: `contract_type` testo libero (nuove tipologie senza toccare lo schema),
+  `custom_config` JSONB per vincoli aziendali futuri, campi di audit che permettono di aggiungere
+  in seguito una `user_contract_history` come modifica puramente additiva.
+- Verificato in locale: migrazione idempotente (2×), endpoint via curl (creazione/lettura/upsert,
+  numerici tornati come `Number`, campi vuoti → `null`, `customConfig` persistito; errori 400 su
+  negativi/non-numerici e su ruolo non-`user`, 404 su utente inesistente/altra società, 401 senza
+  token) e flusso UI end-to-end nel browser (apertura modale, precaricamento del contratto salvato,
+  modifica e salvataggio persistito con `updated_by` corretto). Nessuna migrazione produzione ancora
+  eseguita.
+
+### Fase 2 — Disponibilità dichiarate ✅
+
+Disponibilità ricorrenti per giorno della settimana (tabella `user_availability`, vedi "Tabelle
+principali"), dichiarate dal dipendente e lette dal responsabile. Additivo puro.
+- **Backend**: `controllers/availabilityController.js` (dominio separato) — `getUserAvailability`
+  (leggibile dal dipendente stesso **o** da un responsabile/dirigente della stessa società: 403 se
+  un dipendente prova a leggere un altro, 404 se un manager legge un utente di altra società) e
+  `replaceUserAvailability` (solo il dipendente stesso, ruolo `user`; valida tutte le fasce poi
+  DELETE + INSERT multi-riga, stesso pattern di `userController.setUserAreas`). Route `GET`/`PUT
+  /api/users/:id/availability` in `routes/users.js` con **solo `authenticate`** (unica eccezione al
+  pattern "tutto `requireManager`" di quel file: anche il dipendente accede ai propri dati,
+  l'autorizzazione fine è nel controller).
+- **Frontend**: `components/profile/AvailabilityEditor.jsx` (editor self-service montato in
+  `MyProfile`: righe giorno+inizio+fine, aggiungi/rimuovi, salva; esporta `WEEKDAYS` riusato dalla
+  vista manager); `components/management/AvailabilityModal.jsx` (vista **sola lettura** per il
+  responsabile, fasce raggruppate per giorno) aperta dal bottone "Disponibilità" per riga dipendente
+  in `UserManagementSection.jsx`; `api.getUserAvailability`/`api.saveUserAvailability` in
+  `client.js`; classi `.availability-*` in `styles.css`.
+- **Semantica chiave**: **assenza di dichiarazioni = disponibilità "ignota"**, non incompatibile —
+  in Fase 4 il candidato senza fasce dichiarate resterà in classifica con "necessaria verifica
+  disponibilità", non escluso. Il dipendente **possiede** le proprie disponibilità (le modifica solo
+  lui); il responsabile le consulta soltanto. Più fasce lo stesso giorno sono ammesse.
+- Verificato in locale: migrazione idempotente (2×), endpoint via curl (lettura self/manager,
+  replace con ordinamento lun→dom, replace vuoto che azzera; errori 400 su giorno/orari non validi e
+  `slots` non-array, 403 su PUT del manager e su lettura incrociata tra dipendenti, 404 su utente di
+  altra società, 401 senza token; CHECK a DB su `end<start`), e flusso UI end-to-end (vista manager
+  read-only raggruppata per giorno; editor dipendente con aggiunta di una fascia e salvataggio
+  persistito). Nessuna migrazione produzione ancora eseguita.
+
+### Fase 3 — Notifiche in-app ✅
+
+Notifiche per utente in campanella (header di tutte le dashboard), generate **in coda** ai flussi
+esistenti in modo **best-effort** (un errore di invio non fa mai fallire l'azione che le innesca).
+Tabella `notifications` (vedi "Tabelle principali"). Additivo puro.
+- **Backend**: `services/notificationService.js` (dominio separato) risolve i destinatari e inserisce
+  in blocco. `resolveManagerRecipients(companyId, areaId)` restituisce i responsabili **collegati
+  all'area** se presenti, altrimenti **tutti gli admin/dirigente della società** (fallback v1): la
+  query per area è già pronta e sfrutta `user_areas`, così collegare in futuro responsabili specifici
+  alle aree non richiederà di toccare i call site (struttura predisposta, decisione dell'utente).
+  `createNotifications` è best-effort (cattura/logga, non lancia; dedup via `ON CONFLICT` sull'indice
+  parziale). Le funzioni `notify*` (una per evento) sono chiamate **in coda** — senza modificarne la
+  logica — da: `shiftController.createShift` (Sostituzione creata → dipendenti area + responsabili),
+  `.claimShift` (accettata → responsabili), `.deleteShiftSelf` (richiesta cancellazione →
+  responsabili); `cancellationController.approveRequest` (→ richiedente "approvata" + nuova
+  Sostituzione disponibile), `.rejectRequest` (→ richiedente "rifiutata");
+  `staffingController.generateGapShifts` (→ disponibili, notifica riassuntiva con conteggio).
+  `controllers/notificationController.js` + `routes/notifications.js` (`authenticate`, montato su
+  `/api/notifications`): elenco (ultime 50 + `unreadCount`), segna-letta (404 se non propria),
+  segna-tutte-lette. L'**autore** di un'azione è escluso dalle proprie notifiche.
+- **Frontend**: `components/notifications/NotificationsBell.jsx` (campanella + badge non lette +
+  pannello con elenco/tempo relativo/evidenza non lette/"segna tutte"/segna-letta ottimistico/
+  chiusura al click esterno), polling 10s con `usePolling` aggiornando in place (nessuno stato di
+  caricamento che nasconda contenuto → nessuno sfarfallio). Montata nell'header (`.topbar-actions`)
+  di `AdminDashboard`/`DirigenteDashboard`/`EmployeeDashboard`. `api.listNotifications`/
+  `markNotificationRead`/`markAllNotificationsRead` in `client.js`; stili `.notif-*` in `styles.css`.
+- **Deep-link (limite v1 dichiarato)**: il `payload` porta i riferimenti (`shiftId`/`areaId`/...) per
+  una navigazione ricca futura; oggi il click marca come letta ma non naviga alla tab specifica (le
+  aree sono tab, non rotte) — affinamento previsto, non un bug.
+- Verificato in locale: migrazione idempotente (2×), flusso completo via curl (disponibile/accettata/
+  richiesta-cancellazione/approvata con nuova Sostituzione; mark-read/mark-all; 404 su notifica non
+  propria; 401 senza token; tutte le azioni restano 2xx con notifiche attive), flusso UI end-to-end
+  nel browser (badge lato dipendente e dirigente, pannello, "segna tutte" che azzera badge e DB,
+  chiusura/riapertura). Dati di test rimossi. Nessuna migrazione produzione ancora eseguita.
+
+### Fase 4 — Motore di compatibilità + "Trova sostituzione" ✅
+
+Motore di suggerimento **sola lettura** (nessuna modifica allo schema/ai dati): data una Sostituzione
+scoperta, produce una **classifica 0–100 con motivazioni** dei dipendenti interni compatibili
+dell'area. Solo suggerimento, mai assegnazione automatica.
+- **Backend**: `services/substitutionMatcher.js` (motore isolato) — `rankCandidates({ shift,
+  companyId })`. Pool = dipendenti (`user_areas`, ruolo `user`) dell'area del turno; batch di
+  disponibilità/contratti/storico + **una** `getExpandedShifts` sulla finestra che copre settimana e
+  mese della data (raggruppata per dipendente in memoria, stesso spirito del fix N+1 di
+  `listAvailableShifts`). Punteggio su 4 dimensioni con **pesi in `CONFIG`** (punto di aggancio per
+  futuri algoritmi AI): disponibilità (fascia coperta/parziale/fuori/ignota), contratto (proiezione
+  ore settimana/mese/giorno e giorni consecutivi vs massimali di `user_contracts`), bilanciamento
+  carico (relativo al min/max ore settimanali del pool), storico (Sostituzioni già accettate).
+  **Unica esclusione rigida: la sovrapposizione oraria** (stesso vincolo di `claimShift` — chi si
+  sovrappone non potrebbe comunque accettare). Le **violazioni contrattuali NON escludono**:
+  azzerano la dimensione contratto e aggiungono una motivazione rossa (il candidato retrocede ma
+  resta visibile, la decisione è del responsabile). Disponibilità non dichiarata = neutra ("da
+  verificare"). Motivazioni tipizzate `{ text, kind: positive|neutral|negative }`.
+  `shiftController.getShiftCandidates` valida che la Sostituzione sia aperta e della società (404
+  altrimenti) e chiama il motore; route `GET /api/shifts/:id/candidates` (`requireManager`).
+- **Frontend**: `components/shifts/FindReplacementModal.jsx` (classifica: rank, nome, % con colore
+  alto/medio/basso, chip motivazioni verde/grigio/rosso; stati loading/vuoto/errore) aperto dal
+  bottone "Trova sostituzione" in `SubstitutionsPanel` (**solo vista `manage`**); `api.getShiftCandidates`
+  in `client.js`; classi `.candidate-*`/`.reason-*`/`.shift-item-actions` in `styles.css`.
+- **Perché sola lettura**: la Fase 4 suggerisce soltanto; l'invio di una proposta mirata ai candidati
+  selezionati (che scriverà) è la Fase 5.
+- Verificato in locale: endpoint via curl con dipendenti di prova ad attributi diversi (disponibile
+  in fascia in cima, disponibilità ignota/fuori-fascia a scendere, violazione contrattuale retrocessa
+  con motivo rosso, sovrapposizione oraria esclusa del tutto; punteggi coerenti con i pesi); errori
+  404 (shift inesistente/non-volante/assegnato), 403 (dipendente su rotta `requireManager`), 401
+  (senza token). Flusso UI end-to-end nel browser (classifica renderizzata con percentuali e
+  motivazioni colorate). Dati di test rimossi. Nessuna migrazione (fase sola lettura).
+
 ## Aggiornamenti quasi in tempo reale (polling leggero)
 
 Problema: quando un utente crea/modifica un turno o accetta una Sostituzione, gli altri utenti
@@ -648,9 +824,18 @@ l'indice mancante `idx_cancellation_requests_shift_id`.
 
 ## Funzionalità in sviluppo
 
-Nessuna al momento: l'ultima modifica (ottimizzazione aggiornamenti quasi in tempo reale + query
-più veloci) è stata completata, testata in locale e documentata; resta solo la migrazione
-dell'indice in produzione, da eseguire dopo conferma esplicita dell'utente.
+**Sistema avanzato di sostituzioni** (vedi sezione dedicata per il piano completo a 7 fasi). Stato:
+- **Fase 1 — Contratti dei dipendenti**: ✅ completata e testata in locale (2026-07-08). Migrazione
+  produzione della tabella `user_contracts` da eseguire dopo conferma esplicita dell'utente.
+- **Fase 2 — Disponibilità dichiarate**: ✅ completata e testata in locale (2026-07-08). Migrazione
+  produzione della tabella `user_availability` da eseguire (con quella di `user_contracts`) dopo
+  conferma esplicita dell'utente.
+- **Fase 3 — Notifiche in-app**: ✅ completata e testata in locale (2026-07-08). Migrazione
+  produzione della tabella `notifications` da eseguire (con le due precedenti) dopo conferma
+  esplicita dell'utente.
+- **Fase 4 — Motore di compatibilità + "Trova sostituzione"**: ✅ completata e testata in locale
+  (2026-07-08). Nessuna migrazione (fase sola lettura).
+- **Fasi 5–7** (proposte mirate, opt-out, escalation lazy): da implementare, in ordine.
 
 ## Funzionalità future previste
 
@@ -797,6 +982,39 @@ dell'indice in produzione, da eseguire dopo conferma esplicita dell'utente.
   le credenziali reali (dirigente, super admin, `JWT_SECRET`, connection string del DB di
   produzione) vivono solo in variabili d'ambiente (`.env` locale, dashboard Vercel) o vengono
   comunicate all'utente in chat, mai salvate nel repository.
+
+### Sistema avanzato di sostituzioni (Fasi 1–4) — invarianti da non modificare senza motivo
+
+- **Il motore di compatibilità NON assegna mai automaticamente** (`substitutionMatcher.js`/
+  `GET /api/shifts/:id/candidates` sono di sola lettura): produce solo una classifica di
+  suggerimento. La decisione resta del responsabile. Non trasformarlo in un assegnatore automatico.
+- **Unica esclusione rigida dal ranking = la sovrapposizione oraria** (stesso vincolo di
+  `claimShift`). Tutto il resto (contratto, disponibilità, carico, storico) è *punteggio*. In
+  particolare, **le violazioni contrattuali RETROCEDONO il candidato con motivazione rossa, non lo
+  escludono**: non trasformarle in un'esclusione senza discuterne (il responsabile deve poter
+  decidere in deroga).
+- **Assenza di disponibilità dichiarata = "ignota", non incompatibile**: un candidato senza fasce in
+  `user_availability` resta in classifica con motivazione neutra "da verificare". Non trattarla come
+  indisponibilità.
+- **Le notifiche sono best-effort e non bloccanti**: ogni `notify*` di `notificationService.js`
+  cattura i propri errori e non li propaga — un problema di invio non deve MAI far fallire l'azione
+  che le innesca (claim, approvazione, creazione turno...). Non spostare le chiamate `notify*` in un
+  punto in cui un loro errore possa interrompere il flusso principale.
+- **Destinatari "responsabili" delle notifiche**: `resolveManagerRecipients` prova prima i manager
+  collegati all'area (`user_areas`) e in mancanza ricade su tutti gli `admin`/`dirigente` della
+  società. Questa struttura è predisposta per un futuro legame area↔responsabile: non sostituirla con
+  un invio indiscriminato a tutti "per semplificare".
+- **Il dipendente possiede le proprie disponibilità**: solo lui le modifica (`PUT
+  /api/users/:id/availability` è self-only); il responsabile è in sola lettura. Non permettere al
+  manager di editarle senza riconferma.
+- **`user_contracts`/`user_availability` senza `company_id`** (a differenza di `notifications`):
+  `user_id` è sempre valorizzato, la società si ricava per JOIN e l'isolamento è nel controller. Non
+  aggiungere `company_id` a queste due "per coerenza": è ridondante (vedi ragionamento su
+  `shifts`/`courses`, che invece lo hanno perché `user_id` può essere NULL).
+- **Ogni fase del sistema di sostituzioni è additiva**: non ha modificato la logica di
+  `claimShift`/`listAvailableShifts`/`approveRequest`/`createShift` — solo aggiunte in coda
+  (notifiche best-effort) o nuovi endpoint di sola lettura. Mantenere questa proprietà nelle fasi
+  successive (5–7).
 
 ## Problemi risolti e problemi ancora aperti
 
@@ -1039,3 +1257,80 @@ Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cos
      un'altra esistente risponde `409` come atteso, verificato via chiamata diretta all'API).
      Nessuna migrazione DB necessaria (nessuna modifica a schema.sql). Deploy: push su `origin/main`
      dopo la verifica locale, stesso protocollo delle modifiche precedenti.
+- **2026-07-08** — **Sistema avanzato di sostituzioni — Fase 1: Contratti dei dipendenti**. Avvio
+  del nuovo sistema di copertura turni scoperti (piano completo a 7 fasi, vedi sezione dedicata
+  "Sistema avanzato di sostituzioni"), integrato con — non sostitutivo di — le Sostituzioni
+  esistenti. Prima fase interamente additiva: nuova tabella `user_contracts` (1:1 con `users`,
+  massimali nullable, `custom_config` JSONB + campi di audit per estendibilità futura), nuovo
+  `backend/src/controllers/contractController.js` (`getUserContract`/`upsertUserContract` con
+  isolamento società + restrizione ruolo `user` + validazione numerici), route `GET`/`PUT
+  /api/users/:id/contract` in `routes/users.js` (`requireManager`), nuovo
+  `frontend/src/components/management/ContractModal.jsx`, bottone "Contratto" per riga dipendente in
+  `UserManagementSection.jsx`, `api.getUserContract`/`api.saveUserContract` in `client.js`, classi
+  `.modal-card-wide`/`.contract-grid` in `styles.css`. **Nessuna modifica a tabelle/flussi
+  esistenti** (`shifts`/`claimShift`/`listAvailableShifts`/`approveRequest` intatti). Decisioni
+  concordate con l'utente all'avvio: destinatari notifiche responsabili con struttura predisposta
+  per un futuro legame responsabile↔area (in v1 fallback su admin/dirigente di società); contratti
+  a testo libero + preset ed estendibili; escalation lazy via polling senza cron. Verificato in
+  locale (migrazione idempotente 2×, endpoint via curl con happy path + tutti i casi d'errore e
+  l'isolamento, flusso UI end-to-end nel browser: apertura/precaricamento/salvataggio persistito);
+  dati di test rimossi al termine. **Migrazione produzione di `user_contracts`: da eseguire solo
+  dopo conferma esplicita dell'utente** (stesso protocollo delle feature precedenti).
+- **2026-07-08** — **Sistema avanzato di sostituzioni — Fase 2: Disponibilità dichiarate**. Fasce di
+  disponibilità ricorrenti per giorno della settimana, dichiarate dal dipendente e lette (sola
+  lettura) dal responsabile. Interamente additiva: nuova tabella `user_availability` (righe multiple
+  per utente, `weekday` MON..SUN, `start_time`/`end_time`, CHECK orari; niente `company_id`), nuovo
+  `backend/src/controllers/availabilityController.js` (`getUserAvailability` self-o-manager,
+  `replaceUserAvailability` self-only con validazione + replace in blocco), route `GET`/`PUT
+  /api/users/:id/availability` con solo `authenticate` (autorizzazione fine nel controller — unica
+  eccezione al pattern "tutto requireManager" di `routes/users.js`), nuovo
+  `frontend/src/components/profile/AvailabilityEditor.jsx` (editor self-service in `MyProfile`, con
+  `WEEKDAYS` esportato), nuovo `frontend/src/components/management/AvailabilityModal.jsx` (vista
+  manager read-only), bottone "Disponibilità" per riga dipendente in `UserManagementSection.jsx`,
+  `api.getUserAvailability`/`api.saveUserAvailability` in `client.js`, classi `.availability-*` in
+  `styles.css`. **Semantica chiave concordata**: assenza di dichiarazioni = disponibilità "ignota"
+  (non incompatibile), sfruttata dal motore di compatibilità in Fase 4; il dipendente possiede le
+  proprie disponibilità (le modifica solo lui). Nessuna modifica a tabelle/flussi esistenti.
+  Verificato in locale (migrazione idempotente 2×, endpoint via curl con happy path + validazioni +
+  isolamento self/manager/altra-società + CHECK a DB, flusso UI end-to-end sia lato dipendente sia
+  lato responsabile); dati di test rimossi al termine. **Migrazione produzione di `user_availability`
+  (con `user_contracts`): da eseguire solo dopo conferma esplicita dell'utente.**
+- **2026-07-08** — **Sistema avanzato di sostituzioni — Fase 3: Notifiche in-app**. Notifiche per
+  utente in campanella (header di tutte le dashboard), generate **in coda** ai flussi esistenti in
+  modo **best-effort** (un errore di invio non fa mai fallire l'azione che le innesca). Additiva:
+  nuova tabella `notifications` (destinatario `user_id`, `type`, `message`, `payload` JSONB per il
+  deep-link, `is_read`, `dedupe_key` per l'escalation idempotente della Fase 7; `company_id` diretto)
+  + 3 indici; nuovo `backend/src/services/notificationService.js` (risoluzione destinatari con
+  priorità ai responsabili dell'area — query già pronta, fallback su admin/dirigente di società — e
+  `createNotifications` best-effort con dedup `ON CONFLICT`); nuovo
+  `backend/src/controllers/notificationController.js` + `routes/notifications.js` (montato in
+  `app.js`); agganci `notify*` **in coda** in `shiftController` (createShift/claimShift/
+  deleteShiftSelf), `cancellationController` (approve/reject), `staffingController` (generateGap) —
+  nessuna modifica alla loro logica; nuovo `frontend/src/components/notifications/NotificationsBell.jsx`
+  (badge non lette + pannello, polling 10s con `usePolling` in place, nessuno sfarfallio), montata in
+  `.topbar-actions` nelle tre dashboard; `api.listNotifications`/`markNotificationRead`/
+  `markAllNotificationsRead` in `client.js`; stili `.notif-*` in `styles.css`. Decisioni: best-effort
+  (mai bloccante), destinatari responsabili con struttura predisposta per il futuro legame
+  area↔responsabile (fallback v1 su tutti i manager), autore escluso dalle proprie notifiche,
+  deep-link `payload` salvato ma navigazione alla tab specifica rinviata (limite v1 dichiarato, le
+  aree sono tab non rotte). Verificato in locale (migrazione idempotente 2×, flusso completo via curl
+  con tutti gli eventi + mark-read/mark-all + 404/401 + azioni sempre 2xx, flusso UI end-to-end con
+  badge/pannello/segna-tutte/chiusura lato dipendente e dirigente); dati di test rimossi al termine.
+  **Migrazione produzione di `notifications` (con `user_contracts`/`user_availability`): da eseguire
+  solo dopo conferma esplicita dell'utente.**
+- **2026-07-08** — **Sistema avanzato di sostituzioni — Fase 4: Motore di compatibilità + "Trova
+  sostituzione"**. Motore di suggerimento **sola lettura** (nessuna migrazione DB): per una
+  Sostituzione scoperta produce una classifica 0–100 con motivazioni dei dipendenti interni dell'area.
+  Nuovo `backend/src/services/substitutionMatcher.js` (`rankCandidates`: pool da `user_areas`, batch
+  disponibilità/contratti/storico + una `getExpandedShifts` su settimana+mese, 4 dimensioni con pesi
+  in `CONFIG`, unica esclusione rigida = sovrapposizione oraria, violazioni contrattuali che
+  **retrocedono** con motivazione rossa senza escludere, disponibilità ignota = neutra); nuovo
+  `shiftController.getShiftCandidates` + route `GET /api/shifts/:id/candidates` (`requireManager`);
+  nuovo `frontend/src/components/shifts/FindReplacementModal.jsx` (classifica con % colorate e chip
+  motivazioni verde/grigio/rosso) aperto dal bottone "Trova sostituzione" in `SubstitutionsPanel`
+  (solo vista `manage`); `api.getShiftCandidates` in `client.js`; classi `.candidate-*`/`.reason-*`
+  in `styles.css`. Nessuna modifica a tabelle/flussi esistenti (solo lettura). Verificato in locale
+  (endpoint via curl con più candidati ad attributi diversi: ranking corretto, sovrapposizione
+  esclusa, violazione contratto retrocessa; errori 404/403/401; flusso UI end-to-end con classifica
+  colorata nel browser); dati di test rimossi. **Nessuna migrazione**; restano pendenti solo quelle
+  delle Fasi 1–3.

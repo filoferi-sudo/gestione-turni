@@ -14,6 +14,7 @@ import CoursesCalendar from '../components/courses/CoursesCalendar';
 import CoursesAvailablePanel from '../components/courses/CoursesAvailablePanel';
 import SediManagement from './dirigente/SediManagement';
 import AreasManagement from '../components/areas/AreasManagement';
+import NotificationsBell from '../components/notifications/NotificationsBell';
 
 // Il calendario non è più una coppia fissa "Turni Bagnini"/"Corsi Istruttori": le tab si
 // costruiscono dinamicamente dalle aree operative della sede selezionata (vedi
@@ -69,9 +70,12 @@ export default function DirigenteDashboard() {
         <div>
           <strong>Gestione Turni</strong> <span className="badge badge-admin">Dirigente</span>
         </div>
-        <button className="link-button" onClick={handleLogout}>
-          Esci
-        </button>
+        <div className="topbar-actions">
+          <NotificationsBell />
+          <button className="link-button" onClick={handleLogout}>
+            Esci
+          </button>
+        </div>
       </header>
 
       <main className="content content-wide">

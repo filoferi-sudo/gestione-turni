@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import ContractModal from './ContractModal';
+import AvailabilityModal from './AvailabilityModal';
 
 const ROLE_LABELS = { admin: 'Responsabile', dirigente: 'Dirigente', user: 'Dipendente' };
 
@@ -22,6 +24,8 @@ export default function UserManagementSection({ roles, title, createHref, create
   const [notice, setNotice] = useState('');
   const [resetTarget, setResetTarget] = useState(null); // utente per cui reimpostare la password
   const [areasTarget, setAreasTarget] = useState(null); // utente per cui riassegnare le aree
+  const [contractTarget, setContractTarget] = useState(null); // dipendente di cui gestire il contratto
+  const [availabilityTarget, setAvailabilityTarget] = useState(null); // dipendente di cui vedere le disponibilità
 
   function load() {
     api
@@ -102,6 +106,16 @@ export default function UserManagementSection({ roles, title, createHref, create
                           Modifica aree
                         </button>
                       )}
+                      {u.role === 'user' && (
+                        <button className="table-action" onClick={() => setContractTarget(u)}>
+                          Contratto
+                        </button>
+                      )}
+                      {u.role === 'user' && (
+                        <button className="table-action" onClick={() => setAvailabilityTarget(u)}>
+                          Disponibilità
+                        </button>
+                      )}
                       <button className="table-action" onClick={() => setResetTarget(u)}>
                         Reimposta password
                       </button>
@@ -151,6 +165,18 @@ export default function UserManagementSection({ roles, title, createHref, create
             load();
           }}
         />
+      )}
+
+      {contractTarget && (
+        <ContractModal
+          targetUser={contractTarget}
+          onClose={() => setContractTarget(null)}
+          onDone={() => setContractTarget(null)}
+        />
+      )}
+
+      {availabilityTarget && (
+        <AvailabilityModal targetUser={availabilityTarget} onClose={() => setAvailabilityTarget(null)} />
       )}
     </section>
   );

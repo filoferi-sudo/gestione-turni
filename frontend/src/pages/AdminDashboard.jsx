@@ -12,6 +12,7 @@ import SubstitutionsPanel from '../components/shifts/SubstitutionsPanel';
 import CancellationRequestsPanel from '../components/cancellation/CancellationRequestsPanel';
 import CoursesCalendar from '../components/courses/CoursesCalendar';
 import CoursesAvailablePanel from '../components/courses/CoursesAvailablePanel';
+import NotificationsBell from '../components/notifications/NotificationsBell';
 
 // Il Responsabile opera dentro le sedi/aree già configurate dal Dirigente: può selezionare quale
 // sede vedere ma non crearle/modificarle (vedi DirigenteDashboard per la gestione struttura).
@@ -62,9 +63,12 @@ export default function AdminDashboard() {
         <div>
           <strong>Gestione Turni</strong> <span className="badge badge-admin">Responsabile</span>
         </div>
-        <button className="link-button" onClick={handleLogout}>
-          Esci
-        </button>
+        <div className="topbar-actions">
+          <NotificationsBell />
+          <button className="link-button" onClick={handleLogout}>
+            Esci
+          </button>
+        </div>
       </header>
 
       <main className="content content-wide">

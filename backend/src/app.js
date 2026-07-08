@@ -13,6 +13,7 @@ const companyRoutes = require('./routes/companies');
 const sedeRoutes = require('./routes/sedi');
 const areaRoutes = require('./routes/areas');
 const staffingRoutes = require('./routes/staffing');
+const notificationRoutes = require('./routes/notifications');
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use('/api/companies', companyRoutes);
 app.use('/api/sedi', sedeRoutes);
 app.use('/api/areas', areaRoutes);
 app.use('/api/staffing', staffingRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

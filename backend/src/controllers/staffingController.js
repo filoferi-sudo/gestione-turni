@@ -3,6 +3,7 @@ const { isValidTimeString } = require('../utils/timeWindow');
 const { isValidDateString, toDateOnly, getExpandedShifts, toSafeShift } = require('../services/shiftExpansion');
 const { weekdayOf, addDays } = require('../utils/staffingOccurrences');
 const { computeCoverage, findConflictingRequirement } = require('../services/staffingCoverage');
+const { notifySubstitutionAvailable } = require('../services/notificationService');
 
 const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
@@ -443,6 +444,20 @@ async function generateGapShifts(req, res) {
     );
     created.push(rows[0]);
   }
+
+  // Le nuove Sostituzioni generate dal fabbisogno sono disponibili: avvisa dipendenti dell'area +
+  // responsabili con un'unica notifica riassuntiva (best-effort, non blocca la risposta).
+  await notifySubstitutionAvailable({
+    companyId: req.user.companyId,
+    areaId: requirement.area_id,
+    sedeId,
+    shiftId: created[0].id,
+    date,
+    startTime,
+    endTime,
+    count: created.length,
+    actorUserId: req.user.id,
+  });
 
   return res.status(201).json({ created: created.length, shifts: created.map(toSafeShift) });
 }

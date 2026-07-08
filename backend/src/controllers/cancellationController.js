@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { toDateOnly } = require('../services/shiftExpansion');
+const { notifySubstitutionAvailable, notifyCancellationDecision } = require('../services/notificationService');
 
 function toSafeRequest(row) {
   return {
@@ -111,10 +112,11 @@ async function approveRequest(req, res) {
       // appartiene sempre a un'area operativa, l'area stessa è già il "ruolo richiesto" della
       // nuova Sostituzione (vedi PROJECT_CONTEXT.md, sezione Sedi/Aree). Non serve più risalire
       // alla categoria del dipendente titolare.
-      await pool.query(
+      const { rows: newShiftRows } = await pool.query(
         `INSERT INTO shifts
            (user_id, company_id, start_time, end_time, date, type, note, created_by, status, area_id, sede_id, origin_shift_id)
-         VALUES (NULL, $1, $2, $3, $4, 'volante', $5, $6, 'active', $7, $8, $9)`,
+         VALUES (NULL, $1, $2, $3, $4, 'volante', $5, $6, 'active', $7, $8, $9)
+         RETURNING *`,
         [
           request.company_id,
           request.shift_start_time,
@@ -127,8 +129,32 @@ async function approveRequest(req, res) {
           shift.id,
         ]
       );
+
+      // La nuova Sostituzione è disponibile: avvisa dipendenti dell'area + responsabili (best-effort).
+      const newShift = newShiftRows[0];
+      await notifySubstitutionAvailable({
+        companyId: request.company_id,
+        areaId: newShift.area_id,
+        sedeId: newShift.sede_id,
+        shiftId: newShift.id,
+        date: toDateOnly(newShift.date),
+        startTime: newShift.start_time.slice(0, 5),
+        endTime: newShift.end_time.slice(0, 5),
+        actorUserId: req.user.id,
+      });
     }
   }
+
+  // Avvisa il dipendente richiedente che la sua cancellazione è stata approvata (best-effort).
+  await notifyCancellationDecision({
+    companyId: request.company_id,
+    requesterUserId: request.requested_by,
+    requestId: request.id,
+    date: toDateOnly(request.shift_date),
+    startTime: request.shift_start_time.slice(0, 5),
+    endTime: request.shift_end_time.slice(0, 5),
+    approved: true,
+  });
 
   return res.json({ request: toSafeRequest(rows[0]) });
 }
@@ -146,6 +172,17 @@ async function rejectRequest(req, res) {
       RETURNING *`,
     [req.user.id, id]
   );
+
+  // Avvisa il dipendente richiedente che la sua cancellazione è stata rifiutata (best-effort).
+  await notifyCancellationDecision({
+    companyId: request.company_id,
+    requesterUserId: request.requested_by,
+    requestId: request.id,
+    date: toDateOnly(request.shift_date),
+    startTime: request.shift_start_time.slice(0, 5),
+    endTime: request.shift_end_time.slice(0, 5),
+    approved: false,
+  });
 
   return res.json({ request: toSafeRequest(rows[0]) });
 }
