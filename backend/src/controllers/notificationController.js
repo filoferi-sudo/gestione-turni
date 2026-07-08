@@ -1,4 +1,6 @@
 const pool = require('../config/db');
+const { MANAGER_ROLES } = require('../middleware/auth');
+const { escalateOverdueSubstitutions } = require('../services/escalationService');
 
 const LIST_LIMIT = 50;
 
@@ -16,6 +18,16 @@ function toSafeNotification(row) {
 // GET /api/notifications - le proprie notifiche più recenti + conteggio non lette.
 // Ogni utente autenticato ha le proprie notifiche (dipendente, responsabile o dirigente).
 async function listNotifications(req, res) {
+  // Rilevamento LAZY dell'escalation (Fase 7): agganciato al polling delle notifiche, senza cron.
+  // Solo quando è un responsabile a caricare (gating per limitare il costo: pochi manager vs molti
+  // dipendenti, e l'escalation è comunque destinata ai manager). best-effort: escalateOverdueSubstitutions
+  // cattura i propri errori, così non fa mai fallire il caricamento delle notifiche. Idempotente
+  // (dedupe_key): eseguirla a ogni poll non crea duplicati. L'await fa sì che una nuova notifica di
+  // escalation compaia già in questa stessa risposta.
+  if (MANAGER_ROLES.includes(req.user.role)) {
+    await escalateOverdueSubstitutions(req.user.companyId);
+  }
+
   const { rows } = await pool.query(
     `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
     [req.user.id, LIST_LIMIT]

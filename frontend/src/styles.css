@@ -548,6 +548,77 @@ button:disabled {
   border-bottom: 1px solid #eef0f3;
 }
 
+/* --- Opt-out "Non partecipare" (Fase 6) --- */
+.optout-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 8px 0 12px;
+}
+
+.optout-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.optout-form .optout-note {
+  flex: 1;
+  min-width: 160px;
+}
+
+.optout-form .optout-note input {
+  width: 100%;
+}
+
+.optout-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.optout-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  background: #f9fafb;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.optout-heading {
+  margin: 16px 0 4px;
+  font-size: 15px;
+}
+
+/* Impostazioni sostituzioni (Fase 7): riga campo + salva */
+.settings-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.settings-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.settings-row input {
+  width: 140px;
+}
+
 /* --- Notifiche: campanella nell'header + pannello a discesa --- */
 .topbar-actions {
   display: flex;
@@ -762,6 +833,58 @@ button:disabled {
 .reason-neutral {
   background: #f3f4f6;
   color: #4b5563;
+}
+
+/* Proposte mirate (Fase 5) */
+.candidate-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.proposal-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #f3f4f6;
+  color: #4b5563;
+}
+.proposal-badge-pending {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+.proposal-badge-accepted {
+  background: #dcfce7;
+  color: #166534;
+}
+.proposal-badge-declined {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.proposal-badge-expired {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.proposal-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 10px;
+  background: #f9fafb;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.proposal-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
 
 .button-secondary {

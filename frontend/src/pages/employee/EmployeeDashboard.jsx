@@ -4,6 +4,7 @@ import CalendarPage from '../../components/calendar/CalendarPage';
 import CoursesCalendar from '../../components/courses/CoursesCalendar';
 import TabbedCalendar from '../../components/calendar/TabbedCalendar';
 import SubstitutionsPanel from '../../components/shifts/SubstitutionsPanel';
+import MyProposalsPanel from '../../components/shifts/MyProposalsPanel';
 import CoursesAvailablePanel from '../../components/courses/CoursesAvailablePanel';
 import MyCancellationRequests from '../../components/cancellation/MyCancellationRequests';
 import MyProfile from '../../components/profile/MyProfile';
@@ -74,6 +75,8 @@ export default function EmployeeDashboard() {
             <section className="card">
               <TabbedCalendar views={calendarViews} />
             </section>
+
+            <MyProposalsPanel />
 
             {shiftAreas.map((area) => (
               <SubstitutionsPanel

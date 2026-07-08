@@ -42,6 +42,20 @@ async function resolveAreaEmployees(areaId) {
   return rows.map((r) => r.id);
 }
 
+// Rimuove dai destinatari i dipendenti con un opt-out "Non partecipare" attivo su quella data (Fase 6):
+// chi ha dichiarato di non voler essere sollecitato non riceve il broadcast di nuova Sostituzione.
+// Non impedisce comunque il claim autonomo (listAvailableShifts è invariato).
+async function excludeOptedOut(userIds, date) {
+  if (userIds.length === 0 || !date) return userIds;
+  const { rows } = await pool.query(
+    `SELECT user_id FROM substitution_optouts
+      WHERE user_id = ANY($1::int[]) AND start_date <= $2 AND (end_date IS NULL OR end_date >= $2)`,
+    [userIds, date]
+  );
+  const opted = new Set(rows.map((r) => r.user_id));
+  return userIds.filter((id) => !opted.has(id));
+}
+
 async function areaName(areaId) {
   if (!areaId) return null;
   const { rows } = await pool.query('SELECT name FROM operational_areas WHERE id = $1', [areaId]);
@@ -84,7 +98,7 @@ async function notifySubstitutionAvailable({ companyId, areaId, sedeId, shiftId,
     const when = `${date} ${startTime}-${endTime}`;
     const payload = { kind: 'substitution', shiftId, areaId, sedeId, date };
 
-    const employees = await resolveAreaEmployees(areaId);
+    const employees = await excludeOptedOut(await resolveAreaEmployees(areaId), date);
     const empMessage =
       count > 1
         ? `${count} nuove sostituzioni disponibili${where} il ${date}`
@@ -155,6 +169,67 @@ async function notifyCancellationDecision({ companyId, requesterUserId, requestI
   }
 }
 
+// Proposta mirata inviata dal responsabile a UN singolo dipendente (Fase 5): notifica personale al
+// destinatario. Diversa da notifySubstitutionAvailable (che avvisa tutta l'area): qui il turno è
+// stato proposto specificamente a questa persona, che può accettarlo o rifiutarlo.
+async function notifySubstitutionProposal({ companyId, proposedUserId, proposalId, shiftId, areaId, sedeId, date, startTime, endTime }) {
+  try {
+    const name = await areaName(areaId);
+    const where = name ? ` in ${name}` : '';
+    await createNotifications({
+      companyId,
+      userIds: [proposedUserId],
+      type: 'substitution_proposed',
+      message: `Ti è stata proposta una sostituzione${where}: ${date} ${startTime}-${endTime}`,
+      payload: { kind: 'proposal', proposalId, shiftId, areaId, sedeId, date },
+    });
+  } catch (err) {
+    console.error('[notifications] notifySubstitutionProposal fallita (non bloccante):', err.message);
+  }
+}
+
+// Un dipendente ha RIFIUTATO una proposta mirata (Fase 5): avvisa i responsabili, così possono
+// proporla a qualcun altro. Il rifiuto è anche storico per il motore (Fase 6).
+async function notifyProposalDeclined({ companyId, areaId, sedeId, shiftId, date, startTime, endTime, declinerUsername, declinerUserId = null }) {
+  try {
+    const name = await areaName(areaId);
+    const where = name ? ` (${name})` : '';
+    const managers = await resolveManagerRecipients(companyId, areaId);
+    await createNotifications({
+      companyId,
+      userIds: managers,
+      type: 'substitution_proposal_declined',
+      message: `${declinerUsername} ha rifiutato la proposta di sostituzione del ${date} ${startTime}-${endTime}${where}`,
+      payload: { kind: 'substitution', shiftId, areaId, sedeId, date },
+      excludeUserId: declinerUserId,
+    });
+  } catch (err) {
+    console.error('[notifications] notifyProposalDeclined fallita (non bloccante):', err.message);
+  }
+}
+
+// Escalation (Fase 7): una Sostituzione è ancora scoperta oltre il tempo configurato dalla società.
+// Avvisa i RESPONSABILI (l'ultimo livello: autonomia e proposte non hanno coperto il turno, tocca a
+// loro intervenire). Idempotente: dedupe_key 'escalation:<shiftId>' fa scattare la notifica UNA sola
+// volta per turno, anche se la passata lazy gira a ogni poll delle notifiche.
+async function notifySubstitutionEscalated({ companyId, areaId, sedeId, shiftId, date, startTime, endTime, hours }) {
+  try {
+    const name = await areaName(areaId);
+    const where = name ? ` in ${name}` : '';
+    const managers = await resolveManagerRecipients(companyId, areaId);
+    await createNotifications({
+      companyId,
+      userIds: managers,
+      type: 'substitution_escalated',
+      message: `Sostituzione ancora scoperta${where} da oltre ${hours}h: ${date} ${startTime}-${endTime}`,
+      payload: { kind: 'substitution', shiftId, areaId, sedeId, date },
+      dedupeKey: `escalation:${shiftId}`,
+    });
+  } catch (err) {
+    console.error('[notifications] notifySubstitutionEscalated fallita (non bloccante):', err.message);
+  }
+}
+
 module.exports = {
   createNotifications,
   resolveManagerRecipients,
@@ -163,4 +238,7 @@ module.exports = {
   notifySubstitutionClaimed,
   notifyCancellationRequested,
   notifyCancellationDecision,
+  notifySubstitutionProposal,
+  notifyProposalDeclined,
+  notifySubstitutionEscalated,
 };

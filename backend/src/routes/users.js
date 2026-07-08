@@ -9,6 +9,7 @@ const {
 } = require('../controllers/userController');
 const { getUserContract, upsertUserContract } = require('../controllers/contractController');
 const { getUserAvailability, replaceUserAvailability } = require('../controllers/availabilityController');
+const { getUserOptOuts, addUserOptOut, deleteUserOptOut } = require('../controllers/optOutController');
 const { authenticate, requireManager } = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 
@@ -26,6 +27,12 @@ router.put('/:id/contract', authenticate, requireManager, asyncHandler(upsertUse
 // manager della stessa società in sola lettura) è dentro il controller.
 router.get('/:id/availability', authenticate, asyncHandler(getUserAvailability));
 router.put('/:id/availability', authenticate, asyncHandler(replaceUserAvailability));
+// Opt-out "Non partecipare" (Fase 6): stesso schema di autorizzazione delle disponibilità
+// (authenticate + autorizzazione fine nel controller: il dipendente gestisce i propri, il manager
+// legge in sola lettura).
+router.get('/:id/optouts', authenticate, asyncHandler(getUserOptOuts));
+router.post('/:id/optouts', authenticate, asyncHandler(addUserOptOut));
+router.delete('/:id/optouts/:optoutId', authenticate, asyncHandler(deleteUserOptOut));
 router.delete('/:id', authenticate, requireManager, asyncHandler(deleteUser));
 
 module.exports = router;

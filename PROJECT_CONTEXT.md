@@ -171,8 +171,10 @@ vedi changelog).
 
 **Tabelle principali**:
 - `companies` — società/piscine: `name`, `email`, `phone`, `address`, `is_active`, `created_by`,
-  `created_at`. `created_by` referenzia `users(id)` con FK aggiunta *dopo* la creazione di
-  `users` nel file, per evitare dipendenza circolare tra le due `CREATE TABLE`.
+  `created_at`, `substitution_escalation_hours` (Fase 7: ore prima dell'escalation di una Sostituzione
+  ancora scoperta, configurabile dal **Dirigente**; NULL/≤0 = disattivata). `created_by` referenzia
+  `users(id)` con FK aggiunta *dopo* la creazione di `users` nel file, per evitare dipendenza
+  circolare tra le due `CREATE TABLE`.
 - `sedi` — sedi fisiche di una società: `company_id`, `name`, `is_active`, `display_order`,
   `calendar_start_time`/`calendar_end_time` (default `07:30`/`23:00`, personalizzabili dal
   Dirigente). Una società creata da Super Admin riceve automaticamente una "Sede Principale"
@@ -239,6 +241,23 @@ vedi changelog).
   `date`/...), `is_read`, `dedupe_key` (nullable, per la deduplica idempotente dell'escalation lazy
   della Fase 7 — indice unico parziale su `(user_id, dedupe_key)`). Generate **in coda** ai flussi
   esistenti in modo best-effort (vedi sezione "Sistema avanzato di sostituzioni" → Fase 3).
+- `substitution_proposals` — proposte mirate di sostituzione (Fase 5): il responsabile invia una
+  Sostituzione scoperta solo ai candidati che sceglie. `shift_id` (FK→shifts `ON DELETE CASCADE`, la
+  Sostituzione `volante` proposta), `user_id` (dipendente destinatario), `proposed_by` (chi l'ha
+  inviata, `ON DELETE SET NULL`), `status` (`pending`|`accepted`|`declined`|`expired`), `score` +
+  `reasons` JSONB (**snapshot** della classifica di compatibilità al momento dell'invio),
+  `responded_at`, `created_at`. `UNIQUE (shift_id, user_id)` (una proposta per coppia; ri-proporre
+  dopo un rifiuto è un UPSERT che la riporta a `pending`). **Nessun `company_id`**: `shift_id`/
+  `user_id` sempre valorizzati, società ricavata per JOIN (autoritativo `shift.company_id`),
+  isolamento nel controller — stesso principio di `user_contracts`/`user_availability`.
+- `substitution_optouts` — periodi di opt-out "Non partecipare" dichiarati dal dipendente (Fase 6):
+  `user_id`, `start_date`, `end_date` (**nullable** = a tempo indeterminato), `note`, `created_at`
+  (`CHECK end_date IS NULL OR end_date >= start_date`). Un opt-out è attivo su una data D se
+  `start_date <= D AND (end_date IS NULL OR end_date >= D)`. Niente `company_id` (come
+  `user_availability`). Dichiarati dal dipendente stesso, letti anche dal responsabile in sola lettura.
+  Effetti (additivi): il motore RETROCEDE il candidato (motivo rosso, resta visibile), il responsabile
+  non può inviargli una proposta nel periodo, niente notifica broadcast — ma `listAvailableShifts`
+  resta invariato (può ancora reclamare da sé).
 
 **Perché `company_id` è diretto su `shifts`/`courses`/`cancellation_requests` e non dedotto da
 `user_id`/`instructor_id`**: un turno o corso `volante`/disponibile nasce **senza** utente
@@ -586,10 +605,11 @@ dopo conferma esplicita dell'utente):
 2. **Disponibilità dichiarate** ✅ *completata (2026-07-08)* — vedi sotto.
 3. **Notifiche in-app** ✅ *completata (2026-07-08)* — vedi sotto.
 4. **Motore di compatibilità + "Trova sostituzione"** ✅ *completata (2026-07-08)* — vedi sotto.
-5. Proposte mirate (terzo livello: il responsabile invia la richiesta solo ai più compatibili).
-6. Opt-out "Non partecipare" del dipendente + storico per il motore.
-7. Escalation lazy (rilevamento "nessuno ha accettato" al polling notifiche, **senza cron**:
-   vincolo hosting serverless, tempo configurabile per società `substitution_escalation_hours`).
+5. **Proposte mirate** ✅ *completata (2026-07-08)* — vedi sotto.
+6. **Opt-out "Non partecipare" + storico per il motore** ✅ *completata (2026-07-08)* — vedi sotto.
+7. **Escalation lazy** (rilevamento "nessuno ha accettato" al polling notifiche, **senza cron**:
+   vincolo hosting serverless, tempo configurabile per società `substitution_escalation_hours`) ✅
+   *completata (2026-07-08)* — vedi sotto. **Piano a 7 fasi completato.**
 
 **Decisioni prese con l'utente all'avvio**:
 - *Destinatari notifiche responsabili*: struttura predisposta per collegare in futuro responsabili
@@ -720,6 +740,111 @@ dell'area. Solo suggerimento, mai assegnazione automatica.
   (senza token). Flusso UI end-to-end nel browser (classifica renderizzata con percentuali e
   motivazioni colorate). Dati di test rimossi. Nessuna migrazione (fase sola lettura).
 
+### Fase 5 — Proposte mirate ✅
+
+Terzo livello di copertura dei turni scoperti: dalla classifica di "Trova sostituzione" (Fase 4) il
+responsabile **invia una proposta solo ai candidati che sceglie**; il dipendente la vede in "Le mie
+proposte" e decide (Accetta/Rifiuta). Convive con l'autonomia esistente — la stessa Sostituzione resta
+accettabile anche dal pannello "Sostituzioni disponibili": nessuna esclusiva, nessuna assegnazione
+automatica. Additivo puro.
+- **Riuso del claim atomico (helper condiviso)**: il cuore dell'assegnazione di una Sostituzione
+  (doppi controlli area+sovrapposizione + UPDATE condizionale) è stato estratto da `claimShift` in
+  `shiftController.assignVolanteToUser({ shiftRow, user })`, **unica fonte di verità** riusata sia dal
+  claim autonomo sia dall'accettazione di una proposta. `claimShift` resta un wrapper a comportamento
+  osservabile **invariato** (verificato: 403/200/409 identici). Questa è la "necessità documentata"
+  che il vincolo "non modificare `claimShift`" ammette: garantisce che i due percorsi non divergano.
+- **Backend**: `substitutionProposalController.js` — `createProposals` (POST
+  `/api/shifts/:id/proposals`, `requireManager`: snapshot `score`/`reasons` da `rankCandidates`,
+  propone solo ai candidati **validi**; chi ha sovrapposizione oraria finisce in `skipped`, non gli si
+  propone un turno che non potrebbe accettare; UPSERT su `(shift_id,user_id)` per ri-proporre dopo un
+  rifiuto), `listShiftProposals` (GET stessa rotta: annota "Trova sostituzione" con lo stato delle
+  proposte già inviate), `listMyProposals` (GET `/api/proposals/mine`: solo `pending` su turni
+  **ancora aperti** — una proposta superata sparisce senza toccare `claimShift`), `acceptProposal`
+  (POST `/api/proposals/:id/accept`: riusa `assignVolanteToUser`, segna `accepted`, porta le proposte
+  **gemelle** dello stesso turno a `expired`, notifica i responsabili con `notifySubstitutionClaimed`;
+  se il turno è già coperto → `expired` + 409), `declineProposal` (POST `.../decline`: segna
+  `declined`, notifica i responsabili). Rotte `/api/proposals/*` con `authenticate` (autorizzazione
+  fine nel controller, azioni sempre sulle proprie proposte). Notifiche nuove:
+  `notifySubstitutionProposal` (al singolo dipendente), `notifyProposalDeclined` (ai responsabili),
+  entrambe best-effort come le altre.
+- **Frontend**: `FindReplacementModal` esteso con checkbox per candidato + "Invia proposta (N)" e
+  badge di stato delle proposte già inviate; nuovo `MyProposalsPanel.jsx` (card dipendente con
+  Accetta/Rifiuta + polling 5s, nascosta se non ci sono proposte), montato in `EmployeeDashboard`
+  sopra le Sostituzioni disponibili. `api.createProposals`/`listShiftProposals`/`listMyProposals`/
+  `acceptProposal`/`declineProposal` in `client.js`; classi `.candidate-check`/`.proposal-badge*`/
+  `.proposal-item`/`.proposal-info` in `styles.css`.
+- **Perché lo snapshot `score`/`reasons`**: la motivazione mostrata a dipendente e responsabile resta
+  stabile anche se turni/disponibilità cambiano dopo l'invio; è la stessa forma tipizzata del motore.
+- Verificato in locale: migrazione idempotente (2×); script e2e via HTTP con JWT firmati, **30/30
+  asserzioni** (invio, viste manager/dipendente, accept con assegnazione + gemella `expired` + accept
+  scaduta 409, notifiche dei 3 nuovi/riusati tipi, rifiuto, ri-proposta UPSERT→pending; errori
+  400/401/403/404; isolamento società); **test di regressione dedicato su `claimShift`** (claim
+  autonomo 403/200/409 invariato); nessun ciclo di require; build frontend OK; dati di test rimossi
+  (CASCADE). Migrazione produzione ancora da eseguire.
+
+### Fase 6 — Opt-out "Non partecipare" + storico per il motore ✅
+
+Due parti additive. **(A) Opt-out**: il dipendente dichiara periodi in cui non vuole essere
+considerato per le sostituzioni (tabella `substitution_optouts`, vedi "Tabelle principali").
+**(B) Storico nel motore**: `rankCandidates` inizia a usare opt-out e rifiuti per ordinare i candidati.
+- **Opt-out "blocca + retrocede"** (decisione dell'utente): a chi ha un opt-out attivo sulla data (1)
+  il motore assegna una forte penalità (`CONFIG.optOutPenalty`, score a 0) + motivo rosso e lo mette in
+  fondo con flag `optedOut`; (2) `substitutionProposalController.createProposals` **non gli invia la
+  proposta** (finisce in `skipped`, visibile); (3) `notificationService` **non** gli manda il broadcast
+  "nuova sostituzione disponibile" (`excludeOptedOut`). **Nessuna esclusione silenziosa**: resta sempre
+  visibile in classifica, e `listAvailableShifts` è invariato — può ancora reclamare autonomamente se
+  cambia idea ("non sollecitarmi", non "non posso").
+- **Storico rifiuti**: la dimensione "storico" del motore, oltre alle Sostituzioni accettate, considera
+  i **rifiuti** di proposte mirate (`substitution_proposals.status='declined'`) come leggero segnale
+  negativo (`CONFIG.declinePenaltyRatio`, motivo neutro). Le proposte **accettate** non si ricontano:
+  diventano turni `volante` con `user_id`, già conteggiati — dai record delle proposte si prende solo il
+  numero di rifiuti.
+- **Backend**: `optOutController.js` (self-service come le disponibilità: il dipendente gestisce i
+  propri opt-out, il responsabile li legge; date TZ-safe con `toDateOnly`, validazione su componenti
+  UTC); rotte `GET/POST /api/users/:id/optouts` + `DELETE .../optouts/:optoutId`. Modifiche di sola
+  lettura a `substitutionMatcher.js`; guardia in `createProposals`; `excludeOptedOut` in
+  `notificationService.js`.
+- **Frontend**: `OptOutEditor.jsx` (nuovo) in `MyProfile` (aggiungi periodo/elenco/rimuovi; esporta
+  `formatOptOutPeriod`); `AvailabilityModal.jsx` esteso con la sezione read-only "Periodi 'non
+  partecipa'" per il responsabile; 3 metodi in `client.js`; classi `.optout-*` in `styles.css`.
+- Verificato in locale: migrazione idempotente (2×); e2e via HTTP **24/24** (CRUD opt-out +
+  errori/isolamento; motore che retrocede l'opt-out con motivo rosso e score 0; blocco dell'invio
+  proposta; storico rifiuti; soppressione broadcast); **regressione Fasi 5/claim 30/30 + 4/4**; smoke
+  test browser (editor dipendente con date corrette senza slittamento fuso, vista manager read-only).
+  Migrazione produzione ancora da eseguire.
+
+### Fase 7 — Escalation lazy (senza cron) ✅
+
+Ultimo livello del sistema: se una Sostituzione resta scoperta oltre le ore configurate dal Dirigente
+(`companies.substitution_escalation_hours`), i **responsabili** vengono avvisati. Additivo puro,
+nessuna assegnazione automatica (l'escalation *avvisa*, non riassegna).
+- **Nessun cron** (vincolo hosting serverless Vercel): il rilevamento è **lazy**, agganciato al polling
+  già esistente delle notifiche. In `notificationController.listNotifications`, **solo se chi carica è
+  un responsabile**, si esegue `escalationService.escalateOverdueSubstitutions(companyId)` (best-effort:
+  cattura i propri errori, non fa mai fallire il caricamento). Il gating ai manager limita il costo
+  (pochi manager vs molti dipendenti) e l'escalation è comunque destinata a loro. **Idempotente**: la
+  notifica usa `dedupe_key='escalation:<shiftId>'` (indice unico parziale già predisposto in Fase 3),
+  quindi scatta una sola volta per turno anche se la passata gira a ogni poll.
+- **Criterio "scoperta da troppo"**: `type='volante'` non assegnato, `status='active'`, `date` ancora
+  futura (c'è tempo per intervenire), e `created_at <= NOW() - N ore` (misurato da quando è stata
+  pubblicata). `N = substitution_escalation_hours`; NULL/≤0 → escalation disattivata (opt-in per società).
+- **Configurazione riservata al Dirigente**: nuovo endpoint scoped `GET/PUT /api/company/settings`
+  (`requireDirigente`), diverso da `/api/companies/*` (anagrafica di piattaforma, solo Super Admin). È
+  la separazione di ruoli richiesta esplicitamente dall'utente: **Super Admin = piattaforma, Dirigente
+  = regole aziendali, Responsabile = operatività** (il Responsabile non modifica le regole). La risposta
+  `settings` è un oggetto estendibile (comportamento/livelli successivi in futuro senza cambiare l'impianto).
+- **Frontend**: `SubstitutionSettingsCard.jsx` (nuovo) in `DirigenteDashboard` (campo ore + salva, vuoto
+  = disattivata); `notifySubstitutionEscalated` (tipo `substitution_escalated`) resa dalla campanella
+  già esistente (`NotificationsBell`), nessuna UI dipendente nuova. `api.getCompanySettings`/
+  `saveCompanySettings` in `client.js`; classe `.settings-row` in `styles.css`.
+- **Limite noto** (accettato per la v1): senza cron l'escalation è generata solo quando un responsabile
+  è attivo e carica le notifiche — cioè esattamente quando può agire; se nessuno è online, compare al
+  primo accesso successivo. Non è un bug: è la conseguenza diretta del vincolo "niente cron".
+- Verificato in locale: migrazione idempotente (2×); e2e via HTTP **19/19** (impostazioni + permessi
+  `requireDirigente`, gating del poll, escalation solo per il turno scaduto e solo ai manager,
+  idempotenza, disattivazione); **regressione Fasi 5/6/claim 30/30 + 24/24 + 4/4**; smoke test browser
+  (card Dirigente + escalation reale nella campanella del dirigente). Migrazione produzione ancora da eseguire.
+
 ## Aggiornamenti quasi in tempo reale (polling leggero)
 
 Problema: quando un utente crea/modifica un turno o accetta una Sostituzione, gli altri utenti
@@ -835,7 +960,15 @@ l'indice mancante `idx_cancellation_requests_shift_id`.
   esplicita dell'utente.
 - **Fase 4 — Motore di compatibilità + "Trova sostituzione"**: ✅ completata e testata in locale
   (2026-07-08). Nessuna migrazione (fase sola lettura).
-- **Fasi 5–7** (proposte mirate, opt-out, escalation lazy): da implementare, in ordine.
+- **Fase 5 — Proposte mirate**: ✅ completata e testata in locale (2026-07-08). Migrazione produzione
+  della tabella `substitution_proposals` da eseguire (con quelle delle Fasi 1–3) dopo conferma
+  esplicita dell'utente.
+- **Fase 6 — Opt-out "Non partecipare" + storico per il motore**: ✅ completata e testata in locale
+  (2026-07-08). Migrazione produzione della tabella `substitution_optouts` da eseguire (con le altre
+  pendenti) dopo conferma esplicita dell'utente.
+- **Fase 7 — Escalation lazy (senza cron)**: ✅ completata e testata in locale (2026-07-08). Migrazione
+  produzione della colonna `companies.substitution_escalation_hours` da eseguire (con le tabelle
+  pendenti) dopo conferma esplicita dell'utente. **Piano a 7 fasi completato.**
 
 ## Funzionalità future previste
 
@@ -1014,7 +1147,37 @@ l'indice mancante `idx_cancellation_requests_shift_id`.
 - **Ogni fase del sistema di sostituzioni è additiva**: non ha modificato la logica di
   `claimShift`/`listAvailableShifts`/`approveRequest`/`createShift` — solo aggiunte in coda
   (notifiche best-effort) o nuovi endpoint di sola lettura. Mantenere questa proprietà nelle fasi
-  successive (5–7).
+  successive (6–7).
+- **Claim atomico = un'unica funzione condivisa** (`shiftController.assignVolanteToUser`): sia il
+  claim autonomo (`claimShift`) sia l'accettazione di una proposta mirata (Fase 5) passano di qui —
+  identici doppi controlli (appartenenza area + assenza sovrapposizione) e stessa UPDATE condizionale
+  atomica. **Non duplicare né divergere**: qualunque nuovo percorso che assegni una Sostituzione a un
+  dipendente deve riusare questo helper, non reimplementare la logica. `claimShift` è ora un wrapper a
+  comportamento invariato: non "ottimizzarlo" reintroducendo la logica inline.
+- **Le proposte mirate NON sono esclusive e NON assegnano**: sono un canale aggiuntivo sopra
+  l'autonomia dei dipendenti. La stessa Sostituzione resta accettabile dal pannello "Sostituzioni
+  disponibili"; una proposta si concretizza solo quando il dipendente la accetta (mai in automatico).
+  Non trasformare l'invio di una proposta in un'assegnazione diretta del turno.
+- **L'opt-out "Non partecipare" NON è un divieto di lavorare**: blocca proposte e notifiche broadcast
+  e retrocede il candidato nel motore (motivo rosso, **resta visibile**), ma NON tocca
+  `listAvailableShifts` — il dipendente può sempre reclamare autonomamente una Sostituzione se cambia
+  idea. Significa "non sollecitarmi", non "non posso". Non trasformarlo in un filtro rigido né in
+  un'esclusione silenziosa dalla classifica.
+- **Lo storico del motore non riconta le accettazioni**: le proposte accettate diventano turni
+  `volante` con `user_id` (già contati come "accettate"); da `substitution_proposals` il motore prende
+  solo i **rifiuti**. Non sommare `substitution_proposals.status='accepted'` alle accettazioni: sarebbe
+  un doppio conteggio.
+- **Escalation SENZA cron, lazy e idempotente**: il rilevamento vive dentro
+  `notificationController.listNotifications` (gated ai manager, best-effort) — **non** introdurre cron,
+  WebSocket o servizi terzi (vincolo hosting serverless, decisione architetturale). L'idempotenza dipende
+  dal `dedupe_key='escalation:<shiftId>'` + indice unico parziale: non generare escalation con
+  `dedupe_key` nullo (creerebbe duplicati a ogni poll). L'escalation **avvisa i responsabili, non
+  riassegna** il turno.
+- **Regole aziendali = Dirigente, non Super Admin né Responsabile**: `substitution_escalation_hours`
+  (e future regole di escalation) si configurano da `/api/company/settings` (`requireDirigente`). Il
+  Super Admin resta sull'anagrafica di piattaforma (`/api/companies/*`), il Responsabile gestisce
+  l'operatività ma non modifica le regole. Non spostare questa configurazione sotto il Super Admin "per
+  comodità": è una separazione di ruoli richiesta esplicitamente dall'utente.
 
 ## Problemi risolti e problemi ancora aperti
 
@@ -1334,3 +1497,52 @@ Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cos
   esclusa, violazione contratto retrocessa; errori 404/403/401; flusso UI end-to-end con classifica
   colorata nel browser); dati di test rimossi. **Nessuna migrazione**; restano pendenti solo quelle
   delle Fasi 1–3.
+- **2026-07-08** — **Sistema avanzato di sostituzioni — Fase 5: Proposte mirate**. Dalla classifica di
+  "Trova sostituzione" il responsabile invia una proposta solo ai candidati scelti; il dipendente la
+  vede in "Le mie proposte" e Accetta/Rifiuta. **Canale aggiuntivo, non esclusivo** (la Sostituzione
+  resta accettabile anche dal pannello autonomo) e **nessuna assegnazione automatica**. Nuova tabella
+  `substitution_proposals` (snapshot `score`/`reasons`, `UNIQUE (shift_id,user_id)`, niente
+  `company_id`). **Refactor a comportamento invariato di `claimShift`**: estratto il claim atomico in
+  `shiftController.assignVolanteToUser`, unica fonte di verità riusata anche dall'accettazione delle
+  proposte (la "necessità documentata" ammessa dal vincolo su `claimShift`; regressione verificata
+  403/200/409). Nuovo `substitutionProposalController.js` (create/list/accept/decline), route
+  `POST`/`GET /api/shifts/:id/proposals` (`requireManager`) + `routes/substitutionProposals.js`
+  (`/api/proposals/*`, `authenticate`); notifiche `notifySubstitutionProposal`/`notifyProposalDeclined`
+  (+ riuso `notifySubstitutionClaimed`). Frontend: `FindReplacementModal` con checkbox + invio +
+  badge stato, nuovo `MyProposalsPanel.jsx` in `EmployeeDashboard`, 5 metodi in `client.js`, classi
+  `.candidate-check`/`.proposal-*` in `styles.css`. Verificato in locale: migrazione idempotente 2×,
+  script e2e 30/30 (invio/accept/decline/ri-proposta, gemelle `expired`, notifiche, errori
+  400/401/403/404, isolamento società) + test di regressione su `claimShift`; build frontend OK; dati
+  di test rimossi (CASCADE). **Migrazione produzione di `substitution_proposals` ancora da eseguire**,
+  con quelle delle Fasi 1–3, su conferma dell'utente.
+- **2026-07-08** — **Sistema avanzato di sostituzioni — Fase 6: Opt-out "Non partecipare" + storico
+  per il motore**. (A) Il dipendente dichiara periodi di opt-out (nuova tabella `substitution_optouts`,
+  `end_date` nullable = a tempo indeterminato); (B) il motore usa opt-out e rifiuti per ordinare.
+  **Opt-out "blocca + retrocede"** (scelta dell'utente): non gli si invia la proposta (→ `skipped`),
+  non riceve il broadcast, ed è retrocesso in fondo alla classifica con motivo rosso — ma resta
+  visibile e `listAvailableShifts` è invariato (può ancora reclamare da sé). Lo storico usa i **soli
+  rifiuti** da `substitution_proposals` (le accettazioni sono già i turni `volante`, niente doppio
+  conteggio). Nuovo `optOutController.js` + rotte `/api/users/:id/optouts`; modifiche sola-lettura a
+  `substitutionMatcher.js` (pesi `optOutPenalty`/`declinePenaltyRatio` in `CONFIG`); guardia in
+  `createProposals`; `excludeOptedOut` in `notificationService.js`. Frontend: nuovo `OptOutEditor.jsx`
+  in `MyProfile`, sezione read-only in `AvailabilityModal.jsx`, 3 metodi in `client.js`, classi
+  `.optout-*` in `styles.css`. **Attenzione fuso orario**: date DATE formattate/validate TZ-safe (no
+  `toISOString()`). Verificato in locale: migrazione idempotente 2×, e2e HTTP 24/24 + regressione Fasi
+  5/claim (30/30 + 4/4) + smoke test browser; dati di test rimossi. **Migrazione produzione di
+  `substitution_optouts` ancora da eseguire**, con le altre pendenti, su conferma dell'utente.
+- **2026-07-08** — **Sistema avanzato di sostituzioni — Fase 7: Escalation lazy (senza cron)**. Se una
+  Sostituzione resta scoperta oltre le ore configurate dal Dirigente
+  (`companies.substitution_escalation_hours`, nullable = disattivata), i responsabili vengono avvisati.
+  **Rilevamento lazy** dentro `notificationController.listNotifications` (gated ai manager, best-effort,
+  senza cron per il vincolo serverless) e **idempotente** via `dedupe_key='escalation:<shiftId>'`. Nuovo
+  `escalationService.js` + `notifySubstitutionEscalated` in `notificationService.js`. Configurazione
+  riservata al **Dirigente**: nuovo `companySettingsController.js` + rotte `GET/PUT /api/company/settings`
+  (`requireDirigente`) — separazione di ruoli richiesta dall'utente (Super Admin = piattaforma, Dirigente
+  = regole, Responsabile = operatività). Frontend: nuovo `SubstitutionSettingsCard.jsx` in
+  `DirigenteDashboard`, `getCompanySettings`/`saveCompanySettings` in `client.js`, `.settings-row` in
+  `styles.css`; l'escalation è resa dalla campanella esistente. Escalation **solo ai responsabili**
+  (scelta dell'utente), **avvisa e non riassegna**. Verificato in locale: migrazione idempotente 2×, e2e
+  HTTP 19/19 + regressione Fasi 5/6/claim (30/30 + 24/24 + 4/4) + smoke test browser (escalation reale
+  nella campanella); artefatti di test ripristinati. **Migrazione produzione della colonna
+  `substitution_escalation_hours` ancora da eseguire**, con le tabelle pendenti, su conferma dell'utente.
+  **Con questa fase il piano a 7 fasi del sistema avanzato di sostituzioni è completo.**

@@ -156,10 +156,52 @@ async function listAvailableShifts(req, res) {
   });
 }
 
+// Assegnazione atomica di una Sostituzione (turno 'volante' non ancora accettato) a un dipendente.
+// CUORE CONDIVISO tra claimShift (accettazione autonoma dal pannello Sostituzioni) e
+// l'accettazione di una PROPOSTA mirata (Fase 5, substitutionProposalController): stessi identici
+// doppi controlli (appartenenza all'area + assenza di sovrapposizione oraria) e stessa UPDATE
+// condizionale che garantisce l'atomicità (il primo che arriva vince; chi perde la corsa ottiene
+// un esito `gone`). Estratto da claimShift SENZA cambiarne il comportamento osservabile: è l'unica
+// fonte di verità del claim, così i due percorsi non potranno mai divergere.
+// Ritorna un oggetto discriminato:
+//   { ok: true, claimed }                        assegnato con successo (riga aggiornata)
+//   { ok: false, code: 403, error }              non assegnato all'area del turno
+//   { ok: false, code: 409, error }              sovrapposizione con un proprio turno
+//   { ok: false, code: 409, gone: true, error }  la Sostituzione non è più disponibile (persa la corsa)
+// `user` è req.user (id/companyId/username), non fa I/O verso di esso oltre a leggerne i campi.
+async function assignVolanteToUser({ shiftRow, user }) {
+  if (!(await isUserAssignedToArea(user.id, shiftRow.area_id))) {
+    return { ok: false, code: 403, error: 'Questa sostituzione appartiene a un\'area a cui non sei assegnato' };
+  }
+
+  const overlapping = await hasOverlappingShift({
+    userId: user.id,
+    companyId: user.companyId,
+    date: toDateOnly(shiftRow.date),
+    startTime: shiftRow.start_time.slice(0, 5),
+    endTime: shiftRow.end_time.slice(0, 5),
+  });
+  if (overlapping) {
+    return { ok: false, code: 409, error: 'Hai già un turno che si sovrappone a questo orario' };
+  }
+
+  const { rows, rowCount } = await pool.query(
+    `UPDATE shifts SET user_id = $1
+      WHERE id = $2 AND type = 'volante' AND user_id IS NULL AND status = 'active' AND company_id = $3
+      RETURNING *`,
+    [user.id, shiftRow.id, user.companyId]
+  );
+  if (rowCount === 0) {
+    return { ok: false, code: 409, gone: true, error: 'La sostituzione non è più disponibile' };
+  }
+  return { ok: true, claimed: rows[0] };
+}
+
 // POST /api/shifts/:id/claim - il primo dipendente compatibile che lo richiede lo riceve
 // automaticamente. La lista filtrata in listAvailableShifts è solo un aiuto UX: qui si
-// riverificano sempre appartenenza all'area e assenza di sovrapposizione, per non fidarsi di una
-// richiesta diretta all'endpoint che aggiri il filtro lato client.
+// riverificano sempre appartenenza all'area e assenza di sovrapposizione (dentro
+// assignVolanteToUser), per non fidarsi di una richiesta diretta all'endpoint che aggiri il filtro
+// lato client.
 async function claimShift(req, res) {
   const { id } = req.params;
 
@@ -173,33 +215,12 @@ async function claimShift(req, res) {
     return res.status(409).json({ error: 'La sostituzione non è più disponibile' });
   }
 
-  if (!(await isUserAssignedToArea(req.user.id, shift.area_id))) {
-    return res.status(403).json({ error: 'Questa sostituzione appartiene a un\'area a cui non sei assegnato' });
+  const result = await assignVolanteToUser({ shiftRow: shift, user: req.user });
+  if (!result.ok) {
+    return res.status(result.code).json({ error: result.error });
   }
 
-  const overlapping = await hasOverlappingShift({
-    userId: req.user.id,
-    companyId: req.user.companyId,
-    date: toDateOnly(shift.date),
-    startTime: shift.start_time.slice(0, 5),
-    endTime: shift.end_time.slice(0, 5),
-  });
-  if (overlapping) {
-    return res.status(409).json({ error: 'Hai già un turno che si sovrappone a questo orario' });
-  }
-
-  const { rows, rowCount } = await pool.query(
-    `UPDATE shifts SET user_id = $1
-      WHERE id = $2 AND type = 'volante' AND user_id IS NULL AND status = 'active' AND company_id = $3
-      RETURNING *`,
-    [req.user.id, id, req.user.companyId]
-  );
-
-  if (rowCount === 0) {
-    return res.status(409).json({ error: 'La sostituzione non è più disponibile' });
-  }
-
-  const claimed = rows[0];
+  const claimed = result.claimed;
   // Notifica ai responsabili che la Sostituzione è stata coperta (best-effort, non blocca la risposta).
   await notifySubstitutionClaimed({
     companyId: req.user.companyId,
@@ -508,4 +529,8 @@ module.exports = {
   listAvailableShifts,
   claimShift,
   getShiftCandidates,
+  // Riusati dalle proposte mirate (Fase 5): il claim atomico condiviso e il controllo di
+  // appartenenza all'area, per non duplicare la logica già collaudata.
+  assignVolanteToUser,
+  isUserAssignedToArea,
 };

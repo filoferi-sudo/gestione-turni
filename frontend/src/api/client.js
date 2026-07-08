@@ -71,6 +71,13 @@ export const api = {
   listAvailableShifts: (token, areaId) => request(`/shifts/available?areaId=${areaId}`, { token }),
   claimShift: (id, token) => request(`/shifts/${id}/claim`, { method: 'POST', token }),
   getShiftCandidates: (id, token) => request(`/shifts/${id}/candidates`, { token }),
+  // Proposte mirate (Fase 5)
+  createProposals: (shiftId, userIds, token) =>
+    request(`/shifts/${shiftId}/proposals`, { method: 'POST', body: { userIds }, token }),
+  listShiftProposals: (shiftId, token) => request(`/shifts/${shiftId}/proposals`, { token }),
+  listMyProposals: (token) => request('/proposals/mine', { token }),
+  acceptProposal: (id, token) => request(`/proposals/${id}/accept`, { method: 'POST', token }),
+  declineProposal: (id, token) => request(`/proposals/${id}/decline`, { method: 'POST', token }),
 
   resetPassword: (id, newPassword, token) =>
     request(`/users/${id}/reset-password`, { method: 'POST', body: { newPassword }, token }),
@@ -81,6 +88,12 @@ export const api = {
   getUserAvailability: (id, token) => request(`/users/${id}/availability`, { token }),
   saveUserAvailability: (id, slots, token) =>
     request(`/users/${id}/availability`, { method: 'PUT', body: { slots }, token }),
+  // Opt-out "Non partecipare" (Fase 6)
+  getUserOptOuts: (id, token) => request(`/users/${id}/optouts`, { token }),
+  addUserOptOut: (id, payload, token) =>
+    request(`/users/${id}/optouts`, { method: 'POST', body: payload, token }),
+  deleteUserOptOut: (id, optoutId, token) =>
+    request(`/users/${id}/optouts/${optoutId}`, { method: 'DELETE', token }),
   deleteUser: (id, token) => request(`/users/${id}`, { method: 'DELETE', token }),
 
   listCancellationRequests: (token, status) =>
@@ -92,6 +105,10 @@ export const api = {
     request(`/cancellation-requests/${id}/reject`, { method: 'POST', token }),
 
   getHoursStats: (token, userId) => request(`/stats/hours${userId ? `?userId=${userId}` : ''}`, { token }),
+
+  // Impostazioni della propria società (Fase 7, solo Dirigente)
+  getCompanySettings: (token) => request('/company/settings', { token }),
+  saveCompanySettings: (payload, token) => request('/company/settings', { method: 'PUT', body: payload, token }),
 
   listNotifications: (token) => request('/notifications', { token }),
   markNotificationRead: (id, token) => request(`/notifications/${id}/read`, { method: 'POST', token }),

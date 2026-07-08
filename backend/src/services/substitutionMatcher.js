@@ -20,6 +20,8 @@ const { getExpandedShifts, shiftDurationHours, toDateOnly } = require('./shiftEx
 const CONFIG = {
   weights: { availability: 35, contract: 35, load: 20, history: 10 },
   nearLimitRatio: 0.9, // proiezione ore >= 90% del massimale ⇒ "vicino al limite"
+  optOutPenalty: 100, // opt-out attivo sulla data: retrocede il candidato in fondo (floor a 0), resta visibile
+  declinePenaltyRatio: 0.3, // quota del peso "storico" sottratta se il candidato ha rifiutato proposte
 };
 
 // getDay(): 0=domenica..6=sabato → codici MON..SUN usati da user_availability.
@@ -84,14 +86,31 @@ async function rankCandidates({ shift, companyId }) {
   if (poolRows.length === 0) return [];
   const poolIds = poolRows.map((r) => r.id);
 
-  // 2) Batch: disponibilità, contratti, storico accettazioni.
-  const [{ rows: availRows }, { rows: contractRows }, { rows: historyRows }] = await Promise.all([
+  // 2) Batch: disponibilità, contratti, storico accettazioni, opt-out attivi sulla data del turno,
+  //    storico rifiuti delle proposte mirate (Fase 6).
+  //    Nota: le proposte ACCETTATE si concretizzano in un turno 'volante' con user_id valorizzato, già
+  //    contato da `historyRows` — qui dalle proposte si prende solo il numero di RIFIUTI (segnale
+  //    negativo che non esiste tra i turni), per non contare due volte le accettazioni.
+  const [{ rows: availRows }, { rows: contractRows }, { rows: historyRows }, { rows: optOutRows }, { rows: proposalRows }] = await Promise.all([
     pool.query('SELECT user_id, weekday, start_time, end_time FROM user_availability WHERE user_id = ANY($1::int[])', [poolIds]),
     pool.query('SELECT * FROM user_contracts WHERE user_id = ANY($1::int[])', [poolIds]),
     pool.query(
       `SELECT user_id, COUNT(*)::int AS accepted
          FROM shifts
         WHERE user_id = ANY($1::int[]) AND type = 'volante'
+        GROUP BY user_id`,
+      [poolIds]
+    ),
+    pool.query(
+      `SELECT user_id, start_date, end_date
+         FROM substitution_optouts
+        WHERE user_id = ANY($1::int[]) AND start_date <= $2 AND (end_date IS NULL OR end_date >= $2)`,
+      [poolIds, date]
+    ),
+    pool.query(
+      `SELECT user_id, COUNT(*)::int AS declined
+         FROM substitution_proposals
+        WHERE user_id = ANY($1::int[]) AND status = 'declined'
         GROUP BY user_id`,
       [poolIds]
     ),
@@ -109,6 +128,11 @@ async function rankCandidates({ shift, companyId }) {
   for (const r of contractRows) contractByUser[r.user_id] = r;
   const historyByUser = {};
   for (const r of historyRows) historyByUser[r.user_id] = r.accepted;
+  // Primo opt-out attivo per utente (per il testo della motivazione: periodo dichiarato).
+  const optOutByUser = {};
+  for (const r of optOutRows) if (!optOutByUser[r.user_id]) optOutByUser[r.user_id] = r;
+  const declinedByUser = {};
+  for (const r of proposalRows) declinedByUser[r.user_id] = r.declined;
 
   // 3) Ore già assegnate: un'unica espansione dei turni della società sulla finestra che copre
   //    sia la settimana sia il mese della data del turno (poi raggruppata per dipendente in memoria).
@@ -218,18 +242,35 @@ async function rankCandidates({ shift, companyId }) {
       }
     }
 
-    // Storico
+    // Storico: accettazioni (positivo) e rifiuti di proposte mirate (leggero segnale negativo, Fase 6).
     const accepted = historyByUser[cand.id] || 0;
+    const declined = declinedByUser[cand.id] || 0;
     let historyScore = 0.5 * WH;
     if (accepted > 0) {
       historyScore += 0.5 * WH;
       reasons.push(reason(`Ha già accettato ${accepted} sostituzion${accepted > 1 ? 'i' : 'e'}`, 'positive'));
+    }
+    if (declined > 0) {
+      historyScore -= CONFIG.declinePenaltyRatio * WH;
+      reasons.push(reason(`Ha rifiutato ${declined} propost${declined > 1 ? 'e' : 'a'} in precedenza`, 'neutral'));
+    }
+    historyScore = Math.max(0, Math.min(WH, historyScore));
+
+    // Opt-out "Non partecipare" attivo sulla data (Fase 6): RETROCEDE il candidato (motivo rosso), ma
+    // resta visibile — l'esclusione dall'invio di una proposta la applica il controller, non il motore.
+    const optOut = optOutByUser[cand.id];
+    const optedOut = !!optOut;
+    if (optedOut) {
+      const from = toDateOnly(optOut.start_date);
+      const periodo = optOut.end_date ? `dal ${from} al ${toDateOnly(optOut.end_date)}` : `dal ${from} (a tempo indeterminato)`;
+      reasons.push(reason(`Ha dichiarato di non partecipare alle sostituzioni ${periodo}`, 'negative'));
     }
 
     partial.push({
       userId: cand.id,
       username: cand.username,
       weeklyHours,
+      optedOut,
       baseScore: availabilityScore + contractScore + historyScore,
       reasons,
     });
@@ -255,11 +296,17 @@ async function rankCandidates({ shift, companyId }) {
         c.reasons.push(reason(`Maggiore carico ore settimanale (${fmtHours(c.weeklyHours)}h)`, 'neutral'));
       }
     }
-    const score = Math.max(0, Math.min(100, Math.round(c.baseScore + loadScore)));
-    return { userId: c.userId, username: c.username, score, reasons: c.reasons };
+    let score = Math.round(c.baseScore + loadScore);
+    if (c.optedOut) score -= CONFIG.optOutPenalty; // retrocessione forte: floor a 0, resta in classifica
+    score = Math.max(0, Math.min(100, score));
+    return { userId: c.userId, username: c.username, score, optedOut: c.optedOut, reasons: c.reasons };
   });
 
-  ranked.sort((a, b) => b.score - a.score || a.username.localeCompare(b.username));
+  // I candidati in opt-out finiscono sempre in fondo (a parità di score con altri a 0), poi per score
+  // decrescente e nome. `optedOut` è esposto: il controller lo usa per NON inviare loro una proposta.
+  ranked.sort(
+    (a, b) => (a.optedOut ? 1 : 0) - (b.optedOut ? 1 : 0) || b.score - a.score || a.username.localeCompare(b.username)
+  );
   return ranked;
 }
 

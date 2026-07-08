@@ -552,3 +552,87 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_i
 -- Deduplica idempotente solo per le notifiche con dedupe_key valorizzata (escalation lazy, Fase 7).
 CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_dedupe
   ON notifications(user_id, dedupe_key) WHERE dedupe_key IS NOT NULL;
+
+-- ============================================================================
+-- Proposte mirate di sostituzione (Fase 5 - sistema avanzato di sostituzioni)
+-- ============================================================================
+-- Terzo livello di copertura dei turni scoperti (dopo autonomia dei dipendenti e classifica dei
+-- candidati): il responsabile, dalla classifica di "Trova sostituzione", INVIA una proposta SOLO ai
+-- candidati che sceglie (non a tutti). Ogni proposta è una riga qui. Additivo puro: non modifica la
+-- logica esistente di claimShift/listAvailableShifts/approveRequest — l'accettazione riusa lo stesso
+-- claim atomico di claimShift (identici doppi controlli area + sovrapposizione).
+--   * shift_id  = la Sostituzione scoperta (turno 'volante' non assegnato) proposta.
+--   * user_id   = dipendente destinatario della proposta.
+--   * proposed_by = responsabile/dirigente che l'ha inviata (SET NULL se l'account viene rimosso).
+--   * status = pending | accepted | declined | expired. 'expired' = il turno è stato coperto per
+--     altra via (accettazione diretta di un altro, o accettazione di una proposta gemella): la
+--     proposta non è più azionabile. Il click del dipendente decide sempre (mai automatico).
+--   * score / reasons = FOTOGRAFIA della classifica di compatibilità al momento dell'invio
+--     (snapshot), così la motivazione mostrata al dipendente/al responsabile resta stabile anche se
+--     i turni/le disponibilità cambiano dopo l'invio. reasons è la stessa forma tipizzata del motore
+--     (array di { text, kind }).
+-- Nessun company_id: shift_id e user_id sono sempre valorizzati (a differenza di shifts/courses),
+-- la società si ricava per JOIN (shift.company_id è l'autoritativo) e l'isolamento è verificato nel
+-- controller — stesso principio di user_contracts/user_availability.
+-- UNIQUE (shift_id, user_id): una sola proposta per coppia turno-dipendente; ri-proporre dopo un
+-- declino/scadenza è un UPSERT che la riporta a 'pending' (ON CONFLICT DO UPDATE nel controller).
+CREATE TABLE IF NOT EXISTS substitution_proposals (
+  id            SERIAL PRIMARY KEY,
+  shift_id      INTEGER NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  proposed_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  status        VARCHAR(10) NOT NULL DEFAULT 'pending'
+                  CHECK (status IN ('pending', 'accepted', 'declined', 'expired')),
+  score         INTEGER,
+  reasons       JSONB NOT NULL DEFAULT '[]'::jsonb,
+  responded_at  TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (shift_id, user_id)
+);
+
+-- Elenco delle proposte pendenti di un dipendente (pannello "Le mie proposte").
+CREATE INDEX IF NOT EXISTS idx_substitution_proposals_user_status
+  ON substitution_proposals(user_id, status);
+-- Proposte di una data Sostituzione (vista responsabile + scadenza delle gemelle all'accettazione).
+CREATE INDEX IF NOT EXISTS idx_substitution_proposals_shift
+  ON substitution_proposals(shift_id);
+
+-- ============================================================================
+-- Opt-out "Non partecipare" (Fase 6 - sistema avanzato di sostituzioni)
+-- ============================================================================
+-- Periodi in cui un dipendente dichiara di NON voler essere considerato per le sostituzioni (es.
+-- ferie, o "da oggi in poi" con end_date NULL = a tempo indeterminato). Additivo puro: dichiarato
+-- dal dipendente stesso (self-service, come user_availability), letto anche dal responsabile in sola
+-- lettura. Effetti (tutti additivi, nessuna modifica ai flussi core):
+--   * il motore di compatibilità RETROCEDE il candidato in opt-out (motivazione rossa, resta comunque
+--     visibile: nessuna esclusione silenziosa);
+--   * il responsabile NON può inviargli una proposta mirata nel periodo (finisce in `skipped`);
+--   * niente notifica broadcast "nuova sostituzione disponibile" nel periodo.
+-- NON tocca listAvailableShifts: il dipendente resta libero di reclamare autonomamente una
+-- sostituzione se cambia idea (l'opt-out è "non sollecitarmi", non "non posso").
+-- Un opt-out è attivo su una data D se: start_date <= D AND (end_date IS NULL OR end_date >= D).
+-- Nessun company_id: user_id sempre valorizzato (società per JOIN), isolamento nel controller — stesso
+-- principio di user_contracts/user_availability.
+CREATE TABLE IF NOT EXISTS substitution_optouts (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  start_date  DATE NOT NULL,
+  end_date    DATE,
+  note        TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (end_date IS NULL OR end_date >= start_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_substitution_optouts_user ON substitution_optouts(user_id);
+
+-- ============================================================================
+-- Escalation lazy delle sostituzioni (Fase 7 - sistema avanzato di sostituzioni)
+-- ============================================================================
+-- Ore di attesa prima che una Sostituzione ancora scoperta venga segnalata ai responsabili
+-- (escalation). Configurabile PER SOCIETÀ dal Dirigente (regola organizzativa interna, non tocca il
+-- Super Admin). NULL o <= 0 = escalation DISATTIVATA (opt-in): una società la abilita impostando un
+-- numero di ore. Il rilevamento è LAZY (nessun cron, vincolo hosting serverless): avviene quando un
+-- responsabile carica le notifiche (GET /api/notifications), in modo best-effort e idempotente
+-- (deduplica via notifications.dedupe_key = 'escalation:<shiftId>', già predisposta in Fase 3).
+-- Additivo puro: nessuna modifica ai flussi esistenti.
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS substitution_escalation_hours INTEGER;

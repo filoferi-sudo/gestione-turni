@@ -1,5 +1,6 @@
 import { useAuth } from '../../context/AuthContext';
 import AvailabilityEditor from './AvailabilityEditor';
+import OptOutEditor from './OptOutEditor';
 
 // Scheda con i dati del proprio account (sola lettura) + editor delle proprie disponibilità
 // dichiarate. Condivisa da tutti i dipendenti, qualunque area operativa a cui siano assegnati:
@@ -35,6 +36,8 @@ export default function MyProfile() {
       </section>
 
       <AvailabilityEditor />
+
+      <OptOutEditor />
     </>
   );
 }

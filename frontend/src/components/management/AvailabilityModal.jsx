@@ -2,21 +2,26 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { WEEKDAYS } from '../profile/AvailabilityEditor';
+import { formatOptOutPeriod } from '../profile/OptOutEditor';
 
-// Vista di SOLA LETTURA delle disponibilità dichiarate di un dipendente, per il responsabile/
-// dirigente. Il manager non le modifica (le dichiara il dipendente stesso dal proprio profilo):
-// qui servono solo per valutare le sostituzioni. Raggruppate per giorno della settimana.
+// Vista di SOLA LETTURA delle disponibilità dichiarate di un dipendente + dei periodi di opt-out
+// "Non partecipare" (Fase 6), per il responsabile/dirigente. Il manager non le modifica (le dichiara
+// il dipendente stesso dal proprio profilo): qui servono solo per valutare le sostituzioni.
 export default function AvailabilityModal({ targetUser, onClose }) {
   const { token } = useAuth();
   const [slots, setSlots] = useState([]);
+  const [optOuts, setOptOuts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let active = true;
-    api
-      .getUserAvailability(targetUser.id, token)
-      .then(({ availability }) => active && setSlots(availability))
+    Promise.all([api.getUserAvailability(targetUser.id, token), api.getUserOptOuts(targetUser.id, token)])
+      .then(([av, oo]) => {
+        if (!active) return;
+        setSlots(av.availability);
+        setOptOuts(oo.optOuts);
+      })
       .catch((err) => active && setError(err.message))
       .finally(() => active && setLoading(false));
     return () => {
@@ -52,6 +57,26 @@ export default function AvailabilityModal({ targetUser, onClose }) {
               );
             })}
           </div>
+        )}
+
+        {!loading && (
+          <>
+            <h3 className="optout-heading">Periodi "non partecipa"</h3>
+            {optOuts.length === 0 ? (
+              <p className="hint">Nessun periodo dichiarato.</p>
+            ) : (
+              <ul className="optout-list">
+                {optOuts.map((o) => (
+                  <li key={o.id} className="optout-item">
+                    <span>
+                      {formatOptOutPeriod(o)}
+                      {o.note ? ` · ${o.note}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
 
         <div className="modal-actions">

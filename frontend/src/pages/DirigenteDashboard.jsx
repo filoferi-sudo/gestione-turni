@@ -15,6 +15,7 @@ import CoursesAvailablePanel from '../components/courses/CoursesAvailablePanel';
 import SediManagement from './dirigente/SediManagement';
 import AreasManagement from '../components/areas/AreasManagement';
 import NotificationsBell from '../components/notifications/NotificationsBell';
+import SubstitutionSettingsCard from '../components/management/SubstitutionSettingsCard';
 
 // Il calendario non è più una coppia fissa "Turni Bagnini"/"Corsi Istruttori": le tab si
 // costruiscono dinamicamente dalle aree operative della sede selezionata (vedi
@@ -140,6 +141,8 @@ export default function DirigenteDashboard() {
         ))}
 
         <CancellationRequestsPanel />
+
+        <SubstitutionSettingsCard />
       </main>
     </div>
   );
