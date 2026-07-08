@@ -2,10 +2,44 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 const { fetchUserAreas } = require('../services/userAreas');
+const { validatePassword, describePolicy } = require('../utils/passwordPolicy');
+const { bcryptRounds, login: loginConfig } = require('../config/security');
+const audit = require('../services/auditService');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const SESSION_EXPIRES_IN = '8h';
 const FIRST_ACCESS_EXPIRES_IN = '10m';
+
+// --- Protezione brute-force (Fase S2) ---
+// L'account è bloccato se locked_until è nel futuro. Superato quell'istante il blocco è scaduto
+// (nessun job di pulizia necessario: si valuta al volo).
+function isLocked(user) {
+  return !!user.locked_until && new Date(user.locked_until).getTime() > Date.now();
+}
+
+// Registra un tentativo fallito: incrementa il contatore e, raggiunta la soglia, imposta il blocco
+// temporaneo. Best-effort: un errore qui non deve cambiare la risposta al client (che resta
+// "Credenziali non valide"), quindi il chiamante non attende un esito.
+async function registerFailedAttempt(user) {
+  const attempts = (user.failed_login_attempts || 0) + 1;
+  const lockedUntil =
+    attempts >= loginConfig.maxAttempts
+      ? new Date(Date.now() + loginConfig.lockoutMinutes * 60 * 1000)
+      : null;
+  await pool.query(
+    'UPDATE users SET failed_login_attempts = $1, locked_until = $2 WHERE id = $3',
+    [attempts, lockedUntil, user.id]
+  );
+}
+
+// Azzera contatore e blocco dopo un accesso riuscito (o codice di primo accesso corretto).
+async function resetFailedAttempts(user) {
+  if (!user.failed_login_attempts && !user.locked_until) return; // nulla da azzerare
+  await pool.query(
+    'UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1',
+    [user.id]
+  );
+}
 
 function toSafeUser(user) {
   return {
@@ -46,6 +80,8 @@ async function login(req, res) {
   const user = rows[0];
 
   if (!user) {
+    // Tracciato con actor NULL: utile per individuare tentativi su username inesistenti.
+    await audit.logAction({ action: 'auth.login_failed', ip: audit.ipFromReq(req), metadata: { username, reason: 'unknown_user' } });
     return res.status(401).json({ error: 'Credenziali non valide' });
   }
 
@@ -55,11 +91,26 @@ async function login(req, res) {
     return res.status(403).json({ error: 'La società collegata a questo account è stata disattivata' });
   }
 
+  // Account bloccato per troppi tentativi falliti: rifiuta senza nemmeno verificare la password.
+  // Questo è l'unico caso in cui la risposta rivela indirettamente l'esistenza dell'account —
+  // inevitabile con qualunque lockout, e accettabile in cambio della protezione brute-force.
+  if (isLocked(user)) {
+    await audit.logAction({ companyId: user.company_id, actorUserId: user.id, action: 'auth.login_failed', ip: audit.ipFromReq(req), metadata: { reason: 'locked' } });
+    return res.status(429).json({
+      error: 'Troppi tentativi di accesso falliti. Account temporaneamente bloccato, riprova più tardi.',
+    });
+  }
+
   // Primo accesso: l'utente non ha ancora una password, deve usare il codice iniziale
   if (user.must_change_password) {
     if (!user.initial_code || password !== user.initial_code) {
+      await registerFailedAttempt(user);
+      await audit.logAction({ companyId: user.company_id, actorUserId: user.id, action: 'auth.login_failed', ip: audit.ipFromReq(req), metadata: { reason: 'bad_initial_code' } });
       return res.status(401).json({ error: 'Credenziali non valide' });
     }
+
+    await resetFailedAttempts(user);
+    await audit.logAction({ companyId: user.company_id, actorUserId: user.id, action: 'auth.login', ip: audit.ipFromReq(req), metadata: { firstAccess: true } });
 
     const firstAccessToken = jwt.sign(
       { id: user.id, username: user.username, type: 'first_access' },
@@ -77,8 +128,13 @@ async function login(req, res) {
   // Login standard
   const passwordMatches = await bcrypt.compare(password, user.password_hash || '');
   if (!passwordMatches) {
+    await registerFailedAttempt(user);
+    await audit.logAction({ companyId: user.company_id, actorUserId: user.id, action: 'auth.login_failed', ip: audit.ipFromReq(req), metadata: { reason: 'bad_password' } });
     return res.status(401).json({ error: 'Credenziali non valide' });
   }
+
+  await resetFailedAttempts(user);
+  await audit.logAction({ companyId: user.company_id, actorUserId: user.id, action: 'auth.login', ip: audit.ipFromReq(req) });
 
   const token = jwt.sign(
     { id: user.id, username: user.username, role: user.role, companyId: user.company_id, type: 'session' },
@@ -94,10 +150,11 @@ async function login(req, res) {
 // e invalida definitivamente il codice iniziale.
 async function firstLoginSetup(req, res) {
   const { newPassword } = req.body;
-  const { id } = req.firstAccessUser;
+  const { id, username } = req.firstAccessUser;
 
-  if (!newPassword || newPassword.length < 8) {
-    return res.status(400).json({ error: 'La password deve avere almeno 8 caratteri' });
+  const check = validatePassword(newPassword, { username });
+  if (!check.valid) {
+    return res.status(400).json({ error: check.errors[0], errors: check.errors });
   }
 
   const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
@@ -107,7 +164,7 @@ async function firstLoginSetup(req, res) {
     return res.status(400).json({ error: 'Operazione non consentita' });
   }
 
-  const passwordHash = await bcrypt.hash(newPassword, 10);
+  const passwordHash = await bcrypt.hash(newPassword, bcryptRounds);
 
   const { rows: updatedRows } = await pool.query(
     `UPDATE users
@@ -133,6 +190,13 @@ async function firstLoginSetup(req, res) {
   return res.json({ token, user: await toSafeUserWithAreas(updatedUser) });
 }
 
+// GET /api/auth/password-policy
+// Pubblico (nessun dato sensibile): espone i requisiti password ATTIVI così il frontend può
+// mostrarli e validarli in tempo reale riflettendo la configurazione backend, senza rebuild.
+async function passwordPolicy(req, res) {
+  return res.json({ policy: describePolicy() });
+}
+
 // GET /api/auth/me
 async function me(req, res) {
   const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
@@ -143,4 +207,4 @@ async function me(req, res) {
   return res.json({ user: await toSafeUserWithAreas(user) });
 }
 
-module.exports = { login, firstLoginSetup, me };
+module.exports = { login, firstLoginSetup, me, passwordPolicy };

@@ -7,6 +7,11 @@
 require('dotenv').config();
 const bcrypt = require('bcrypt');
 const pool = require('../config/db');
+const { assertDestructiveAllowed } = require('../utils/envGuard');
+
+// Seed di sviluppo: in produzione i dirigenti si creano dal pannello Super Admin. Bloccato in
+// produzione per non introdurre account/società di bootstrap non voluti.
+assertDestructiveAllowed('seed:dirigente');
 
 const USERNAME = process.env.DIRIGENTE_USERNAME || 'dirigente2353';
 const PASSWORD = process.env.DIRIGENTE_PASSWORD || 'Filippo124';

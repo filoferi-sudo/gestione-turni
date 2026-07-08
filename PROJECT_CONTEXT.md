@@ -1234,10 +1234,115 @@ l'indice mancante `idx_cancellation_requests_shift_id`.
    davvero necessario — i due esistenti coprono la stragrande maggioranza dei casi).
 5. Dopo la modifica: aggiorna la sezione [Changelog](#changelog--aggiornamenti) qui sotto.
 
+## Sicurezza: classificazione dati e cifratura (predisposizione)
+
+Introdotta con l'**iniziativa Sicurezza** (fasi S1–S7, vedi `IMPLEMENTATION_PROGRESS.md`). Questa
+sezione classifica i dati gestiti e definisce l'approccio alla cifratura at-rest.
+
+**Classificazione**:
+- **Dati operativi** (non sensibili di per sé): turni, corsi, aree, sedi, fabbisogni, disponibilità,
+  orari, ruoli. Restano in chiaro: servono a query, filtri e calcoli continui.
+- **Credenziali/segreti**: `password_hash` (bcrypt, mai reversibile), `initial_code` (codice
+  monouso di primo accesso), `auth_tokens.token_hash` (solo hash SHA-256). **Già protetti** per
+  costruzione, non richiedono cifratura reversibile.
+- **Dati personali sensibili**: `users.email`, `users.phone`, `companies.email/phone/address`,
+  `user_contracts.note`/`custom_config` (note libere che possono contenere informazioni riservate).
+
+**Approccio alla cifratura** (modulo `backend/src/utils/crypto.js`, AES-256-GCM, chiave da env):
+- **`email` resta in chiaro** — scelta funzionale, **non** dimenticanza: è usata per il lookup di
+  login (unicità globale) e per la futura verifica email; cifrarla romperebbe vincoli `UNIQUE` e
+  ricerche. È protetta da TLS in transito, controllo accessi e isolamento multi-tenant.
+- **Candidati primari alla cifratura**: `phone` e le note contrattuali (free-text, nessuna ricerca
+  su di essi). Il modulo supporta l'adozione **graduale** (decrypt restituisce invariati i valori
+  ancora in chiaro) e la **rotazione delle chiavi** (ID chiave nel formato del valore cifrato).
+- **Stato attuale (S6)**: il modulo è **predisposto e testato ma NON ancora applicato** ad alcun
+  campo — decisione esplicita dell'utente (l'applicazione tocca dati reali e va fatta in una fase
+  dedicata, su conferma). La chiave (`DATA_ENCRYPTION_KEY`) è gestita **solo via env**, mai nel
+  codice. Non applicare la cifratura a un campo "di nascosto" in una modifica futura senza
+  discuterne: cambia il modo in cui quel dato va letto/scritto ovunque.
+
 ## Changelog / aggiornamenti
 
 Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cosa ricordare.
 
+- **2026-07-08** — **Iniziativa Sicurezza — Fase S7 (Backup, affidabilità, ambienti) + chiusura piano
+  S1–S7**. Nuovo `utils/envGuard.js` (`assertDestructiveAllowed`): `db:reset`/`seed:dirigente`/
+  `restore` si rifiutano di girare con `NODE_ENV=production` salvo `ALLOW_DESTRUCTIVE=true`
+  (`seed:superadmin` **non** bloccato, bootstrap legittimo). Nuovi `scripts/backup.sh` (`pg_dump`→
+  `.sql.gz`) e `scripts/restore.sh` (`psql`) + npm `db:backup`/`db:restore`; `backups/` in
+  `.gitignore`. `.env.example` completato con tutte le env S1–S6 + `NODE_ENV`/`ALLOW_DESTRUCTIVE`.
+  Verificato: guardia (exit 1 in prod, opt-in supera, dev non blocca), backup reale, migrazione
+  idempotente completa 2×, app + build frontend OK. **Riepilogo completo del piano sicurezza in
+  `IMPLEMENTATION_PROGRESS.md` → "Riepilogo finale"** (implementato / predisposto / migrazioni
+  produzione in sospeso / migliorie consigliate). **Le migrazioni DB delle fasi S2/S3/S4 vanno
+  applicate in produzione con `npm run migrate` solo su conferma esplicita.**
+- **2026-07-08** — **Iniziativa Sicurezza — Fase S6 (Modulo cifratura dati sensibili)**. SOLO modulo
+  + predisposizione, **nessuna applicazione ai dati** (decisione esplicita dell'utente). Nuovo
+  `backend/src/utils/crypto.js`: AES-256-GCM, chiave 32 byte da env (`DATA_ENCRYPTION_KEY`, mai nel
+  codice), formato `enc:<keyId>:<iv>:<tag>:<ciphertext>` con **rotazione chiavi** (keyring primaria +
+  ritirate); `encrypt`/`decrypt` null-safe, `decrypt` pass-through sui valori non cifrati (adozione
+  graduale). Aggiunta sezione **"Sicurezza: classificazione dati e cifratura"** in questo file
+  (email in chiaro per motivi funzionali; candidati: `phone`, note contrattuali). Nessuna dipendenza,
+  nessuna modifica di schema. Verificato (8/8, incl. integrità GCM e rotazione). **Applicazione ai
+  dati rimandata** a una fase dedicata su conferma esplicita.
+- **2026-07-08** — **Iniziativa Sicurezza — Fase S5 (Predisposizione sistema email modulare)**.
+  Base per invii email futuri, **nessun invio reale attivo**. Nuovo modulo
+  `backend/src/services/email/`: `emailService.sendEmail({to,template,data})` (astrazione su template
+  + provider), `providers/` (selezione via `EMAIL_PROVIDER`, default **no-op** che logga soltanto;
+  provider ignoto → fallback no-op), `templates/` (email_verification, password_reset,
+  two_factor_code, substitution_proposal, generic_notification; link da `APP_BASE_URL`, escape HTML).
+  Nessuna dipendenza (`nodemailer` solo in futuro con SMTP reale). Email = canale **aggiuntivo** alle
+  notifiche in-app. Nessun chiamante ancora agganciato. Verificato (7/7). Nessuna modifica di schema.
+- **2026-07-08** — **Iniziativa Sicurezza — Fase S4 (Predisposizione verifica email + token auth)**.
+  SOLO STRUTTURA, nessun invio email attivo. **Schema** (idempotente): `users.email_verified` +
+  `users.two_factor_enabled` (BOOLEAN DEFAULT FALSE, non ancora consultati dai flussi); tabella
+  generica `auth_tokens` (`purpose` in email_verification/password_reset/two_factor, `token_hash`,
+  `expires_at`, `used_at`) che copre in un'unica struttura i tre scopi futuri. Nuovo
+  `services/authTokenService.js` (`createToken`/`consumeToken`): salva **solo l'hash SHA-256** del
+  token (chiaro restituito una volta), TTL per scopo via env, **monouso atomico** e scadenza. Usa
+  `crypto` di Node, nessuna dipendenza. **Nessun endpoint agganciato** (attivazione rimandata a dopo
+  S5 + wiring dedicato). Verificato con DB reale (7/7). **Migrazione produzione in sospeso.**
+- **2026-07-08** — **Iniziativa Sicurezza — Fase S3 (Audit trail)**. Registro delle operazioni
+  importanti. **Schema** (idempotente): tabella `audit_logs` (company_id/actor_user_id entrambi
+  `ON DELETE SET NULL`, action, entity_type/id, metadata JSONB, ip, created_at; 2 indici). Nuovo
+  `services/auditService.js` (`logAction`/`logFromReq`/`ipFromReq`, **best-effort non bloccante**,
+  stesso principio delle notifiche). Strumentati: login riuscito/fallito, CRUD utenti/turni/corsi,
+  approva/rifiuta cancellazioni, azioni società del super admin. Nuovo endpoint di lettura
+  `GET /api/audit-logs` (`auditController.js` + `routes/audit.js`), riservato a dirigente (propria
+  società) / super admin (tutte, filtro `?companyId`), **predisposto** per futura UI. **Decisioni**:
+  audit awaitato ma che non propaga errori; `admin`/responsabile escluso dalla lettura; metadata
+  senza dati sensibili. Verificato con DB reale (E2E login→audit→lettura, 403 dipendente, 401 senza
+  token; corretto in verifica un `company_id` ambiguo nella JOIN). **Migrazione produzione di
+  `audit_logs` in sospeso**, su conferma esplicita.
+- **2026-07-08** — **Iniziativa Sicurezza — Fase S2 (Protezione brute-force)**. Blocco temporaneo
+  dell'account dopo troppi tentativi di login falliti. **Schema** (migrazione idempotente):
+  `users.failed_login_attempts` + `users.locked_until`. **`authController.login`**: check lockout
+  prima della verifica credenziali (429 se attivo), `registerFailedAttempt`/`resetFailedAttempts`
+  su fallimento/successo (copre anche il primo accesso via codice). Soglia/durata via env
+  (`LOGIN_MAX_ATTEMPTS`/`LOGIN_LOCKOUT_MINUTES`, in `config/security.js`). **Decisione**: stato su DB
+  e non in memoria perché su Vercel serverless le istanze non la condividono; nessun job di pulizia
+  (blocco scaduto valutato al volo). File: `schema.sql`, `authController.js`, `.env.example`.
+  Verificato con DB reale (migrazione idempotente 2×, E2E lockout→429→reset). **Migrazione
+  produzione delle 2 colonne in sospeso**, su conferma esplicita.
+- **2026-07-08** — **Iniziativa Sicurezza — Fase S1 (Politica password + hardening base)**.
+  Prima fase del piano di rafforzamento sicurezza (vedi `IMPLEMENTATION_PROGRESS.md` → "Iniziativa:
+  Sicurezza e predisposizioni"). Additiva, nessuna modifica di schema, nessuna regressione.
+  **Novità**: (1) politica password robusta e configurabile via env, single-source backend↔frontend
+  — nuovo `backend/src/config/security.js` (lettura centralizzata env di sicurezza) e
+  `backend/src/utils/passwordPolicy.js` (`validatePassword`/`describePolicy`: lunghezza min,
+  maiuscola/minuscola/numero/speciale disattivabili, blocklist password comuni, no-username),
+  applicata in `authController.firstLoginSetup` e `userController.resetPassword` (prima solo
+  `length>=8`); nuovo endpoint pubblico `GET /api/auth/password-policy`; frontend
+  `utils/passwordPolicy.js` + `components/auth/PasswordRequirements.jsx` (checklist live) in
+  `FirstAccessSetup.jsx`. (2) Hardening `app.js`: **Helmet** (scelto dall'utente come standard
+  Express; CSP off perché API solo-JSON), boot check `JWT_SECRET` (fail-fast se assente / placeholder
+  in produzione), `express.json({ limit:'100kb' })`, `x-powered-by` disabilitato, 404 handler JSON,
+  error handler che non logga il corpo (niente password nei log) e gestisce JSON malformato/troppo
+  grande. `BCRYPT_ROUNDS` configurabile (default 10 invariato). **Decisioni**: seed dev non passano
+  dalla policy (hash diretto, invariati); vulnerabilità `npm audit` su `tar`/`node-pre-gyp` sono
+  pre-esistenti (transitive di `bcrypt`, build-time), non introdotte qui. Verificato: boot check,
+  `validatePassword` (8 casi), HTTP live (header Helmet, endpoint policy, 404, no x-powered-by),
+  build frontend OK. **Nessuna migrazione DB** in questa fase.
 - **2026-07-07** — Creazione di questo file (`PROJECT_CONTEXT.md`), a valle del completamento
   della trasformazione multi-azienda (Super Admin + Società). Nessun codice applicativo
   modificato in questo passaggio, solo documentazione.

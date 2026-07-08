@@ -1,6 +1,23 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+
+// Boot check (Fase S1): fail-fast se il segreto JWT non è configurato correttamente. Senza un
+// segreto robusto l'intera sicurezza delle sessioni è compromessa: meglio non avviarsi affatto
+// che girare con un segreto assente o quello di esempio.
+const JWT_SECRET = process.env.JWT_SECRET;
+const PLACEHOLDER_SECRET = 'change-me-to-a-long-random-string';
+const isProduction = process.env.NODE_ENV === 'production';
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET non è impostato: configuralo (es. `openssl rand -hex 32`) prima di avviare il backend.');
+}
+if (JWT_SECRET === PLACEHOLDER_SECRET) {
+  if (isProduction) {
+    throw new Error('JWT_SECRET è ancora il valore di esempio: impostane uno lungo e casuale in produzione.');
+  }
+  console.warn('[security] JWT_SECRET è il valore di esempio di .env.example: usane uno casuale prima di andare in produzione.');
+}
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
@@ -16,14 +33,27 @@ const areaRoutes = require('./routes/areas');
 const staffingRoutes = require('./routes/staffing');
 const notificationRoutes = require('./routes/notifications');
 const substitutionProposalRoutes = require('./routes/substitutionProposals');
+const auditRoutes = require('./routes/audit');
 
 const app = express();
+
+// Nasconde l'header X-Powered-By: Express (riduce il fingerprinting della tecnologia).
+app.disable('x-powered-by');
+
+// Security headers standard (Fase S1). L'API risponde solo JSON e non serve HTML, quindi
+// disattiviamo la Content-Security-Policy di default di Helmet (pensata per pagine servite dal
+// backend): non serve e potrebbe interferire. Restano attivi gli header rilevanti per un'API
+// (nosniff, frameguard, HSTS in produzione via infrastruttura, ecc.).
+app.use(helmet({ contentSecurityPolicy: false }));
 
 // Frontend e backend sono deployati come progetti Vercel separati (origin diversi):
 // di default CORS è aperto per non richiedere configurazione; CORS_ORIGIN permette di restringerlo.
 const corsOrigin = process.env.CORS_ORIGIN;
 app.use(cors(corsOrigin ? { origin: corsOrigin } : undefined));
-app.use(express.json());
+
+// Limite esplicito alla dimensione del corpo JSON: nessun endpoint riceve payload grandi, un
+// limite basso riduce la superficie di abuso (payload giganti / DoS applicativo).
+app.use(express.json({ limit: '100kb' }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -39,12 +69,27 @@ app.use('/api/areas', areaRoutes);
 app.use('/api/staffing', staffingRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/proposals', substitutionProposalRoutes);
+app.use('/api/audit-logs', auditRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
-// Error handler generico: evita che eccezioni non gestite facciano crashare il processo
+// 404 per rotte API non riconosciute: risposta JSON coerente invece dell'HTML di default di Express.
+app.use((req, res) => {
+  res.status(404).json({ error: 'Risorsa non trovata' });
+});
+
+// Error handler generico: evita che eccezioni non gestite facciano crashare il processo e non
+// espone MAI dettagli interni al client (solo un messaggio generico). Il payload di errore JSON
+// mal formato di express.json arriva qui come err.type === 'entity.parse.failed' (400).
+// Log lato server volutamente senza il corpo della richiesta, che può contenere password/dati.
 app.use((err, req, res, next) => {
-  console.error(err);
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Corpo della richiesta non valido' });
+  }
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Corpo della richiesta troppo grande' });
+  }
+  console.error(`[error] ${req.method} ${req.originalUrl}:`, err.message);
   res.status(500).json({ error: 'Errore interno del server' });
 });
 

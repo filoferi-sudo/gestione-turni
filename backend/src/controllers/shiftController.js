@@ -14,6 +14,7 @@ const {
   notifyCancellationRequested,
 } = require('../services/notificationService');
 const { rankCandidates } = require('../services/substitutionMatcher');
+const audit = require('../services/auditService');
 
 const SHIFT_TYPES = ['fixed', 'mobile', 'volante'];
 
@@ -352,6 +353,8 @@ async function createShift(req, res) {
     });
   }
 
+  await audit.logFromReq(req, { action: 'shift.create', entityType: 'shift', entityId: createdShift.id, metadata: { type: createdShift.type, areaId: createdShift.area_id } });
+
   return res.status(201).json({ shift: toSafeShift(createdShift) });
 }
 
@@ -431,6 +434,8 @@ async function updateShift(req, res) {
     ]
   );
 
+  await audit.logFromReq(req, { action: 'shift.update', entityType: 'shift', entityId: id });
+
   return res.json({ shift: toSafeShift(rows[0]) });
 }
 
@@ -444,6 +449,9 @@ async function deleteShift(req, res) {
   if (rowCount === 0) {
     return res.status(404).json({ error: 'Turno non trovato' });
   }
+
+  await audit.logFromReq(req, { action: 'shift.delete', entityType: 'shift', entityId: id });
+
   return res.status(204).send();
 }
 

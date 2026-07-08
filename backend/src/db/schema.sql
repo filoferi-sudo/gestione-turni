@@ -636,3 +636,89 @@ CREATE INDEX IF NOT EXISTS idx_substitution_optouts_user ON substitution_optouts
 -- (deduplica via notifications.dedupe_key = 'escalation:<shiftId>', già predisposta in Fase 3).
 -- Additivo puro: nessuna modifica ai flussi esistenti.
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS substitution_escalation_hours INTEGER;
+
+-- ============================================================================
+-- Protezione brute-force sul login (Fase S2 - iniziativa Sicurezza)
+-- ============================================================================
+-- Blocco temporaneo dell'account dopo troppi tentativi di login falliti. Stato persistito su DB
+-- (non in memoria): su hosting serverless (Vercel) le invocazioni non condividono memoria, quindi
+-- un rate-limiter in-memory sarebbe inefficace. Soglia e durata del blocco sono configurabili via
+-- env (LOGIN_MAX_ATTEMPTS / LOGIN_LOCKOUT_MINUTES, vedi config/security.js), non nello schema.
+--   * failed_login_attempts = tentativi falliti consecutivi (azzerato al login riuscito).
+--   * locked_until = istante fino al quale l'account è bloccato (NULL = non bloccato). Superato
+--     l'istante, il blocco è considerato scaduto senza bisogno di un job di pulizia.
+-- Additivo puro: nessuna modifica ai flussi esistenti oltre al login.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;
+
+-- ============================================================================
+-- Audit trail / tracciabilità (Fase S3 - iniziativa Sicurezza)
+-- ============================================================================
+-- Registro delle operazioni importanti: accessi, modifiche ai dati, ai turni/corsi, assegnazioni,
+-- eliminazioni, azioni amministrative. Serve a rispondere a "chi ha fatto cosa e quando".
+--   * company_id   = società di contesto (NULL per azioni del super admin, che non appartiene a
+--                    nessuna società — es. creazione/disattivazione società).
+--   * actor_user_id = chi ha compiuto l'azione (NULL se l'account viene poi eliminato: ON DELETE
+--                    SET NULL preserva lo storico anche se l'utente sparisce; login falliti su
+--                    username inesistente restano comunque tracciati con actor NULL).
+--   * action       = codice azione (es. 'auth.login', 'user.create', 'shift.delete', ...).
+--   * entity_type / entity_id = risorsa toccata (es. 'user' / 42), entrambi opzionali.
+--   * metadata     = dettagli extra in JSONB (mai dati sensibili come password), opzionale.
+--   * ip           = indirizzo del chiamante (dietro proxy: primo valore di X-Forwarded-For).
+-- Scrittura BEST-EFFORT e non bloccante (come le notifiche): un errore di audit non fa mai fallire
+-- l'operazione applicativa. Additivo puro.
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id             SERIAL PRIMARY KEY,
+  company_id     INTEGER REFERENCES companies(id) ON DELETE SET NULL,
+  actor_user_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  action         VARCHAR(50) NOT NULL,
+  entity_type    VARCHAR(50),
+  entity_id      INTEGER,
+  metadata       JSONB,
+  ip             VARCHAR(64),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Consultazione tipica: eventi recenti di una società, in ordine cronologico inverso.
+CREATE INDEX IF NOT EXISTS idx_audit_logs_company_created ON audit_logs(company_id, created_at DESC);
+-- Ricerca per risorsa specifica ("storia di questo utente/turno").
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
+
+-- ============================================================================
+-- Predisposizione verifica email + autenticazione avanzata (Fase S4 - iniziativa Sicurezza)
+-- ============================================================================
+-- SOLO STRUTTURA: nessun invio email è attivo in questa fase. Si prepara il terreno per verifica
+-- email, reset password via link temporaneo e 2FA via email, tutte funzioni future.
+--
+-- Stato di verifica dell'email e (predisposizione) 2FA sull'utente.
+--   * email_verified = l'indirizzo email è stato confermato dall'utente (default FALSE: gli account
+--     esistenti risultano "non verificati" finché non lo confermeranno in futuro — nessun impatto
+--     sui flussi attuali, che non consultano ancora questo campo).
+--   * two_factor_enabled = predisposizione per la 2FA via email (default FALSE, non ancora usata).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Tabella generica dei token di autenticazione monouso e a scadenza. Un'unica struttura copre tre
+-- scopi futuri distinti (verifica email, reset password, 2FA) tramite la colonna `purpose`.
+--   * token_hash = si salva SOLO l'hash SHA-256 del token, MAI il token in chiaro: se il DB venisse
+--     compromesso, i token non sarebbero utilizzabili. Il valore in chiaro esiste solo il tempo di
+--     essere consegnato all'utente (email/link) e non viene mai persistito.
+--   * expires_at = scadenza; un token scaduto non è più valido.
+--   * used_at = monouso: valorizzato al primo utilizzo, dopodiché il token non è più spendibile.
+-- Nessun company_id: user_id sempre valorizzato (società per JOIN), coerente con user_contracts/
+-- user_availability. ON DELETE CASCADE: i token seguono la vita dell'utente.
+CREATE TABLE IF NOT EXISTS auth_tokens (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  purpose     VARCHAR(30) NOT NULL CHECK (purpose IN ('email_verification', 'password_reset', 'two_factor')),
+  token_hash  VARCHAR(64) NOT NULL,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  used_at     TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Lookup principale in fase di consumo: per hash (con purpose come discriminante applicativo).
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_hash ON auth_tokens(token_hash);
+-- Gestione dei token attivi di un utente per scopo (es. invalidare i precedenti prima di emetterne
+-- uno nuovo).
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_user_purpose ON auth_tokens(user_id, purpose);

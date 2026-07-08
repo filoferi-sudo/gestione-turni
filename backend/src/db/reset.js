@@ -5,6 +5,10 @@
 
 require('dotenv').config();
 const pool = require('../config/db');
+const { assertDestructiveAllowed } = require('../utils/envGuard');
+
+// Protezione hard: non deve mai girare per errore contro il DB di produzione (vedi commento sopra).
+assertDestructiveAllowed('db:reset');
 
 const DIRIGENTE_USERNAME = process.env.DIRIGENTE_USERNAME || 'dirigente2353';
 

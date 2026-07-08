@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const { isWithinDailyWindow } = require('../utils/timeWindow');
 const { parseRecurrenceRule } = require('../utils/recurrence');
 const { getExpandedCourses, toDateOnly, isValidDateString, toSafeCourse } = require('../services/courseExpansion');
+const audit = require('../services/auditService');
 
 const COURSE_TYPES = ['fixed', 'mobile', 'volante'];
 
@@ -204,6 +205,8 @@ async function createCourse(req, res) {
     ]
   );
 
+  await audit.logFromReq(req, { action: 'course.create', entityType: 'course', entityId: rows[0].id, metadata: { type: rows[0].type, areaId: rows[0].area_id } });
+
   return res.status(201).json({ course: toSafeCourse(rows[0]) });
 }
 
@@ -295,6 +298,8 @@ async function updateCourse(req, res) {
     ]
   );
 
+  await audit.logFromReq(req, { action: 'course.update', entityType: 'course', entityId: id });
+
   return res.json({ course: toSafeCourse(rows[0]) });
 }
 
@@ -308,6 +313,9 @@ async function deleteCourse(req, res) {
   if (rowCount === 0) {
     return res.status(404).json({ error: 'Corso non trovato' });
   }
+
+  await audit.logFromReq(req, { action: 'course.delete', entityType: 'course', entityId: id });
+
   return res.status(204).send();
 }
 

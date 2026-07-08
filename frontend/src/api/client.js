@@ -56,6 +56,7 @@ export const api = {
   firstLoginSetup: (newPassword, firstAccessToken) =>
     request('/auth/first-login-setup', { method: 'POST', body: { newPassword }, token: firstAccessToken }),
   me: (token) => request('/auth/me', { token }),
+  passwordPolicy: () => request('/auth/password-policy'),
   createUser: (payload, token) => request('/users', { method: 'POST', body: payload, token }),
   listUsers: (token) => request('/users', { token }),
   getCalendar: (token, { start, end, areaId, userId }) => {

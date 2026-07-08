@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import PasswordRequirements from '../components/auth/PasswordRequirements';
+import { DEFAULT_POLICY, isPasswordValid } from '../utils/passwordPolicy';
 
 export default function FirstAccessSetup() {
   const location = useLocation();
@@ -15,6 +17,16 @@ export default function FirstAccessSetup() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [policy, setPolicy] = useState(DEFAULT_POLICY);
+
+  // Carica i requisiti password attivi dal backend: la checklist riflette la configurazione reale.
+  // In caso di errore si resta sui default (nessun blocco per l'utente).
+  useEffect(() => {
+    api
+      .passwordPolicy()
+      .then(({ policy }) => policy && setPolicy(policy))
+      .catch(() => {});
+  }, []);
 
   if (!firstAccessToken) {
     navigate('/login', { replace: true });
@@ -25,8 +37,8 @@ export default function FirstAccessSetup() {
     e.preventDefault();
     setError('');
 
-    if (newPassword.length < 8) {
-      setError('La password deve avere almeno 8 caratteri');
+    if (!isPasswordValid(newPassword, policy)) {
+      setError('La password non rispetta i requisiti di sicurezza');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -61,6 +73,8 @@ export default function FirstAccessSetup() {
           autoComplete="new-password"
           required
         />
+
+        <PasswordRequirements password={newPassword} policy={policy} />
 
         <label htmlFor="confirmPassword">Conferma password</label>
         <input

@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const { toDateOnly } = require('../services/shiftExpansion');
 const { notifySubstitutionAvailable, notifyCancellationDecision } = require('../services/notificationService');
+const audit = require('../services/auditService');
 
 function toSafeRequest(row) {
   return {
@@ -156,6 +157,8 @@ async function approveRequest(req, res) {
     approved: true,
   });
 
+  await audit.logFromReq(req, { action: 'cancellation.approve', entityType: 'cancellation_request', entityId: request.id, metadata: { shiftId: request.shift_id } });
+
   return res.json({ request: toSafeRequest(rows[0]) });
 }
 
@@ -183,6 +186,8 @@ async function rejectRequest(req, res) {
     endTime: request.shift_end_time.slice(0, 5),
     approved: false,
   });
+
+  await audit.logFromReq(req, { action: 'cancellation.reject', entityType: 'cancellation_request', entityId: request.id, metadata: { shiftId: request.shift_id } });
 
   return res.json({ request: toSafeRequest(rows[0]) });
 }

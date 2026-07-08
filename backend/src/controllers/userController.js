@@ -2,6 +2,9 @@ const bcrypt = require('bcrypt');
 const pool = require('../config/db');
 const { generateInitialCode } = require('../utils/generateCode');
 const { fetchUserAreas, fetchUserAreasBatch } = require('../services/userAreas');
+const { validatePassword } = require('../utils/passwordPolicy');
+const { bcryptRounds } = require('../config/security');
+const audit = require('../services/auditService');
 
 function toSafeUser(user) {
   return {
@@ -102,6 +105,8 @@ async function createUser(req, res) {
     await setUserAreas(user.id, targetAreaIds);
   }
 
+  await audit.logFromReq(req, { action: 'user.create', entityType: 'user', entityId: user.id, metadata: { role: targetRole, username } });
+
   return res.status(201).json({
     user: { ...toSafeUser(user), areas: await fetchUserAreas(user.id) },
     initialCode, // comunicato una sola volta al responsabile, da consegnare al dipendente
@@ -146,6 +151,8 @@ async function updateUserAreas(req, res) {
 
   await setUserAreas(id, normalizedAreaIds);
 
+  await audit.logFromReq(req, { action: 'user.update_areas', entityType: 'user', entityId: id, metadata: { areaIds: normalizedAreaIds } });
+
   return res.json({ user: { ...toSafeUser(target), areas: await fetchUserAreas(id) } });
 }
 
@@ -163,10 +170,6 @@ async function resetPassword(req, res) {
   const { id } = req.params;
   const { newPassword } = req.body;
 
-  if (!newPassword || newPassword.length < 8) {
-    return res.status(400).json({ error: 'La password deve avere almeno 8 caratteri' });
-  }
-
   const target = await fetchUserOr404(id, res);
   if (!target) return;
 
@@ -177,13 +180,20 @@ async function resetPassword(req, res) {
     return res.status(403).json({ error: 'Non autorizzato a gestire questo account' });
   }
 
-  const passwordHash = await bcrypt.hash(newPassword, 10);
+  const check = validatePassword(newPassword, { username: target.username });
+  if (!check.valid) {
+    return res.status(400).json({ error: check.errors[0], errors: check.errors });
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, bcryptRounds);
   const { rows } = await pool.query(
     `UPDATE users SET password_hash = $1, initial_code = NULL, must_change_password = FALSE
       WHERE id = $2
       RETURNING *`,
     [passwordHash, id]
   );
+
+  await audit.logFromReq(req, { action: 'user.reset_password', entityType: 'user', entityId: id });
 
   return res.json({ user: toSafeUser(rows[0]) });
 }
@@ -209,6 +219,8 @@ async function regenerateCode(req, res) {
       RETURNING *`,
     [initialCode, id]
   );
+
+  await audit.logFromReq(req, { action: 'user.regenerate_code', entityType: 'user', entityId: id });
 
   return res.json({ user: toSafeUser(rows[0]), initialCode });
 }
@@ -242,6 +254,9 @@ async function deleteUser(req, res) {
   }
 
   await pool.query('DELETE FROM users WHERE id = $1', [id]);
+
+  await audit.logFromReq(req, { action: 'user.delete', entityType: 'user', entityId: id, metadata: { role: target.role, username: target.username } });
+
   return res.status(204).send();
 }
 

@@ -11,6 +11,8 @@
     "dev": "node --watch src/server.js",
     "migrate": "node -e \"require('dotenv').config(); const fs=require('fs'); const pool=require('./src/config/db'); pool.query(fs.readFileSync('./src/db/schema.sql','utf8')).then(()=>{console.log('Migrazione completata'); return pool.end();}).catch(e=>{console.error(e); process.exit(1);})\"",
     "db:reset": "node src/db/reset.js",
+    "db:backup": "bash scripts/backup.sh",
+    "db:restore": "bash scripts/restore.sh",
     "seed:dirigente": "node src/db/seedDirigente.js",
     "seed:superadmin": "node src/db/seedSuperAdmin.js",
     "setup": "npm run migrate && npm run db:reset && npm run seed:dirigente && npm run seed:superadmin"
@@ -20,6 +22,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.12.0"
   },

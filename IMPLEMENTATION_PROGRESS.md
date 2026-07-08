@@ -600,3 +600,390 @@ Possibili evoluzioni future (non pianificate): deep-link delle notifiche alla ta
 legame esplicito area↔responsabile (oggi le notifiche manager ricadono su tutta la società), livelli
 di escalation successivi + comportamenti configurabili, error boundary attorno ai modali. Prima del
 deploy: **migrazione produzione** di tutto (5 tabelle + 1 colonna) su conferma dell'utente.
+
+---
+---
+
+# Iniziativa: Sicurezza e predisposizioni (fasi S1–S7)
+
+> **Scopo**: rafforzare la sicurezza (autenticazione, autorizzazioni, protezione dati, validazione,
+> logging) e **predisporre** l'architettura per funzionalità future (verifica email, invio email,
+> reset password/2FA, cifratura dati) **senza attivare** servizi esterni né introdurre regressioni.
+> Stesso metodo del sistema sostituzioni: fasi additive, migrazioni idempotenti in `schema.sql`,
+> ogni fase testata prima della successiva, produzione solo su conferma esplicita.
+
+**Ambito e vincoli**: nessuna modifica alla logica funzionale esistente; ogni requisito di
+sicurezza configurabile via **environment variables** (mai valori/chiavi hardcoded); minimizzare le
+dipendenze (usare `crypto` di Node e moduli interni). Dipendenze aggiunte: `helmet` (S1). Da
+aggiungere solo quando si attiverà l'invio reale: `nodemailer` (non ora).
+
+## Stato fasi
+
+- **S1 — Politica password + hardening base** ✅ *completata (2026-07-08)*
+- **S2 — Protezione brute-force (account lockout)** ✅ *completata (2026-07-08)*
+- **S3 — Logging e tracciabilità (audit trail)** ✅ *completata (2026-07-08)*
+- **S4 — Predisposizione verifica email + token auth avanzata (solo struttura)** ✅ *completata (2026-07-08)*
+- **S5 — Predisposizione sistema email (modulare, transport no-op)** ✅ *completata (2026-07-08)*
+- **S6 — Modulo cifratura dati sensibili + predisposizione (nessuna applicazione ai dati)** ✅ *completata (2026-07-08)*
+- **S7 — Backup/affidabilità + separazione ambienti + documentazione finale** ✅ *completata (2026-07-08)*
+
+**→ Piano sicurezza S1–S7 completato. Riepilogo finale in fondo a questa sezione.**
+
+---
+
+## S1 — Politica password + hardening applicativo base ✅
+
+**Obiettivo**: politica password robusta e configurabile (frontend + backend, single-source),
+più hardening applicativo di base senza modifiche allo schema.
+
+### Cosa è stato fatto
+- **Config sicurezza centralizzata**: `backend/src/config/security.js` — unico punto di lettura
+  delle env di sicurezza (policy password, parametri login futuri S2, `BCRYPT_ROUNDS`), con helper
+  `envBool`/`envInt` e default sensati. I requisiti si cambiano **solo** via env.
+- **Validazione password backend**: `backend/src/utils/passwordPolicy.js` — `validatePassword()`
+  (lunghezza min, maiuscola/minuscola/numero/speciale ognuno disattivabile, blocklist password
+  comuni embedded, rifiuto se contiene lo username) + `describePolicy()`. Applicata in
+  `authController.firstLoginSetup` e `userController.resetPassword` (prima: solo `length >= 8`).
+  Stesso `bcryptRounds` configurabile usato al posto del `10` hardcoded.
+- **Endpoint pubblico** `GET /api/auth/password-policy`: espone i requisiti attivi così il frontend
+  li riflette senza rebuild (single-source col backend).
+- **Frontend**: `frontend/src/utils/passwordPolicy.js` (specchio, con fallback `DEFAULT_POLICY`) +
+  `components/auth/PasswordRequirements.jsx` (checklist live ✓/•) integrati in `FirstAccessSetup.jsx`
+  (fetch policy all'avvio, validazione client prima dell'invio). Stile `.password-requirements` in
+  `styles.css`.
+- **Hardening app.js**: boot check `JWT_SECRET` (fail-fast se assente; in produzione anche se è il
+  placeholder di esempio); `helmet({ contentSecurityPolicy: false })` (API JSON, niente CSP);
+  `app.disable('x-powered-by')`; `express.json({ limit: '100kb' })`; **404 handler** JSON per rotte
+  ignote; error handler che gestisce `entity.parse.failed` (400) / `entity.too.large` (413) e
+  logga senza il corpo della richiesta (niente password nei log).
+
+### Decisioni prese
+- **Helmet** (dipendenza) scelto su richiesta esplicita dell'utente come soluzione standard Express.
+  CSP disattivata: il backend serve solo JSON, non HTML.
+- Validazione password **dopo** i controlli di ownership/ruolo in `resetPassword`: non si dà
+  feedback sulla robustezza prima di aver autorizzato l'operazione.
+- I **seed** (`seedDirigente`/`seedSuperAdmin`) NON passano da `validatePassword` (bootstrap dev,
+  hash diretto): lasciati invariati per non rompere il flusso locale.
+- Le vulnerabilità `npm audit` (`tar`/`@mapbox/node-pre-gyp`) sono **pre-esistenti**, transitive di
+  `bcrypt`, solo build-time: non introdotte da S1, segnalate tra i consigli produzione.
+
+### Verifica svolta (locale)
+- Boot check: `JWT_SECRET` assente → l'app **rifiuta** di avviarsi con messaggio esplicito; con
+  segreto valido carica regolarmente.
+- `validatePassword` su 8 casi: rifiuta short/solo-minuscole/solo-maiuscole/no-numero/no-speciale/
+  password-comune/contiene-username; accetta `Valid1Pass!`. `describePolicy()` coerente.
+- HTTP live (porta 4999): `/api/health` 200 con header Helmet (nosniff, X-Frame-Options, HSTS…);
+  `/api/auth/password-policy` restituisce la policy; rotta ignota → `404 {"error":"Risorsa non
+  trovata"}`; `x-powered-by` **assente**.
+- **Build frontend OK** (82 moduli, nessun errore di import).
+
+### File toccati
+`backend/src/config/security.js` (nuovo), `backend/src/utils/passwordPolicy.js` (nuovo),
+`backend/src/controllers/authController.js`, `backend/src/controllers/userController.js`,
+`backend/src/routes/auth.js`, `backend/src/app.js`, `backend/.env.example`, `backend/package.json`
+(+helmet); `frontend/src/utils/passwordPolicy.js` (nuovo),
+`frontend/src/components/auth/PasswordRequirements.jsx` (nuovo),
+`frontend/src/pages/FirstAccessSetup.jsx`, `frontend/src/api/client.js`, `frontend/src/styles.css`.
+
+---
+
+## S2 — Protezione brute-force (account lockout) ✅
+
+**Obiettivo**: bloccare temporaneamente un account dopo troppi tentativi di login falliti,
+in modo compatibile con l'hosting serverless (nessuno stato in memoria condivisa).
+
+### Cosa è stato fatto
+- **Schema** (migrazione idempotente in `schema.sql`): `users.failed_login_attempts INTEGER NOT
+  NULL DEFAULT 0` e `users.locked_until TIMESTAMPTZ`. Stato del lockout persistito su DB.
+- **`authController.login`**: prima di verificare le credenziali, se `locked_until` è nel futuro
+  → **429** con messaggio dedicato (senza verificare la password). Ogni tentativo fallito
+  (password errata *o* codice di primo accesso errato) chiama `registerFailedAttempt` (incrementa
+  il contatore e, raggiunta `LOGIN_MAX_ATTEMPTS`, imposta `locked_until = now + LOGIN_LOCKOUT_MINUTES`).
+  Ogni successo (login standard o codice corretto) chiama `resetFailedAttempts` (azzera contatore
+  e blocco). Soglia/durata da `config/security.js` (env `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES`).
+
+### Decisioni prese
+- **Stato su DB, non in memoria**: su Vercel le invocazioni serverless non condividono memoria →
+  un rate-limiter in-process sarebbe inefficace. Il DB è l'unico stato condiviso affidabile.
+- **Nessun job di pulizia**: `locked_until` scaduto è valutato al volo (`isLocked`), non serve un
+  cron per "sbloccare" (coerente con l'escalation lazy della Fase 7).
+- **Risposta**: sul tentativo fallito la risposta resta "Credenziali non valide" (non rivela nulla);
+  solo quando il blocco è *attivo* si risponde 429 con messaggio dedicato — rivelare l'esistenza
+  dell'account a blocco attivo è inevitabile con qualunque lockout e accettabile.
+- Il lockout copre **anche** il primo accesso (codice iniziale), non solo la password.
+
+### Verifica svolta (locale, DB reale)
+- Migrazione idempotente (2×); colonne confermate (`integer` default 0, `timestamptz` null).
+- E2E via HTTP con utente usa-e-getta e `LOGIN_MAX_ATTEMPTS=3`: 3 password errate → **401** ciascuna;
+  4° tentativo con **password corretta** ma account bloccato → **429** con messaggio dedicato.
+- Reset: sbloccato manualmente (simula scadenza), login corretto → **200**, stato DB torna
+  `failed_login_attempts=0 / locked_until=null`. Utente di test rimosso (DB pulito).
+
+### File toccati
+`backend/src/db/schema.sql`, `backend/src/controllers/authController.js`, `backend/.env.example`.
+
+### In sospeso (produzione)
+- **Migrazione produzione** delle 2 colonne su `users`, su conferma esplicita dell'utente.
+
+---
+
+## S3 — Logging e tracciabilità (audit trail) ✅
+
+**Obiettivo**: registrare le operazioni importanti (accessi, modifiche a dati/turni/corsi,
+assegnazioni, eliminazioni, azioni amministrative) con chi–quando–cosa.
+
+### Cosa è stato fatto
+- **Schema** (idempotente): tabella `audit_logs` (`company_id` FK→companies ON DELETE SET NULL,
+  `actor_user_id` FK→users ON DELETE SET NULL — lo storico sopravvive alla rimozione dell'attore,
+  `action`, `entity_type`, `entity_id`, `metadata` JSONB, `ip`, `created_at`) + 2 indici
+  (per società/data e per entità).
+- **Servizio** `backend/src/services/auditService.js`: `logAction()` **best-effort e non bloccante**
+  (cattura internamente ogni errore, non lo propaga — un errore di audit non fa mai fallire
+  l'operazione); `logFromReq()` (ricava company/actor/ip dalla request); `ipFromReq()` (primo valore
+  di `X-Forwarded-For` dietro proxy Vercel).
+- **Strumentazione eventi** (in coda ai flussi, come le notifiche): `authController` (auth.login,
+  auth.login_failed con motivo: unknown_user/locked/bad_initial_code/bad_password); `userController`
+  (user.create/delete/reset_password/regenerate_code/update_areas); `shiftController`
+  (shift.create/update/delete); `courseController` (course.create/update/delete);
+  `cancellationController` (cancellation.approve/reject); `companyController`
+  (company.create/update/dirigente_create, azioni super admin con `company_id` = società toccata).
+- **Endpoint di lettura** `GET /api/audit-logs` (`routes/audit.js` + `auditController.js`):
+  riservato a **dirigente** (scoping automatico alla propria società) e **super admin** (tutte,
+  filtro opzionale `?companyId`); filtri `action`/`entityType`, paginazione difensiva (limit
+  max 500). **Predisposto** per una futura UI (nessun frontend in questa fase).
+
+### Decisioni prese
+- Audit **best-effort awaitato** (non fire-and-forget): su serverless conviene attendere la
+  scrittura prima del freeze della funzione, ma senza propagare errori.
+- Responsabile (`admin`) **escluso** dalla lettura audit: funzione di governance riservata a
+  dirigente/super admin (facilmente estendibile se servisse).
+- `metadata` non contiene mai dati sensibili (nessuna password): solo id/ruoli/motivi.
+
+### Verifica svolta (locale, DB reale)
+- Migrazione idempotente (2×); app carica senza cicli di require; tabella/colonne confermate.
+- E2E via HTTP: login riuscito → riga `auth.login`; login errato → `auth.login_failed`
+  (`reason: bad_password`), con `actor_username`, `ip`, `metadata`. `GET /api/audit-logs` come
+  dirigente restituisce gli eventi della propria società; come **dipendente → 403**; senza token →
+  **401**. Bug intercettato e corretto in verifica: `company_id` ambiguo nella JOIN con users →
+  filtri qualificati con alias `a.`. Dati di test rimossi (6 righe audit + 2 utenti).
+
+### File toccati
+`backend/src/db/schema.sql`, `backend/src/services/auditService.js` (nuovo),
+`backend/src/controllers/auditController.js` (nuovo), `backend/src/routes/audit.js` (nuovo),
+`backend/src/app.js` (registrazione route), `authController.js`, `userController.js`,
+`shiftController.js`, `courseController.js`, `cancellationController.js`, `companyController.js`.
+
+### In sospeso (produzione)
+- **Migrazione produzione** della tabella `audit_logs`, su conferma esplicita.
+- Futuro (non pianificato): UI di consultazione, ritenzione/rotazione dei log.
+
+---
+
+## S4 — Predisposizione verifica email + token auth avanzata ✅
+
+**Obiettivo**: preparare la struttura per verifica email, reset password via link temporaneo e 2FA
+via email — **senza attivare** alcun invio (funzioni future). Solo schema + servizio testabile.
+
+### Cosa è stato fatto
+- **Schema** (idempotente): `users.email_verified` e `users.two_factor_enabled` (entrambi BOOLEAN
+  DEFAULT FALSE — nessun impatto sui flussi attuali, che non consultano ancora questi campi).
+  Tabella generica **`auth_tokens`** (`user_id` FK ON DELETE CASCADE, `purpose` CHECK in
+  email_verification/password_reset/two_factor, `token_hash`, `expires_at`, `used_at`, `created_at`
+  + 2 indici). Un'unica struttura per i tre scopi futuri.
+- **Servizio** `backend/src/services/authTokenService.js`: `createToken(userId, purpose, options)`
+  → restituisce il token **in chiaro una sola volta** (nel DB solo l'hash SHA-256), con TTL per
+  scopo configurabile via env e invalidazione dei token precedenti dello stesso scopo;
+  `consumeToken(rawToken, purpose)` → verifica scadenza + **monouso atomico** (UPDATE con guardia
+  `used_at IS NULL` che evita corse concorrenti). Usa `crypto` di Node, **nessuna dipendenza**.
+
+### Decisioni prese
+- **Solo hash a DB**, mai il token in chiaro: se il DB venisse compromesso i token non sarebbero
+  spendibili. Il valore in chiaro vive solo il tempo di essere consegnato all'utente (futuro invio).
+- **Tabella unica `auth_tokens`** con `purpose` invece di 3 tabelle separate: struttura modulare
+  che copre in un colpo verifica email / reset / 2FA.
+- **Nessun endpoint attivato**: il servizio è testabile ma non è ancora agganciato a rotte — sarà
+  la fase futura di attivazione (dopo S5 email) a collegarlo, su richiesta.
+
+### Verifica svolta (locale, DB reale)
+- Migrazione idempotente (2×); colonne `email_verified`/`two_factor_enabled` e tabella `auth_tokens`
+  confermate. Test del servizio **7/7**: token creato (chiaro 64 char), a DB solo l'hash
+  (SHA-256, ≠ chiaro); primo consumo valido con userId corretto; secondo consumo **rifiutato**
+  (monouso); purpose errato rifiutato; token scaduto (ttl −1) rifiutato; creazione nuova invalida
+  la precedente dello stesso scopo. Dati di test rimossi.
+
+### File toccati
+`backend/src/db/schema.sql`, `backend/src/services/authTokenService.js` (nuovo),
+`backend/.env.example`.
+
+### In sospeso (produzione / future)
+- **Migrazione produzione** (2 colonne su `users` + tabella `auth_tokens`), su conferma esplicita.
+- Attivazione effettiva (endpoint di verifica email / reset / 2FA) rimandata: richiede S5 (email) e
+  una fase di wiring dedicata su richiesta dell'utente.
+
+---
+
+## S5 — Predisposizione sistema email (modulare) ✅
+
+**Obiettivo**: base modulare per gli invii email futuri (reset password, verifica email, proposte
+di sostituzione, comunicazioni) **senza attivare** alcun invio reale.
+
+### Cosa è stato fatto
+- **Modulo** `backend/src/services/email/`:
+  - `emailService.js` — `sendEmail({ to, template, data })`: costruisce subject/text/html dal
+    template e delega al provider selezionato; `isEmailConfigured()` (true solo con provider reale).
+    Mittente da `EMAIL_FROM`.
+  - `providers/` — `index.js` (`getProvider()` sceglie via `EMAIL_PROVIDER`, default `noop`; provider
+    ignoto → fallback no-op con warning) + `noopProvider.js` (**non invia**, logga soltanto). Spazio
+    predisposto per SMTP/API futuri (commentati).
+  - `templates/index.js` — template puri `{subject,text,html}`: `email_verification`,
+    `password_reset`, `two_factor_code`, `substitution_proposal`, `generic_notification`; costruzione
+    link da `APP_BASE_URL`; escape HTML dei dati interpolati.
+- Nessuna dipendenza aggiunta (`nodemailer` sarà introdotto **solo** quando si attiverà l'SMTP reale).
+
+### Decisioni prese
+- **Transport no-op di default**: la struttura è completa e testabile end-to-end senza rischio di
+  invii accidentali in sviluppo e senza configurare un provider. Nessun chiamante è ancora agganciato.
+- Email come **canale futuro aggiuntivo** rispetto alle notifiche in-app (che restano primarie).
+- Provider ignoto → fallback no-op (nessuna rottura se `EMAIL_PROVIDER` viene impostato in anticipo).
+
+### Verifica svolta (locale)
+- Test del modulo **7/7**: render `email_verification`/`password_reset` con link corretti;
+  escape HTML (nessun `<script>` grezzo); `sendEmail` con no-op → `provider:'noop'`,
+  `delivered:false`, logga; `isEmailConfigured()` = false col default; template sconosciuto e
+  destinatario mancante → errore esplicito.
+
+### File toccati
+`backend/src/services/email/emailService.js`, `.../providers/index.js`, `.../providers/noopProvider.js`,
+`.../templates/index.js` (tutti nuovi), `backend/.env.example`.
+
+### In sospeso (future)
+- Attivazione di un provider reale (SMTP via `nodemailer` o API) + wiring degli invii ai flussi
+  (reset password, verifica email, ...), su richiesta esplicita dell'utente.
+
+---
+
+## S6 — Modulo cifratura dati sensibili (predisposizione) ✅
+
+**Obiettivo**: fornire il modulo di cifratura at-rest e la classificazione dei dati, **senza
+applicarlo** ad alcun campo esistente (decisione esplicita: l'applicazione tocca dati reali).
+
+### Cosa è stato fatto
+- **Modulo** `backend/src/utils/crypto.js`: **AES-256-GCM** (cifratura autenticata), IV casuale a
+  12 byte per valore, chiave a 32 byte da env (`DATA_ENCRYPTION_KEY`, hex). Formato autodescrittivo
+  `enc:<keyId>:<iv>:<tag>:<ciphertext>` pensato per la **rotazione**: keyring con chiave primaria +
+  chiavi ritirate (`DATA_ENCRYPTION_KEYS_RETIRED`) in sola decifratura. `encrypt`/`decrypt`
+  gestiscono null; `decrypt` restituisce invariati i valori **non** cifrati (adozione graduale
+  sicura); `isEncrypted`/`isEncryptionConfigured`. Usa `crypto` di Node, **nessuna dipendenza**.
+- **Classificazione dati** documentata in `PROJECT_CONTEXT.md` → "Sicurezza: classificazione dati e
+  cifratura": operativi (in chiaro) / credenziali (già hashate) / personali sensibili. `email`
+  resta in chiaro per motivi funzionali (login-lookup, unicità, verifica email); candidati primari
+  alla cifratura: `phone` e note contrattuali.
+
+### Decisioni prese
+- **Nessuna applicazione ai dati** in questa fase (richiesta esplicita dell'utente): solo modulo +
+  predisposizione. L'applicazione a `phone`/note sarà una fase dedicata, su conferma.
+- **AES-256-GCM** (non solo AES-CBC): autentica il ciphertext, un valore manomesso è rifiutato.
+- **Chiave solo via env**, mai nel codice; versioning della chiave per rotazione senza riscrivere
+  tutti i valori storici in una volta.
+
+### Verifica svolta (locale)
+- Test del modulo **8/8**: round-trip; IV casuale (cifrari diversi per stesso input); manomissione
+  del ciphertext → decrypt **rifiuta** (GCM); valore in chiaro storico → pass-through; null→null;
+  `isEncrypted`/`isEncryptionConfigured`; **rotazione** (valore cifrato con `v0` ritirata,
+  decifrato con keyring `v1`+`v0`; nuovi valori con primaria `v1`); senza chiave → encrypt lancia,
+  `isEncryptionConfigured=false`.
+
+### File toccati
+`backend/src/utils/crypto.js` (nuovo), `backend/.env.example`, `PROJECT_CONTEXT.md` (classificazione).
+
+### In sospeso (future)
+- **Applicazione** della cifratura ai campi selezionati (`phone`, note) con migrazione dei dati
+  esistenti — solo su conferma esplicita (impatta dati reali e la lettura/scrittura di quei campi).
+
+---
+
+## S7 — Backup, affidabilità, separazione ambienti, documentazione ✅
+
+**Obiettivo**: predisporre backup/ripristino, proteggere gli ambienti (dev/prod) dagli script
+distruttivi, e chiudere con la documentazione finale.
+
+### Cosa è stato fatto
+- **Guardia script distruttivi**: nuovo `backend/src/utils/envGuard.js`
+  (`assertDestructiveAllowed`): in `NODE_ENV=production` gli script distruttivi si rifiutano di
+  partire salvo `ALLOW_DESTRUCTIVE=true`. Applicata a `db/reset.js` e `db/seedDirigente.js` (prima
+  solo un commento). `seed:superadmin` **non** è bloccato: è il bootstrap legittimo dell'admin di
+  piattaforma (idempotente `ON CONFLICT DO UPDATE`).
+- **Backup/ripristino**: `backend/scripts/backup.sh` (`pg_dump` → `.sql.gz`, carica `DATABASE_URL`
+  da `.env` se assente) e `scripts/restore.sh` (`psql`, con protezione produzione). Nuovi npm
+  script `db:backup` / `db:restore`. `backups/` aggiunto a `.gitignore`.
+- **Separazione ambienti**: documentata in `.env.example` (locale vs Vercel), `NODE_ENV` e
+  `ALLOW_DESTRUCTIVE` esplicitati. `.env.example` completo di **tutte** le env delle fasi S1–S6.
+- **Documentazione**: `PROJECT_CONTEXT.md` (changelog per ogni fase + sezione classificazione dati)
+  e questo file aggiornati; riepilogo finale qui sotto.
+
+### Decisioni prese
+- Backup logico manuale come **aggiuntivo** al PITR gestito dal provider (Neon) in produzione — non
+  sostitutivo.
+- `seed:superadmin` non bloccato (bootstrap legittimo); `reset`/`seed:dirigente`/`restore` sì.
+
+### Verifica svolta (locale)
+- Guardia: `db:reset` con `NODE_ENV=production` → **exit 1** (bloccato); con `ALLOW_DESTRUCTIVE=true`
+  → guardia superata; in dev non blocca. `bash -n` OK su entrambi gli script.
+- `npm run db:backup` contro il DB locale → file `.gz` reale prodotto (poi rimosso).
+- **Regressione finale**: migrazione idempotente completa (2×), app carica con tutte le route,
+  **build frontend OK**.
+
+### File toccati
+`backend/src/utils/envGuard.js` (nuovo), `backend/scripts/backup.sh` (nuovo),
+`backend/scripts/restore.sh` (nuovo), `backend/src/db/reset.js`, `backend/src/db/seedDirigente.js`,
+`backend/package.json`, `backend/.gitignore`, `backend/.env.example`, `PROJECT_CONTEXT.md`.
+
+---
+
+## Riepilogo finale — Iniziativa Sicurezza (S1–S7)
+
+### Sicurezza IMPLEMENTATA e attiva
+- **Password**: hashing bcrypt (mai in chiaro, costo configurabile) + **politica robusta
+  configurabile** (lunghezza, maiuscole/minuscole/numeri/speciali, blocklist, no-username), validata
+  **lato backend e frontend** con requisiti mostrati all'utente (single-source via
+  `GET /api/auth/password-policy`). [S1]
+- **Sessioni/token**: boot check `JWT_SECRET` (fail-fast), sessioni JWT 8h (invariate). [S1]
+- **Hardening HTTP**: **Helmet**, `x-powered-by` off, body limit 100kb, 404/500 handler che non
+  espongono dettagli né loggano credenziali. [S1]
+- **Anti brute-force**: account lockout su DB (soglia/durata configurabili), compatibile serverless,
+  copre anche il primo accesso. [S2]
+- **Autorizzazioni**: confermato che tutti i permessi sono lato backend (`requireManager/Dirigente/
+  SuperAdmin`) + isolamento multi-tenant `company_id` nei controller (nessun privilegio ottenibile
+  da URL/API/parametri). [audit S3]
+- **SQL Injection**: confermato che tutte le query sono parametrizzate (nessuna concatenazione di
+  input). **XSS**: API solo-JSON, React escapa di default, nessun `dangerouslySetInnerHTML`.
+- **Audit trail**: registro `audit_logs` (chi/quando/cosa) su accessi, CRUD utenti/turni/corsi,
+  cancellazioni, azioni società; endpoint di lettura per dirigente/super admin. [S3]
+- **Affidabilità**: guardie anti-esecuzione distruttiva in produzione + backup/ripristino. [S7]
+
+### Parti solo PREDISPOSTE (struttura pronta, non attive)
+- **Verifica email + 2FA**: colonne `users.email_verified`/`two_factor_enabled` + tabella
+  `auth_tokens` + servizio token monouso/scadenza (`authTokenService`). Nessun endpoint agganciato. [S4]
+- **Sistema email**: modulo `services/email/` (provider astratto, **transport no-op** di default,
+  template). Nessun invio reale. [S5]
+- **Cifratura dati sensibili**: modulo `utils/crypto.js` (AES-256-GCM, chiave da env, rotazione).
+  **Non applicato** ad alcun campo. [S6]
+
+### Migrazioni DB in sospeso per la PRODUZIONE (solo su conferma esplicita)
+- `users`: `failed_login_attempts`, `locked_until` [S2]; `email_verified`, `two_factor_enabled` [S4].
+- Tabelle nuove: `audit_logs` [S3], `auth_tokens` [S4].
+- Tutte idempotenti, additive, senza perdita dati. Da applicare in blocco con `npm run migrate`
+  (connection string di produzione) dopo il via dell'utente.
+
+### Miglioramenti consigliati prima/della fase produzione
+1. **Impostare le env di sicurezza in produzione**: `JWT_SECRET` robusto (obbligatorio),
+   `NODE_ENV=production`, `CORS_ORIGIN` ristretto al dominio del frontend, e — quando si attiveranno —
+   `DATA_ENCRYPTION_KEY` / provider email.
+2. **`npm audit`**: risolvere le vulnerabilità transitive di `bcrypt` (`tar`/`node-pre-gyp`, solo
+   build-time) valutando `npm audit fix` o l'aggiornamento di `bcrypt` (testare il login dopo).
+3. **Attivare cifratura** su `phone` e note contrattuali (fase dedicata, con migrazione dati).
+4. **Attivare email** (provider reale) e **wiring** di verifica email / reset password / 2FA sui
+   token già predisposti.
+5. **UI audit log** per dirigente/super admin (endpoint già pronto).
+6. Valutare **refresh token / logout server-side** (oggi sessioni stateless 8h) e ritenzione/
+   rotazione dei log di audit.

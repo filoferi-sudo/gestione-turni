@@ -1151,3 +1151,33 @@ textarea {
   margin: 0;
   font-weight: 600;
 }
+
+/* Checklist dei requisiti password (primo accesso / cambio password) */
+.password-requirements {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 4px;
+  font-size: 12px;
+}
+
+.password-requirements li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.6;
+}
+
+.password-requirements .req-icon {
+  display: inline-flex;
+  width: 14px;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.password-requirements .req-met {
+  color: #15803d;
+}
+
+.password-requirements .req-unmet {
+  color: #6b7280;
+}

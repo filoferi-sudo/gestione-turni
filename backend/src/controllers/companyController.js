@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { generateInitialCode } = require('../utils/generateCode');
+const audit = require('../services/auditService');
 
 // Il super admin non gestisce mai i dati operativi (turni/corsi/dipendenti) di una specifica
 // società: solo anagrafica società, il loro primo dirigente, e statistiche aggregate. Ogni
@@ -57,6 +58,9 @@ async function createCompany(req, res) {
 
   await pool.query(`INSERT INTO sedi (company_id, name) VALUES ($1, 'Sede Principale')`, [rows[0].id]);
 
+  // Azione del super admin: company_id = società creata, actor = super admin.
+  await audit.logAction({ companyId: rows[0].id, actorUserId: req.user.id, action: 'company.create', entityType: 'company', entityId: rows[0].id, metadata: { name: rows[0].name }, ip: audit.ipFromReq(req) });
+
   return res.status(201).json({ company: toSafeCompany(rows[0]) });
 }
 
@@ -91,6 +95,18 @@ async function updateCompany(req, res) {
     ]
   );
 
+  // Distingue la (dis)attivazione — azione amministrativa rilevante — dalla semplice modifica dati.
+  const activationChanged = isActive !== undefined && Boolean(isActive) !== existing.is_active;
+  await audit.logAction({
+    companyId: Number(id),
+    actorUserId: req.user.id,
+    action: 'company.update',
+    entityType: 'company',
+    entityId: Number(id),
+    metadata: activationChanged ? { isActive: Boolean(isActive) } : null,
+    ip: audit.ipFromReq(req),
+  });
+
   return res.json({ company: toSafeCompany(rows[0]) });
 }
 
@@ -123,6 +139,8 @@ async function createCompanyDirigente(req, res) {
      RETURNING *`,
     [username, email, phone, initialCode, id]
   );
+
+  await audit.logAction({ companyId: Number(id), actorUserId: req.user.id, action: 'company.dirigente_create', entityType: 'user', entityId: rows[0].id, metadata: { username }, ip: audit.ipFromReq(req) });
 
   return res.status(201).json({
     user: {
