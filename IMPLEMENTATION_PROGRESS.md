@@ -987,3 +987,56 @@ distruttivi, e chiudere con la documentazione finale.
 5. **UI audit log** per dirigente/super admin (endpoint già pronto).
 6. Valutare **refresh token / logout server-side** (oggi sessioni stateless 8h) e ritenzione/
    rotazione dei log di audit.
+
+---
+
+# Iniziativa: Riorganizzazione struttura interfaccia (sidebar + sezioni)
+
+**Stato: ✅ completata (2026-07-08).** Solo frontend: nessuna modifica al backend/schema, nessuna
+funzionalità rimossa, nessun restyling grafico (palette e componenti visivi invariati). Fonte di
+verità architetturale: `PROJECT_CONTEXT.md` → sezione "Struttura dell'interfaccia: navigazione a
+sezioni con sidebar".
+
+## Cosa è stato fatto
+
+- **Layout comune** `components/layout/AppLayout.jsx` (sidebar sempre visibile + topbar con
+  campanella/logout + `<Outlet />`) e tre layout di ruolo: `ManagerLayout` (9 sezioni, selettore
+  sede nella sidebar, condiviso da /dirigente e /admin), `EmployeeLayout` (7 sezioni),
+  `SuperAdminLayout` (Dashboard + Società, senza campanella).
+- **Contesto** `context/ManagerWorkspaceContext.jsx`: sede selezionata (riusa `useSedeSelection`) +
+  aree della sede + timeWindow, condivisi da tutte le sezioni manager.
+- **Pagine per sezione** (i contenuti sono i componenti preesistenti, ricollocati):
+  `pages/manager/*` (ManagerDashboard, CalendarioPage, TurniPage, PersonalePage, SostituzioniPage,
+  FabbisognoPage, ImpostazioniPage), `pages/employee/*` (EmployeeHome, EmployeeCalendario,
+  EmployeeTurni, EmployeeSostituzioni, EmployeeImpostazioni), `pages/sections/*` (ComunicazioniPage,
+  ReportPage — condivise), `pages/superadmin/*` (SuperAdminHome, SocietaPage).
+- **Dashboard solo riassuntive** (nuove): indicatori sintetici + link alle sezioni, costruite
+  esclusivamente su endpoint esistenti (listAvailableShifts, staffing/coverage,
+  cancellation-requests, notifications, proposals/mine), polling 30s.
+- **Routing** `App.jsx`: rotte annidate per ruolo sotto i layout; redirect di compatibilità
+  `/…/users/new` → `/…/personale/nuovo`; `ROLE_HOME` invariata. `CreateUser.jsx` è ora pagina
+  figlia di Personale (rimossa la topbar propria).
+- **Rimossi** (sostituiti, nessuna funzionalità persa): `AdminDashboard.jsx`,
+  `DirigenteDashboard.jsx`, `employee/EmployeeDashboard.jsx`, `superadmin/SuperAdminDashboard.jsx`.
+- **Stili**: classi layout in coda a `styles.css` (`.app-shell`, `.sidebar*`, `.dash-grid`,
+  `.stat-card`, `.comms-list`); sotto i 900px la sidebar diventa barra orizzontale scorrevole.
+  `relativeTime` esportata da `NotificationsBell.jsx` (riusata da ComunicazioniPage).
+
+## Verifica svolta
+
+Browser end-to-end sui 4 ruoli con dati locali reali: Dirigente (tutte le 9 sezioni; calendario con
+chip fabbisogno/corsie/toolbar invariati; Impostazioni con Sedi/Aree/escalation), Responsabile
+(stesse sezioni, senza Responsabili in Personale e senza gestione struttura in Impostazioni),
+Dipendente (7 sezioni; calendario dalle proprie aree; profilo/disponibilità/opt-out in
+Impostazioni), Super Admin (statistiche + tabella società). Redirect legacy verificato. Build Vite
+OK, nessun errore console introdotto. (Nota dati locali: password di `testmag` reimpostata a scopo
+di test; utente temporaneo `resp_test` creato e poi eliminato.)
+
+## Possibili passi successivi
+
+- Restyling grafico vero e proprio (vedi suggerimenti in PROJECT_CONTEXT.md: variabili CSS, icone
+  sidebar, refresh tabelle, topbar sticky con attenzione agli z-index).
+- Deep-link delle notifiche verso le sezioni (ora che le aree/sezioni hanno URL propri, il
+  `payload` delle notifiche può diventare navigabile — limite v1 dichiarato in Fase 3).
+- Eventuale endpoint di riepilogo dedicato per le Dashboard se i conteggi multipli diventassero
+  pesanti su società grandi.

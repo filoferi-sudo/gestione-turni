@@ -80,15 +80,26 @@ turni-app/
   frontend/
     vercel.json                rewrite SPA per il routing lato client
     src/
-      main.jsx, App.jsx        routing (react-router-dom), mappa ruolo -> home
+      main.jsx, App.jsx        routing (react-router-dom): rotte annidate per ruolo sotto un
+                                layout con sidebar (vedi sezione "Struttura dell'interfaccia"),
+                                mappa ruolo -> home (/dirigente, /admin, /dashboard, /superadmin)
       api/client.js            unico client HTTP, tutte le chiamate API passano da qui
       context/AuthContext.jsx   token + user (con `areas[]`) in localStorage
+      context/ManagerWorkspaceContext.jsx   stato condiviso delle sezioni manager (sede
+                                selezionata via useSedeSelection + aree della sede + timeWindow),
+                                montato da ManagerLayout così Calendario/Sostituzioni/Fabbisogno/
+                                Impostazioni condividono la stessa selezione
       hooks/useSedeSelection.js  stato "sede selezionata" per le dashboard manager (elenco sedi
                                 della società + sede attiva, persistita in localStorage)
       hooks/usePolling.js       polling leggero riutilizzabile (pausa se tab non visibile, refetch
                                 immediato al ritorno di focus) per aggiornamenti quasi in tempo
                                 reale sui dati condivisi tra utenti (vedi sezione dedicata)
       components/
+        layout/                 AppLayout.jsx (guscio comune: sidebar di navigazione sempre
+                                visibile + topbar con campanella/logout + Outlet), ManagerLayout.jsx
+                                (le 9 sezioni manager + selettore sede nella sidebar, monta
+                                ManagerWorkspaceProvider), EmployeeLayout.jsx (7 sezioni),
+                                SuperAdminLayout.jsx (2 sezioni, senza campanella)
         calendar/               CalendarPage (turni, richiede areaId+timeWindow; per mode='admin'
                                 carica anche la copertura fabbisogno e i 3 modali fabbisogno, vedi
                                 sezione dedicata), CalendarGrid (turni sovrapposti affiancati via
@@ -118,15 +129,26 @@ turni-app/
         stats/HoursStats.jsx     riusato sia per vista manager (tutti) sia self-service (proprie ore)
       pages/
         Login.jsx, FirstAccessSetup.jsx
-        AdminDashboard.jsx (responsabile), DirigenteDashboard.jsx  entrambe: selettore sede +
-                                tab calendario dinamiche costruite dalle aree della sede attiva
-        dirigente/SediManagement.jsx   CRUD sedi (solo Dirigente), dentro DirigenteDashboard
-        employee/EmployeeDashboard.jsx   dashboard unica per qualunque dipendente: le tab e i
-                                pannelli "disponibili" si costruiscono dalle aree assegnate
-                                (user.areas), non più da una categoria/dashboard hardcoded
-        superadmin/SuperAdminDashboard.jsx
+        manager/                 sezioni Dirigente+Responsabile (stesse pagine per entrambi, rotte
+                                /dirigente/* e /admin/*; le differenze di permesso vivono nelle
+                                pagine): ManagerDashboard (panoramica riassuntiva), CalendarioPage
+                                (tab per area della sede attiva), TurniPage (richieste di
+                                cancellazione), PersonalePage (gestione account), SostituzioniPage
+                                (pannelli manage), FabbisognoPage (regole fabbisogno per area),
+                                ImpostazioniPage (account; per il Dirigente anche sedi/aree/
+                                escalation)
+        employee/                sezioni Dipendente (/dashboard/*): EmployeeHome (panoramica),
+                                EmployeeCalendario (tab dalle aree assegnate, user.areas),
+                                EmployeeTurni (mie richieste), EmployeeSostituzioni (proposte +
+                                disponibili), EmployeeImpostazioni (profilo/disponibilità/opt-out)
+        sections/                pagine condivise tra ruoli: ComunicazioniPage (elenco notifiche
+                                completo), ReportPage (HoursStats + placeholder report futuri)
+        superadmin/              SuperAdminHome (statistiche piattaforma), SocietaPage (anagrafica
+                                società + primo dirigente)
+        dirigente/SediManagement.jsx   CRUD sedi (solo Dirigente), ora dentro ImpostazioniPage
         CreateUser.jsx           creazione responsabile/dipendente con multi-select aree operative
-                                (raggruppate per sede) al posto della vecchia categoria singola
+                                (raggruppate per sede); pagina figlia di Personale
+                                (/…/personale/nuovo)
       utils/                    dates.js, timeWindow.js (createTimeWindow(start,end): fabbrica
                                 della finestra oraria del calendario, non più costanti fisse),
                                 courseLayout.js (algoritmo "lane" per corsi sovrapposti)
@@ -897,6 +919,72 @@ memoria, con lo stesso identico predicato — verificato che il comportamento re
 equivalente (stesso filtro "in qualunque area", non solo quella corrente). Aggiunto anche
 l'indice mancante `idx_cancellation_requests_shift_id`.
 
+## Struttura dell'interfaccia: navigazione a sezioni con sidebar (2026-07-08)
+
+Riorganizzazione **solo strutturale** dell'interfaccia (nessun restyling grafico, nessuna modifica
+al backend, nessuna funzionalità rimossa): le tre dashboard monolitiche a scorrimento
+(AdminDashboard/DirigenteDashboard/EmployeeDashboard, tutte le card impilate in un'unica pagina)
+sono state sostituite da un layout con **sidebar di navigazione sempre visibile** e una **pagina
+dedicata per sezione**, con rotte annidate di react-router (`<Outlet />`).
+
+### Architettura del layout
+
+- `components/layout/AppLayout.jsx`: guscio comune (sidebar + topbar con campanella/logout +
+  Outlet), **senza logica di dominio**. Le voci di navigazione arrivano dal layout di ruolo.
+- Un layout per ruolo: `ManagerLayout` (usato sia da /dirigente sia da /admin, con prop `base`),
+  `EmployeeLayout`, `SuperAdminLayout`. Aggiungere una sezione = una voce nell'elenco del layout +
+  una rotta figlia in `App.jsx`: la struttura non va ritoccata.
+- `context/ManagerWorkspaceContext.jsx`: sede selezionata (riusa `useSedeSelection`, persistita in
+  localStorage) + aree della sede + `timeWindow`, condivisi da tutte le sezioni manager. Il
+  **selettore sede è nella sidebar** (una sola sede → solo etichetta, più sedi → select) e vale per
+  tutte le sezioni.
+- Stili in coda a `styles.css` (`.app-shell`, `.sidebar*`, `.dash-grid`, `.stat-card`): stessa
+  palette preesistente (#1f2430 / #2f6f4f), nessun colore nuovo di rilievo. Sotto i 900px la
+  sidebar diventa una barra orizzontale scorrevole in testa (tutte le sezioni sempre raggiungibili,
+  nessun menu a scomparsa/JS).
+
+### Sezioni per ruolo
+
+| Sezione | Dirigente (/dirigente/*) | Responsabile (/admin/*) | Dipendente (/dashboard/*) |
+|---|---|---|---|
+| Dashboard | panoramica riassuntiva (sostituzioni aperte, richieste pendenti, fabbisogno scoperto oggi, notifiche + tabella copertura del giorno) | idem | panoramica (proposte da rispondere, disponibili nelle proprie aree, proprie richieste, notifiche) |
+| Calendario | tab per area della sede attiva (turni con fabbisogno integrato / corsi), creazione e modifica | idem | tab dalle proprie aree (user.areas) |
+| Turni | richieste di cancellazione da approvare | idem | stato delle proprie richieste |
+| Personale | Responsabili + Dipendenti (contratti/disponibilità/aree per riga); `personale/nuovo` = CreateUser | solo Dipendenti | — |
+| Sostituzioni | pannelli manage per area (+ Trova sostituzione/proposte) | idem | proposte ricevute + disponibili per area |
+| Fabbisogno | regole per area (modali settimanale/singolo riusati; la copertura resta nel Calendario) | idem | — |
+| Comunicazioni | elenco notifiche completo (pagina condivisa) | idem | idem |
+| Report | HoursStats aggregato + placeholder report avanzati | idem | HoursStats self-service |
+| Impostazioni | account + Sedi + Aree operative + escalation sostituzioni | solo account (struttura riservata al Dirigente) | MyProfile (profilo/disponibilità/opt-out) |
+
+Super Admin (/superadmin/*): solo **Dashboard** (statistiche piattaforma) e **Società** — coerente
+col vincolo "il Super Admin non gestisce dati operativi". Senza campanella (le notifiche sono
+interne alle società).
+
+### Principi da mantenere
+
+- **La Dashboard è solo riassuntiva**: indicatori e link alle sezioni, **nessuna operazione**
+  (niente form/approvazioni/creazioni dentro la Dashboard). Le nuove funzionalità operative vanno
+  nella loro sezione, non ri-accumulate nella home.
+- **Le dashboard riassuntive riusano solo endpoint esistenti** (listAvailableShifts, coverage,
+  cancellation-requests, notifications): nessuna rotta backend dedicata. Se i conteggi diventassero
+  pesanti, valutare un endpoint di riepilogo dedicato invece di appesantire il polling (oggi 30s).
+- **Compatibilità URL**: i vecchi percorsi `/admin/users/new` e `/dirigente/users/new` reindirizzano
+  a `/…/personale/nuovo`; le home per ruolo (`ROLE_HOME`) sono invariate.
+- La pagina Fabbisogno gestisce le **regole**; la **copertura** resta integrata nel Calendario
+  (decisione preesistente, non reintrodurre un pannello copertura separato).
+
+### Suggerimenti per il futuro restyling grafico (non ancora fatto, solo appunti)
+
+- Introdurre variabili CSS (`:root { --color-primary: … }`) al posto dei colori hardcoded ripetuti
+  (#2f6f4f, #1f2430, #6b7280) prima di toccare la palette.
+- Icone nelle voci della sidebar (oggi solo testo) e stati hover/focus più curati.
+- Migliorare `.dash-grid`/`.stat-card` con trend/sparkline quando arriveranno statistiche avanzate.
+- Valutare una topbar sticky (attenzione agli z-index dei modali `.modal-overlay` e del pannello
+  campanella) e un tema scuro coerente con la sidebar.
+- Le tabelle (`.table`) sono il candidato principale per un refresh (densità, righe alternate,
+  ordinamento).
+
 ## Funzionalità già completate
 
 - Autenticazione JWT con primo accesso via codice iniziale + impostazione password personale.
@@ -1265,6 +1353,21 @@ sezione classifica i dati gestiti e definisce l'approccio alla cifratura at-rest
 
 Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cosa ricordare.
 
+- **2026-07-08** — **Riorganizzazione struttura interfaccia: sidebar + pagine per sezione** (solo
+  frontend, nessuna modifica backend/schema, nessuna funzionalità rimossa). Le dashboard
+  monolitiche `AdminDashboard`/`DirigenteDashboard`/`EmployeeDashboard`/`SuperAdminDashboard` sono
+  state **sostituite** da: layout comuni (`components/layout/AppLayout|ManagerLayout|EmployeeLayout|
+  SuperAdminLayout`), contesto `context/ManagerWorkspaceContext.jsx` (sede+aree condivise tra le
+  sezioni manager, selettore sede nella sidebar), pagine di sezione in `pages/manager/*`,
+  `pages/employee/*`, `pages/sections/*` (Comunicazioni/Report condivise), `pages/superadmin/*`;
+  rotte annidate in `App.jsx` con redirect di compatibilità (`/…/users/new` → `/…/personale/nuovo`);
+  `CreateUser.jsx` resa pagina figlia di Personale (niente topbar propria); `relativeTime` esportata
+  da `NotificationsBell`; stili layout in coda a `styles.css` (palette invariata). Le Dashboard sono
+  ora **solo riassuntive** (indicatori + link, riusano esclusivamente endpoint esistenti). Dettagli,
+  tabella sezioni-per-ruolo, principi e suggerimenti per il futuro restyling nella nuova sezione
+  **"Struttura dell'interfaccia: navigazione a sezioni con sidebar"**. Verificato nel browser per
+  tutti e 4 i ruoli (navigazione completa, calendario con fabbisogno, sostituzioni, personale,
+  impostazioni, redirect legacy); build Vite OK.
 - **2026-07-08** — **Iniziativa Sicurezza — Fase S7 (Backup, affidabilità, ambienti) + chiusura piano
   S1–S7**. Nuovo `utils/envGuard.js` (`assertDestructiveAllowed`): `db:reset`/`seed:dirigente`/
   `restore` si rifiutano di girare con `NODE_ENV=production` salvo `ALLOW_DESTRUCTIVE=true`

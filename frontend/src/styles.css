@@ -1181,3 +1181,205 @@ textarea {
 .password-requirements .req-unmet {
   color: #6b7280;
 }
+
+/* Layout applicazione: sidebar di navigazione sempre visibile + area contenuto.
+   Stessa palette già in uso (#1f2430 scuro, #2f6f4f verde): nessun restyling, solo struttura. */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 230px;
+  flex-shrink: 0;
+  background: #1f2430;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 12px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sidebar-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 0 10px;
+  font-size: 16px;
+}
+
+.sidebar-brand .badge {
+  margin-left: 0;
+}
+
+.sidebar-sede {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 10px;
+}
+
+.sidebar-sede label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9ca3af;
+}
+
+.sidebar-sede select {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #3b4252;
+  background: #2a3040;
+  color: white;
+  font-size: 14px;
+}
+
+.sidebar-sede-name {
+  font-size: 14px;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-link {
+  color: #d1d5db;
+  text-decoration: none;
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  border-left: 3px solid transparent;
+}
+
+.sidebar-link:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: white;
+}
+
+.sidebar-link.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-left-color: #4caf7d;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-topbar {
+  justify-content: space-between;
+}
+
+.topbar-user {
+  font-size: 14px;
+}
+
+/* Su schermi stretti la sidebar diventa una barra orizzontale scorrevole in testa alla pagina:
+   tutte le sezioni restano raggiungibili senza menu a scomparsa. */
+@media (max-width: 900px) {
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    position: static;
+    width: 100%;
+    height: auto;
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 4px;
+  }
+
+  .sidebar-link {
+    white-space: nowrap;
+    border-left: none;
+    border-bottom: 3px solid transparent;
+    border-radius: 6px 6px 0 0;
+  }
+
+  .sidebar-link.active {
+    border-left-color: transparent;
+    border-bottom-color: #4caf7d;
+  }
+}
+
+/* Dashboard riassuntiva: griglia di indicatori sintetici con link alla sezione di dettaglio */
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 10px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.stat-value.stat-alert {
+  color: #b45309;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.stat-link {
+  font-size: 13px;
+  color: #2f6f4f;
+  text-decoration: none;
+  margin-top: 4px;
+}
+
+.stat-link:hover {
+  text-decoration: underline;
+}
+
+.dash-section-note {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* Pagina Comunicazioni: riusa lo stile delle voci della campanella dentro una card a pagina piena */
+
+.comms-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}

@@ -1,30 +1,21 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 
-// Il super admin gestisce solo l'anagrafica delle società (crea, modifica, attiva/disattiva,
-// crea il primo dirigente) e vede statistiche aggregate: non entra mai nel calendario turni/corsi
-// di una specifica società, che resta di esclusiva competenza di quella società.
-export default function SuperAdminDashboard() {
-  const { user, token, logout } = useAuth();
-  const navigate = useNavigate();
+// Sezione Società del Super Admin: anagrafica delle società della piattaforma (creazione,
+// modifica, attivazione/disattivazione, creazione del primo dirigente). Il Super Admin non entra
+// mai nei dati operativi di una società (decisione esplicita, vedi PROJECT_CONTEXT.md).
+export default function SocietaPage() {
+  const { token } = useAuth();
 
   const [companies, setCompanies] = useState([]);
-  const [stats, setStats] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [companyModal, setCompanyModal] = useState(null); // { company } | null
   const [dirigenteModal, setDirigenteModal] = useState(null); // { company } | null
 
-  function handleLogout() {
-    logout();
-    navigate('/login');
-  }
-
   function load() {
     api.listCompanies(token).then(({ companies }) => setCompanies(companies)).catch((err) => setError(err.message));
-    api.getPlatformStats(token).then(setStats).catch((err) => setError(err.message));
   }
 
   useEffect(load, [token]);
@@ -62,114 +53,73 @@ export default function SuperAdminDashboard() {
   }
 
   return (
-    <div className="page">
-      <header className="topbar">
-        <div>
-          <strong>Gestione Turni</strong> <span className="badge badge-admin">Super Admin</span>
+    <>
+      <h1>Società</h1>
+
+      {error && <div className="error">{error}</div>}
+      {notice && <div className="notice">{notice}</div>}
+
+      <section className="card">
+        <div className="section-header">
+          <h2>Società</h2>
+          <button className="button-link" onClick={() => setCompanyModal({ company: null })}>
+            + Nuova società
+          </button>
         </div>
-        <button className="link-button" onClick={handleLogout}>
-          Esci
-        </button>
-      </header>
 
-      <main className="content content-wide">
-        <h1>Ciao, {user.username}</h1>
-
-        {error && <div className="error">{error}</div>}
-        {notice && <div className="notice">{notice}</div>}
-
-        {stats && (
-          <section className="card">
-            <h2>Statistiche piattaforma</h2>
-            <dl className="profile-list">
-              <div className="profile-row">
-                <dt>Società totali</dt>
-                <dd>{stats.companiesTotal}</dd>
-              </div>
-              <div className="profile-row">
-                <dt>Società attive</dt>
-                <dd>{stats.companiesActive}</dd>
-              </div>
-              <div className="profile-row">
-                <dt>Dirigenti</dt>
-                <dd>{stats.usersByRole.dirigente}</dd>
-              </div>
-              <div className="profile-row">
-                <dt>Responsabili</dt>
-                <dd>{stats.usersByRole.admin}</dd>
-              </div>
-              <div className="profile-row">
-                <dt>Dipendenti</dt>
-                <dd>{stats.usersByRole.user}</dd>
-              </div>
-              <div className="profile-row">
-                <dt>Utenti totali</dt>
-                <dd>{stats.usersTotal}</dd>
-              </div>
-            </dl>
-          </section>
-        )}
-
-        <section className="card">
-          <div className="section-header">
-            <h2>Società</h2>
-            <button className="button-link" onClick={() => setCompanyModal({ company: null })}>
-              + Nuova società
-            </button>
-          </div>
-
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Nome</th>
-                <th>Email</th>
-                <th>Telefono</th>
-                <th>Stato</th>
-                <th>Dirigenti</th>
-                <th>Utenti totali</th>
-                <th>Azioni</th>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Email</th>
+              <th>Telefono</th>
+              <th>Stato</th>
+              <th>Dirigenti</th>
+              <th>Utenti totali</th>
+              <th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody>
+            {companies.map((c) => (
+              <tr key={c.id}>
+                <td>{c.name}</td>
+                <td>{c.email || '-'}</td>
+                <td>{c.phone || '-'}</td>
+                <td>
+                  <span
+                    className={`request-status ${c.isActive ? 'request-status-approved' : 'request-status-rejected'}`}
+                  >
+                    {c.isActive ? 'Attiva' : 'Disattivata'}
+                  </span>
+                </td>
+                <td>{c.dirigentiCount}</td>
+                <td>{c.usersCount}</td>
+                <td className="actions-cell">
+                  <button className="table-action" onClick={() => setCompanyModal({ company: c })}>
+                    Modifica
+                  </button>
+                  <button className="table-action" onClick={() => setDirigenteModal({ company: c })}>
+                    + Dirigente
+                  </button>
+                  <button
+                    className={`table-action ${c.isActive ? 'table-action-danger' : ''}`}
+                    onClick={() => handleToggleActive(c)}
+                  >
+                    {c.isActive ? 'Disattiva' : 'Riattiva'}
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {companies.map((c) => (
-                <tr key={c.id}>
-                  <td>{c.name}</td>
-                  <td>{c.email || '-'}</td>
-                  <td>{c.phone || '-'}</td>
-                  <td>
-                    <span className={`request-status ${c.isActive ? 'request-status-approved' : 'request-status-rejected'}`}>
-                      {c.isActive ? 'Attiva' : 'Disattivata'}
-                    </span>
-                  </td>
-                  <td>{c.dirigentiCount}</td>
-                  <td>{c.usersCount}</td>
-                  <td className="actions-cell">
-                    <button className="table-action" onClick={() => setCompanyModal({ company: c })}>
-                      Modifica
-                    </button>
-                    <button className="table-action" onClick={() => setDirigenteModal({ company: c })}>
-                      + Dirigente
-                    </button>
-                    <button
-                      className={`table-action ${c.isActive ? 'table-action-danger' : ''}`}
-                      onClick={() => handleToggleActive(c)}
-                    >
-                      {c.isActive ? 'Disattiva' : 'Riattiva'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {companies.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="hint">
-                    Nessuna società ancora creata.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </section>
-      </main>
+            ))}
+            {companies.length === 0 && (
+              <tr>
+                <td colSpan={7} className="hint">
+                  Nessuna società ancora creata.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </section>
 
       {companyModal && (
         <CompanyFormModal
@@ -186,7 +136,7 @@ export default function SuperAdminDashboard() {
           onClose={() => setDirigenteModal(null)}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -286,7 +236,12 @@ function DirigenteFormModal({ company, onSave, onClose }) {
         <h2>Nuovo dirigente per "{company.name}"</h2>
 
         <label htmlFor="dirigente-username">Username</label>
-        <input id="dirigente-username" value={form.username} onChange={(e) => update('username', e.target.value)} required />
+        <input
+          id="dirigente-username"
+          value={form.username}
+          onChange={(e) => update('username', e.target.value)}
+          required
+        />
 
         <label htmlFor="dirigente-email">Email</label>
         <input

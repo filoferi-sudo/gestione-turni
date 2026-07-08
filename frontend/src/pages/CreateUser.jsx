@@ -3,8 +3,6 @@ import { Link, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
-const ROLE_LABELS = { admin: 'Responsabile', dirigente: 'Dirigente', user: 'Dipendente' };
-
 export default function CreateUser() {
   const { token, user } = useAuth();
   const location = useLocation();
@@ -23,7 +21,8 @@ export default function CreateUser() {
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState(null);
 
-  const backHref = user.role === 'dirigente' ? '/dirigente' : '/admin';
+  // Pagina figlia della sezione Personale (dentro il layout con sidebar): si torna all'elenco.
+  const backHref = user.role === 'dirigente' ? '/dirigente/personale' : '/admin/personale';
 
   // Aree operative disponibili, raggruppate per sede: un dipendente può appartenere a più aree
   // anche di sedi diverse.
@@ -70,18 +69,11 @@ export default function CreateUser() {
   }
 
   return (
-    <div className="page">
-      <header className="topbar">
-        <div>
-          <strong>Gestione Turni</strong> <span className="badge badge-admin">{ROLE_LABELS[user.role]}</span>
-        </div>
-        <Link to={backHref} className="link-button">
-          Torna alla dashboard
-        </Link>
-      </header>
-
-      <main className="content">
-        <h1>{form.role === 'admin' ? 'Nuovo responsabile' : 'Nuovo utente'}</h1>
+    <>
+      <h1>{form.role === 'admin' ? 'Nuovo responsabile' : 'Nuovo utente'}</h1>
+      <p className="subtitle">
+        <Link to={backHref}>← Torna a Personale</Link>
+      </p>
 
         <form className="card" onSubmit={handleSubmit}>
           {isDirigente && (
@@ -166,7 +158,6 @@ export default function CreateUser() {
             <p className="hint">Il codice non sarà più visibile dopo il primo accesso dell'utente.</p>
           </section>
         )}
-      </main>
-    </div>
+    </>
   );
 }

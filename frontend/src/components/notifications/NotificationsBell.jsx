@@ -4,7 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { usePolling } from '../../hooks/usePolling';
 
 // Tempo relativo compatto in italiano ("adesso", "5 min fa", "3 h fa", "2 g fa", poi data).
-function relativeTime(iso) {
+// Esportata perché riusata dalla pagina Comunicazioni (elenco notifiche a pagina piena).
+export function relativeTime(iso) {
   const then = new Date(iso).getTime();
   const diffMin = Math.round((Date.now() - then) / 60000);
   if (diffMin < 1) return 'adesso';
