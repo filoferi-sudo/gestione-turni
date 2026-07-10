@@ -1841,3 +1841,64 @@ l'utente. Tutto verificato in locale; migrazioni produzione in sospeso su confer
 | Storico comunicazioni (scoping società) | E7 9/9 |
 | Funzionamento in demo (soppressione + storico) | E1 + E7 |
 | Best-effort non bloccante (provider ko) | E1 (failed non lancia) |
+
+---
+
+# Iniziativa: Sezione Report (analisi operativa del personale)
+
+> Strumento per titolare/responsabile per capire la situazione del personale in pochi secondi.
+> **Sola lettura, puramente additiva**: aggrega dati già presenti riusando le logiche esistenti,
+> **nessun sistema parallelo**, **nessuna nuova tabella/colonna**, **nessuna migrazione DB**.
+> **Non valuta i dipendenti**: solo dati oggettivi + alert informativi (disclaimer esplicito in UI —
+> la decisione finale resta al responsabile). Dettaglio architetturale in `PROJECT_CONTEXT.md` →
+> sezione "Sezione Report (analisi operativa del personale)".
+
+**Completata**: 2026-07-10.
+
+## Cosa è stato fatto
+
+- **Backend** (dominio isolato, coerente con la modularità del progetto):
+  - `services/reportService.js` — cuore dell'aggregazione riusato da entrambi gli endpoint:
+    `buildOverview` (scheda per dipendente) e `buildDetail` (dettaglio + confronto col periodo
+    precedente di pari durata + storico turni). Una sola `getExpandedShifts` + due query aggregate
+    (cancellazioni, proposte) raggruppate per utente (nessun N+1). Alert/stato operativo con soglie in
+    costanti (`ALERT_THRESHOLDS`, `STATUS_TOLERANCE_HOURS`). Monte ore previsto proporzionato dal
+    massimale contrattuale settimanale/mensile alla durata del periodo (`expectedHoursForPeriod`).
+  - `controllers/reportController.js` — validazione periodo (default mese corrente, 400 su date non
+    valide/incoerenti), autorizzazione: overview `requireManager`; detail `authenticate` + guardia
+    fine (dipendente solo su sé → 403 altrove; manager qualunque della società → 404 fuori società).
+  - `routes/reports.js` (`GET /api/reports/employees`, `GET /api/reports/employees/:id`) + registrazione
+    in `app.js`.
+- **Frontend** (nuova cartella `components/reports/`):
+  - `ReportPage.jsx` (riscritta) istrada per ruolo; `ManagerReport` (filtri + griglia + dettaglio
+    inline, polling 60s sull'elenco), `EmployeeReport` (self-service), `EmployeeReportCard`,
+    `EmployeeReportDetail`, `ReportFilters`, helper `reportPeriods.js`/`reportFormat.jsx`.
+  - `api/client.js`: `getReportOverview`, `getEmployeeReport`. Stili `.report-*` in `styles.css`
+    (palette esistente). Ancora tour `data-tour="hours-stats"` spostata sulla card filtri del Report.
+
+## Dati riusati (nessun sistema parallelo)
+
+`shifts` via `getExpandedShifts`/`shiftDurationHours` (ore lavorate/pianificate, turni, sostituzioni
+prese) · `user_contracts` (monte ore previsto) · `cancellation_requests` (richieste per stato) ·
+`substitution_proposals` (proposte ricevute per stato, scoping via JOIN su `shifts`) · `user_areas`
+(area = "ruolo/reparto", filtro).
+
+## Verifica svolta (locale, scenario demo "ristorante", 32 dipendenti)
+
+- **Service**: `buildOverview`/`buildDetail` con aggregati coerenti (ore, differenza, stato, alert,
+  confronto periodo precedente 31→31 giorni, storico 19–20 turni).
+- **HTTP**: overview manager 200 (32 dip.) e filtrata per `userId`; detail manager 200; detail
+  dipendente su sé 200, su altro **403**; overview come dipendente **403** (`requireManager`); senza
+  token **401**; periodo non valido **400**; detail cross-società **404** (isolamento).
+- **UI end-to-end** (browser): griglia schede con badge stato/alert, filtro area (Cucina → 10 dip.
+  tutti appartenenti all'area), dettaglio con tutte le sezioni (info, analisi ore, richieste,
+  statistiche operative, confronto periodi con variazioni colorate, alert + disclaimer, storico),
+  vista dipendente self-service (solo propri dati, senza filtri/elenco). Build frontend OK. **Zero
+  errori console dagli endpoint `/api/reports/*`.**
+
+## Note
+
+- **Nessuna migrazione DB** (feature sola lettura su tabelle esistenti).
+- Da valutare in futuro (non fatto, per scelta di semplicità): esportazione CSV/PDF, assegnazione
+  esclusiva della copertura, report di copertura del fabbisogno aggregati. Il Report deve restare
+  **raccolta di dati oggettivi**, mai valutazione automatica del personale.

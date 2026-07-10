@@ -121,6 +121,26 @@ export const api = {
 
   getHoursStats: (token, userId) => request(`/stats/hours${userId ? `?userId=${userId}` : ''}`, { token }),
 
+  // Report operativo del personale (sezione Report). overview = vista generale (manager),
+  // detail = scheda dipendente + confronto periodi (manager o il dipendente stesso).
+  getReportOverview: (token, { start, end, areaId, sedeId, userId } = {}) => {
+    const params = new URLSearchParams();
+    if (start) params.set('start', start);
+    if (end) params.set('end', end);
+    if (areaId) params.set('areaId', areaId);
+    if (sedeId) params.set('sedeId', sedeId);
+    if (userId) params.set('userId', userId);
+    const qs = params.toString();
+    return request(`/reports/employees${qs ? `?${qs}` : ''}`, { token });
+  },
+  getEmployeeReport: (token, id, { start, end } = {}) => {
+    const params = new URLSearchParams();
+    if (start) params.set('start', start);
+    if (end) params.set('end', end);
+    const qs = params.toString();
+    return request(`/reports/employees/${id}${qs ? `?${qs}` : ''}`, { token });
+  },
+
   // Impostazioni della propria società (Fase 7, solo Dirigente)
   getCompanySettings: (token) => request('/company/settings', { token }),
   saveCompanySettings: (payload, token) => request('/company/settings', { method: 'PUT', body: payload, token }),

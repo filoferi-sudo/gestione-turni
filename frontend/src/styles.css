@@ -1668,3 +1668,305 @@ textarea {
   color: #92400e;
   margin-top: 4px;
 }
+
+/* ---------------------------------------------------------------------------
+   Sezione Report (analisi operativa del personale)
+   Riusa la palette esistente (#2f6f4f verde, #1f2430 scuro, #6b7280 grigio).
+   --------------------------------------------------------------------------- */
+
+/* Filtri */
+.report-filters {
+  gap: 14px;
+}
+
+.report-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+}
+
+.report-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.report-filter > label {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.report-filter select,
+.report-filter input[type='date'] {
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+  min-width: 180px;
+}
+
+.report-period-label {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* Griglia schede dipendente */
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.report-card {
+  /* è un <button>: azzera lo stile bottone globale */
+  margin: 0;
+  padding: 18px 20px;
+  background: white;
+  color: inherit;
+  text-align: left;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.report-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  border-color: #2f6f4f;
+}
+
+.report-card:active {
+  transform: translateY(1px);
+}
+
+.report-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.report-card-name {
+  margin: 0;
+  font-size: 17px;
+  color: #1f2430;
+}
+
+.report-card-role {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.report-card-contract {
+  margin: 0;
+  font-size: 13px;
+  color: #374151;
+}
+
+.report-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px 10px;
+  border-top: 1px solid #f0f0f2;
+  padding-top: 12px;
+}
+
+.report-card-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.report-metric-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2430;
+  line-height: 1.2;
+}
+
+.report-metric-label {
+  font-size: 11px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.report-diff-pos {
+  color: #2f6f4f;
+}
+
+.report-diff-neg {
+  color: #b91c1c;
+}
+
+.report-card-alerts,
+.report-alerts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.report-card-alerts {
+  border-top: 1px solid #f0f0f2;
+  padding-top: 10px;
+}
+
+.report-card-alerts li,
+.report-alerts li {
+  font-size: 12.5px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.report-alerts li {
+  font-size: 14px;
+}
+
+/* Badge stato operativo (descrizione oggettiva, non un giudizio) */
+.report-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.report-status-ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.report-status-over {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.report-status-under {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.report-status-neutral {
+  background: #eef0f3;
+  color: #4b5563;
+}
+
+/* Scheda dettaglio */
+.report-back {
+  margin: 0 0 12px;
+  padding: 6px 12px;
+  background: #eef0f3;
+  color: #1f2430;
+  font-size: 13px;
+}
+
+.report-back:hover {
+  background: #e2e5ea;
+}
+
+.report-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.report-detail-head h2 {
+  margin: 0;
+}
+
+.report-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 20px;
+  margin: 4px 0 0;
+}
+
+.report-info div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.report-info dt {
+  font-size: 12px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.report-info dd {
+  margin: 0;
+  font-size: 15px;
+  color: #1f2430;
+  font-weight: 600;
+}
+
+.report-note {
+  margin-top: 8px;
+}
+
+.report-requests {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.report-request-block h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #1f2430;
+}
+
+.report-breakdown {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.report-breakdown li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  padding: 6px 10px;
+  background: #f9fafb;
+  border-radius: 6px;
+}
+
+.report-breakdown li span {
+  color: #6b7280;
+}
+
+.report-breakdown li strong {
+  color: #1f2430;
+}
+
+.report-compare td:not(:first-child),
+.report-compare th:not(:first-child) {
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .report-card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
