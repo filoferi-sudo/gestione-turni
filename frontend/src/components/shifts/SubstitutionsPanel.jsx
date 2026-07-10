@@ -60,7 +60,7 @@ export default function SubstitutionsPanel({ mode, areaId, areaName }) {
   }
 
   return (
-    <section className="card">
+    <section className="card" data-tour="substitutions-panel">
       <h2>
         Sostituzioni disponibili{areaName ? ` — ${areaName}` : ''} {mode === 'manage' ? '(non ancora accettate)' : ''}
       </h2>
@@ -90,7 +90,7 @@ export default function SubstitutionsPanel({ mode, areaId, areaName }) {
                 </button>
               ) : (
                 <span className="shift-item-actions">
-                  <button className="table-action" onClick={() => setCandidatesShift(shift)}>
+                  <button data-tour="find-replacement" className="table-action" onClick={() => setCandidatesShift(shift)}>
                     Trova sostituzione
                   </button>
                   <button

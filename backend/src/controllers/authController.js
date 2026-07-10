@@ -51,7 +51,19 @@ function toSafeUser(user) {
     category: user.category,
     companyId: user.company_id,
     mustChangePassword: user.must_change_password,
+    // isDemo: il frontend distingue la sessione demo (banner + tour) senza cambiare i controller.
+    isDemo: user.is_demo === true,
   };
+}
+
+// Firma un JWT di sessione (8h). Estratto per riuso dal demo-login (Fase D3), a comportamento
+// identico all'inline di login/firstLoginSetup: stessa forma di payload e stessa scadenza.
+function signSessionToken(user) {
+  return jwt.sign(
+    { id: user.id, username: user.username, role: user.role, companyId: user.company_id, type: 'session' },
+    JWT_SECRET,
+    { expiresIn: SESSION_EXPIRES_IN }
+  );
 }
 
 // areas è recuperato con una query separata (non sta nel JWT: cambia raramente ma la dashboard
@@ -71,7 +83,7 @@ async function login(req, res) {
   }
 
   const { rows } = await pool.query(
-    `SELECT u.*, c.is_active AS company_is_active
+    `SELECT u.*, c.is_active AS company_is_active, c.is_demo AS is_demo
        FROM users u
        LEFT JOIN companies c ON c.id = u.company_id
       WHERE u.username = $1`,
@@ -199,7 +211,14 @@ async function passwordPolicy(req, res) {
 
 // GET /api/auth/me
 async function me(req, res) {
-  const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+  // JOIN companies per esporre is_demo (colonna della società) nel profilo: il frontend, che
+  // ri-carica l'utente da qui al mount, deve sapere se la sessione è demo (banner + tour).
+  const { rows } = await pool.query(
+    `SELECT u.*, c.is_demo AS is_demo
+       FROM users u LEFT JOIN companies c ON c.id = u.company_id
+      WHERE u.id = $1`,
+    [req.user.id]
+  );
   const user = rows[0];
   if (!user) {
     return res.status(404).json({ error: 'Utente non trovato' });
@@ -207,4 +226,4 @@ async function me(req, res) {
   return res.json({ user: await toSafeUserWithAreas(user) });
 }
 
-module.exports = { login, firstLoginSetup, me, passwordPolicy };
+module.exports = { login, firstLoginSetup, me, passwordPolicy, toSafeUserWithAreas, signSessionToken };

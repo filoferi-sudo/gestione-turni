@@ -1349,9 +1349,84 @@ sezione classifica i dati gestiti e definisce l'approccio alla cifratura at-rest
   codice. Non applicare la cifratura a un campo "di nascosto" in una modifica futura senza
   discuterne: cambia il modo in cui quel dato va letto/scritto ovunque.
 
+## Demo Framework (completato, fasi D1–D6)
+
+Funzionalità **permanente** dell'architettura: PoolShift può generare ambienti dimostrativi
+realistici per qualsiasi settore. Filosofia: il software resta unico, **cambiano solo i dati
+caricati, mai la logica** — il Demo Framework è un layer sopra il gestionale esistente.
+Piano a 6 fasi **completato** (2026-07-10, tutto verificato in locale; migrazione produzione di
+`is_demo`/`demo_state`/`personas` da eseguire su conferma). Dettaglio fase per fase e riepilogo
+finale in `IMPLEMENTATION_PROGRESS.md` → "Iniziativa: Demo Framework".
+
+Architettura: **Framework → Scenario → Dataset → Tour guidato → Software (invariato)**.
+
+- **Isolamento (decisione vincolante)**: le società demo vivono nello **stesso database** delle
+  reali, flaggate con `companies.is_demo` (default FALSE). Riusano integralmente l'isolamento
+  multi-tenant per `company_id`: una sessione demo è un normale utente di una società demo.
+  Guardia unica `demo/framework/guard.js:assertDemoCompany` = **chokepoint anti-dati-reali**,
+  prima istruzione di OGNI percorso di scrittura del framework (loader, reset, azioni simulate);
+  il reset cancella solo con predicato ridondante `AND is_demo=TRUE`. Non aggiungere percorsi di
+  scrittura demo che aggirino questa guardia.
+- **Framework generico, zero logica di settore** (`backend/src/demo/framework/`): config (env
+  `DEMO_MODE`/`DEMO_RESEED_AFTER_DAYS`/`DEMO_PERSONA_PASSWORD`), guard, rng deterministico seedato,
+  anchor (date come offset dal "giorno 0"), registry, loader, reset. Tutta la conoscenza specifica
+  (ristorante, hotel, RSA, ...) vive nei moduli scenario (`backend/src/demo/scenarios/<id>/`):
+  **aggiungere uno scenario = una cartella + una riga in `registry.js`**, il framework non si tocca.
+- **Contratto scenario**: `{ id, name, version, personas[], logoPlaceholder, tours[], build() }`;
+  `build({ anchorDate, rng, helpers })` è una funzione PURA che restituisce un dataset a sezioni
+  generiche con ref simbolici e date a offset (documentato per esteso in testa a
+  `demo/framework/loader.js`). Version bump dello scenario ⇒ ri-caricamento lazy.
+- **Caricamento in transazione unica** (`pool.connect()` + BEGIN/COMMIT + `pg_advisory_xact_lock`
+  per scenario): o l'ambiente demo è completo, o non esiste. È il **primo uso di transazioni nel
+  progetto**, deliberatamente confinato al loader demo — i controller esistenti restano a query
+  autonome, non estendere le transazioni altrove senza discuterne.
+- **Re-anchoring lazy senza cron** (coerente col vincolo serverless, stesso principio
+  dell'escalation Fase 7): stato in tabella `demo_state` (`anchor_date`, `dataset_version`,
+  `tour_context` coi ganci dei tour risolti in id reali); al demo-login, ambiente stantio
+  (`DEMO_RESEED_AFTER_DAYS`, default 7) o versione superata ⇒ reset + reload con ancora = oggi.
+- **Demo = dominio proprio** (`/api/demo/*`), attivato da env `DEMO_MODE=true`, **non legato al
+  Super Admin** (che per vincolo non gestisce dati operativi): il framework si auto-amministra.
+  Default sicuro: demo spenta ⇒ rotte demo rispondono 404, il bottone "Prova la demo" non compare.
+- **Utenti demo**: username con prefisso obbligatorio `demo-` (validato dal loader — username/email
+  sono UNIQUE di piattaforma, il namespace riservato evita collisioni con account reali),
+  `must_change_password=FALSE`, un'unica password bcrypt per load (casuale in produzione, mai
+  comunicata: si entra solo via demo-login; `DEMO_PERSONA_PASSWORD` per ispezione in locale).
+- **Voci demo senza funzionalità corrispondente nel software** (decisione con l'utente): ferie →
+  richieste di cancellazione + opt-out con nota "Ferie"; logo aziendale → placeholder solo frontend
+  nel metadata dello scenario (nessuna colonna DB); gestione documenti esclusa dalla v1.
+
 ## Changelog / aggiornamenti
 
 Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cosa ricordare.
+
+- **2026-07-10** — **Demo Framework — Fasi D2–D5**. **D2**: primo scenario `ristorante`
+  (`backend/src/demo/scenarios/ristorante/`, ~35 persone hand-authored, contratti/disponibilità
+  differenziati, 55 turni fissi ancorati a −90gg, 48 fabbisogni, 4 corsi, storico + stati pendenti
+  generati con RNG deterministico; invariante ore fail-fast), loader generico completo con
+  transazione + advisory lock, `npm run demo:load`/`demo:reset`. **D3**: `POST /api/demo/login`
+  (lazy load/re-anchor, JWT di sessione della persona, forma identica a `/auth/login`) +
+  `/api/demo/reset`; `isDemo` in **entrambe** le copie di `toSafeUser` (via JOIN `companies.is_demo`);
+  bottone "Prova la demo" + persona picker in `Login.jsx`, `DemoBanner` in `AppLayout` (Demo Libera
+  completa). **D4**: engine Tour Guidato scenario-agnostico (`frontend/src/tour/*`,
+  `constants/tours/*`) — state machine + sessionStorage, overlay spotlight z-index 70, `data-tour`
+  sulle nav, criteri `next`/`route`/`click`. **D5**: **tour commerciale** (12 step, una giornata
+  lavorativa) + azioni simulate lato server (`demo/framework/simulations.js`) che riusano
+  `acceptProposalForUser` (estratto da `acceptProposal`, wrapper invariato) — l'altro attore
+  (dipendente che accetta) è simulato senza duplicare logica; endpoint `/api/demo/tour/actions|checks/:name`
+  (guardati `requireDemoCompany`, 403 su società reale); criteri `poll`/`action` nell'engine.
+  Nuova colonna `demo_state.personas`. Tutto verificato (e2e backend 13/13 + regressione accept, tour
+  end-to-end nel browser). **Migrazione produzione** (is_demo/demo_state/personas) su conferma.
+- **2026-07-10** — **Demo Framework — Fase D1 (fondamenta)**. Nuova iniziativa permanente (vedi
+  sezione "Demo Framework" sopra e `IMPLEMENTATION_PROGRESS.md`). **Schema** (idempotente):
+  `companies.is_demo` + indice parziale; tabella `demo_state` (una istanza per scenario in v1,
+  UNIQUE su `scenario_id`). **Nuovo dominio** `backend/src/demo/framework/` (config/guard/rng/
+  anchor/registry/loader/reset — motore generico completo, contratto scenario documentato in
+  `loader.js`), `controllers/demoController.js` + `routes/demo.js` (`GET /api/demo/status`
+  pubblico), 2 righe in `app.js`, sezione demo in `.env.example`. **Decisioni**: società demo nello
+  stesso DB isolate da `is_demo` + chokepoint `assertDemoCompany`; transazione unica + advisory
+  lock nel loader (primo uso di transazioni, confinato lì); re-anchoring lazy senza cron; dominio
+  demo non legato al Super Admin; default spento (404). Verificato: migrazione 2×, guardie,
+  status nei due stati, regressione login/health. **Migrazione produzione in sospeso** con le altre.
 
 - **2026-07-08** — **Riorganizzazione struttura interfaccia: sidebar + pagine per sezione** (solo
   frontend, nessuna modifica backend/schema, nessuna funzionalità rimossa). Le dashboard

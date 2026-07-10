@@ -52,6 +52,8 @@ export default function ManagerLayout({ base }) {
     to: s.path ? `${base}/${s.path}` : base,
     label: s.label,
     end: s.end,
+    // Gancio stabile per il Tour Guidato, indipendente dal ruolo/base (la home è 'nav-dashboard').
+    tourId: `nav-${s.path || 'dashboard'}`,
   }));
 
   return (

@@ -77,7 +77,7 @@ export default function NotificationsBell() {
   }
 
   return (
-    <div className="notif-root" ref={rootRef}>
+    <div className="notif-root" ref={rootRef} data-tour="notifications-bell">
       <button
         type="button"
         className="notif-bell"

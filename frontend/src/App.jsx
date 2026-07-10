@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { TourProvider } from './tour/TourProvider';
 import Login from './pages/Login';
 import FirstAccessSetup from './pages/FirstAccessSetup';
 import CreateUser from './pages/CreateUser';
@@ -63,7 +64,8 @@ function managerRoutes(base) {
 
 export default function App() {
   return (
-    <Routes>
+    <TourProvider>
+      <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/first-access" element={<FirstAccessSetup />} />
 
@@ -122,6 +124,7 @@ export default function App() {
 
       <Route path="/" element={<RoleHome />} />
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+    </TourProvider>
   );
 }

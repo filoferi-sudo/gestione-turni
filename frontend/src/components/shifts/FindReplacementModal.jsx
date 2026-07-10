@@ -79,7 +79,7 @@ export default function FindReplacementModal({ shift, onClose }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-card-wide" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card modal-card-wide" data-tour="find-replacement-modal" onClick={(e) => e.stopPropagation()}>
         <h2>Trova sostituzione</h2>
         <p className="hint">
           Turno scoperto del <strong>{shift.date}</strong> · {shift.startTime}-{shift.endTime}. I candidati
@@ -139,7 +139,7 @@ export default function FindReplacementModal({ shift, onClose }) {
           <button type="button" className="button-secondary" onClick={onClose}>
             Chiudi
           </button>
-          <button type="button" onClick={handleSend} disabled={sending || selected.size === 0}>
+          <button type="button" data-tour="send-proposal" onClick={handleSend} disabled={sending || selected.size === 0}>
             {sending ? 'Invio...' : `Invia proposta${selected.size > 0 ? ` (${selected.size})` : ''}`}
           </button>
         </div>
