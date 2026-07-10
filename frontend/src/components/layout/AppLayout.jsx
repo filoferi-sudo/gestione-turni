@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import NotificationsBell from '../notifications/NotificationsBell';
 import DemoBanner from '../demo/DemoBanner';
+import EmailVerificationBanner from '../notifications/EmailVerificationBanner';
 
 const ROLE_LABELS = { admin: 'Responsabile', dirigente: 'Dirigente', user: 'Dipendente', superadmin: 'Super Admin' };
 
@@ -60,6 +61,7 @@ export default function AppLayout({ navItems, sidebarExtra, showBell = true }) {
         </header>
 
         <DemoBanner />
+        <EmailVerificationBanner />
 
         <main className="content content-wide">
           <Outlet />

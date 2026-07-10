@@ -57,6 +57,13 @@ export const api = {
     request('/auth/first-login-setup', { method: 'POST', body: { newPassword }, token: firstAccessToken }),
   me: (token) => request('/auth/me', { token }),
   passwordPolicy: () => request('/auth/password-policy'),
+  // Verifica e cambio email (Fase E2). verifyEmail è pubblico (il token è la prova, nessuna sessione).
+  sendVerificationEmail: (token) => request('/auth/send-verification', { method: 'POST', token }),
+  verifyEmail: (verifyToken) => request('/auth/verify-email', { method: 'POST', body: { token: verifyToken } }),
+  changeEmail: (email, token) => request('/auth/change-email', { method: 'POST', body: { email }, token }),
+  // Email Actions (Fase E5): describe (GET, non muta) + execute (POST, consuma il token). Pubblici.
+  describeEmailAction: (actionToken) => request(`/email-actions/${actionToken}`),
+  executeEmailAction: (actionToken) => request(`/email-actions/${actionToken}`, { method: 'POST' }),
   // Demo Framework: stato pubblico (bottone "Prova la demo"), ingresso per persona, reset ambiente.
   demoStatus: () => request('/demo/status'),
   demoLogin: (persona, scenarioId = 'ristorante') =>
@@ -121,6 +128,12 @@ export const api = {
   listNotifications: (token) => request('/notifications', { token }),
   markNotificationRead: (id, token) => request(`/notifications/${id}/read`, { method: 'POST', token }),
   markAllNotificationsRead: (token) => request('/notifications/read-all', { method: 'POST', token }),
+  // Preferenze notifiche email (Fase E6): self-service.
+  getNotificationPreferences: (token) => request('/notifications/preferences', { token }),
+  saveNotificationPreferences: (payload, token) =>
+    request('/notifications/preferences', { method: 'PUT', body: payload, token }),
+  // Storico email della società (Fase E7): responsabile/dirigente.
+  listEmailLog: (token) => request('/email-log', { token }),
 
   listCourses: (token, { start, end, areaId, instructorId }) => {
     const params = new URLSearchParams({ start, end, areaId });

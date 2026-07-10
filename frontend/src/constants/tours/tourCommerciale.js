@@ -7,11 +7,11 @@
 // DIPENDENTE (accetta) è simulata lato server dal framework demo, riusando gli helper reali.
 export default {
   id: 'commerciale',
-  name: 'Una giornata con PoolShift',
+  name: 'Una giornata con Planivo',
   steps: [
     {
       id: 'benvenuto',
-      title: 'Benvenuto in PoolShift',
+      title: 'Benvenuto in Planivo',
       body: 'Ti mostriamo come il software gestisce da solo un imprevisto quotidiano: un turno che resta scoperto. Bastano pochi clic.',
       target: null,
       advanceOn: { type: 'next' },
@@ -106,7 +106,7 @@ export default {
     },
     {
       id: 'conclusione',
-      title: 'Ecco il valore di PoolShift',
+      title: 'Ecco il valore di Planivo',
       body: 'Un imprevisto risolto in un minuto, senza caos. Ora esplora liberamente: la demo è tutta tua.',
       target: null,
       advanceOn: { type: 'next' },

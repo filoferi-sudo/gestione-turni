@@ -3,6 +3,8 @@ import { useManagerWorkspace } from '../../context/ManagerWorkspaceContext';
 import SediManagement from '../dirigente/SediManagement';
 import AreasManagement from '../../components/areas/AreasManagement';
 import SubstitutionSettingsCard from '../../components/management/SubstitutionSettingsCard';
+import EmailManager from '../../components/profile/EmailManager';
+import NotificationPreferences from '../../components/notifications/NotificationPreferences';
 
 // Sezione Impostazioni per Dirigente/Responsabile. Il Dirigente gestisce la struttura della
 // società (sedi, aree operative, regole aziendali come l'escalation delle Sostituzioni); il
@@ -27,10 +29,6 @@ export default function ImpostazioniPage() {
             <dd>{user.username}</dd>
           </div>
           <div className="profile-row">
-            <dt>Email</dt>
-            <dd>{user.email}</dd>
-          </div>
-          <div className="profile-row">
             <dt>Telefono</dt>
             <dd>{user.phone || '-'}</dd>
           </div>
@@ -40,6 +38,10 @@ export default function ImpostazioniPage() {
           </div>
         </dl>
       </section>
+
+      <EmailManager />
+
+      <NotificationPreferences />
 
       {isDirigente ? (
         <>

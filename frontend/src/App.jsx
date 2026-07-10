@@ -4,6 +4,8 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { TourProvider } from './tour/TourProvider';
 import Login from './pages/Login';
 import FirstAccessSetup from './pages/FirstAccessSetup';
+import VerifyEmail from './pages/VerifyEmail';
+import EmailAction from './pages/EmailAction';
 import CreateUser from './pages/CreateUser';
 
 import ManagerLayout from './components/layout/ManagerLayout';
@@ -68,6 +70,11 @@ export default function App() {
       <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/first-access" element={<FirstAccessSetup />} />
+      {/* Verifica email (Fase E2): rotta PUBBLICA, il link arriva via email e può essere aperto
+          da un browser non loggato. */}
+      <Route path="/verifica-email" element={<VerifyEmail />} />
+      {/* Email Actions (Fase E5): pagina pubblica di conferma azione (accetta/rifiuta, approva/rifiuta). */}
+      <Route path="/azione-email" element={<EmailAction />} />
 
       <Route
         path="/dashboard"

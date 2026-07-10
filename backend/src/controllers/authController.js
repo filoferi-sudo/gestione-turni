@@ -51,6 +51,11 @@ function toSafeUser(user) {
     category: user.category,
     companyId: user.company_id,
     mustChangePassword: user.must_change_password,
+    // Stato verifica email (Fase E2): il frontend mostra il banner "verifica la tua email" e il
+    // flusso di cambio (pendingEmail = nuovo indirizzo in attesa di conferma). Tenuto allineato
+    // all'altra copia di toSafeUser in userController — vedi PROJECT_CONTEXT "toSafeUser duplicata".
+    emailVerified: user.email_verified === true,
+    pendingEmail: user.pending_email || null,
     // isDemo: il frontend distingue la sessione demo (banner + tour) senza cambiare i controller.
     isDemo: user.is_demo === true,
   };

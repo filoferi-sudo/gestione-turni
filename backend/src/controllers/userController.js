@@ -5,6 +5,7 @@ const { fetchUserAreas, fetchUserAreasBatch } = require('../services/userAreas')
 const { validatePassword } = require('../utils/passwordPolicy');
 const { bcryptRounds } = require('../config/security');
 const audit = require('../services/auditService');
+const { issueAndSendVerification } = require('../services/emailVerificationService');
 
 function toSafeUser(user) {
   return {
@@ -16,6 +17,9 @@ function toSafeUser(user) {
     category: user.category,
     companyId: user.company_id,
     mustChangePassword: user.must_change_password,
+    // Stato verifica email (Fase E2): allineato all'altra copia di toSafeUser in authController.
+    emailVerified: user.email_verified === true,
+    pendingEmail: user.pending_email || null,
     // isDemo (colonna della società): tenuto allineato all'altra copia di toSafeUser in
     // authController — vedi PROJECT_CONTEXT "toSafeUser duplicata". Fonte autoritativa per il
     // frontend è comunque /auth/me; qui è per coerenza. false se la colonna non è nel result set.
@@ -110,6 +114,15 @@ async function createUser(req, res) {
   }
 
   await audit.logFromReq(req, { action: 'user.create', entityType: 'user', entityId: user.id, metadata: { role: targetRole, username } });
+
+  // Invia il link di verifica al nuovo indirizzo (best-effort: un problema di invio non deve far
+  // fallire la creazione dell'account). Con provider no-op/gate/demo il comportamento è già gestito
+  // dal canale email; qui assorbiamo solo eventuali errori di emissione token.
+  try {
+    await issueAndSendVerification({ userId: user.id, companyId: user.company_id, username, toEmail: email });
+  } catch (err) {
+    console.error('[users] invio verifica email alla creazione fallito (non bloccante):', err.message);
+  }
 
   return res.status(201).json({
     user: { ...toSafeUser(user), areas: await fetchUserAreas(user.id) },

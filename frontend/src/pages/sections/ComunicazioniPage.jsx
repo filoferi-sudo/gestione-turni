@@ -4,16 +4,42 @@ import { useAuth } from '../../context/AuthContext';
 import { usePolling } from '../../hooks/usePolling';
 import { relativeTime } from '../../components/notifications/NotificationsBell';
 
-// Sezione Comunicazioni (tutti i ruoli di società): l'elenco completo delle notifiche in-app,
-// con "segna come letta" al click e "segna tutte come lette". La campanella nella topbar resta
-// il punto di accesso rapido (ultimi avvisi); questa pagina è la vista estesa ed è il punto di
-// aggancio per le future comunicazioni (email, avvisi automatici, messaggi interni) senza
-// cambiare la navigazione. Stessa logica ottimistica della campanella.
+// Sezione Comunicazioni (tutti i ruoli di società): l'elenco completo delle notifiche in-app, con
+// "segna come letta". Per responsabile/dirigente aggiunge lo STORICO EMAIL della società (Fase E7):
+// la vista di consultazione delle comunicazioni email inviate (stato: inviata / non inviata / fallita).
+// La campanella nella topbar resta il punto di accesso rapido; questa pagina è la vista estesa.
+
+// Etichette leggibili dei tipi di evento email.
+const EVENT_LABELS = {
+  shift_assigned: 'Turno assegnato',
+  shift_modified: 'Turno modificato',
+  substitution_proposed: 'Proposta di sostituzione',
+  cancellation_requested: 'Richiesta di cancellazione',
+  cancellation_approved: 'Cancellazione approvata',
+  cancellation_rejected: 'Cancellazione rifiutata',
+  substitution_proposal_declined: 'Proposta rifiutata',
+  email_verification: 'Verifica email',
+};
+function eventLabel(type) {
+  return EVENT_LABELS[type] || type;
+}
+
+// Stato invio → etichetta + classe badge.
+const STATUS_BADGE = {
+  sent: { label: 'Inviata', className: 'badge-success' },
+  suppressed: { label: 'Non inviata', className: 'badge-warning' },
+  failed: { label: 'Fallita', className: 'badge-danger' },
+  pending: { label: 'In attesa', className: 'badge' },
+};
+
 export default function ComunicazioniPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const isManager = user.role === 'admin' || user.role === 'dirigente';
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [emails, setEmails] = useState([]);
   const [error, setError] = useState('');
+  const [emailError, setEmailError] = useState('');
 
   function load() {
     api
@@ -23,6 +49,13 @@ export default function ComunicazioniPage() {
         setUnreadCount(unreadCount);
       })
       .catch((err) => setError(err.message));
+
+    if (isManager) {
+      api
+        .listEmailLog(token)
+        .then(({ emails }) => setEmails(emails))
+        .catch((err) => setEmailError(err.message));
+    }
   }
 
   useEffect(load, [token]);
@@ -83,6 +116,54 @@ export default function ComunicazioniPage() {
           </ul>
         )}
       </section>
+
+      {isManager && (
+        <section className="card">
+          <h2>Email inviate</h2>
+          <p className="hint">
+            Storico delle email generate dal sistema. "Non inviata" indica un invio soppresso (ambiente
+            demo o destinatario senza email verificata).
+          </p>
+          {emailError && <div className="error">{emailError}</div>}
+          {emails.length === 0 ? (
+            <p className="hint">Nessuna email registrata.</p>
+          ) : (
+            <div className="table-scroll">
+              <table className="table email-log-table">
+                <thead>
+                  <tr>
+                    <th>Quando</th>
+                    <th>Destinatario</th>
+                    <th>Comunicazione</th>
+                    <th>Stato</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {emails.map((e) => {
+                    const badge = STATUS_BADGE[e.status] || STATUS_BADGE.pending;
+                    return (
+                      <tr key={e.id}>
+                        <td>{relativeTime(e.createdAt)}</td>
+                        <td>{e.recipientUsername || e.toEmail}</td>
+                        <td>
+                          {eventLabel(e.eventType)}
+                          {e.subject && <div className="email-log-subject">{e.subject}</div>}
+                        </td>
+                        <td>
+                          <span className={`badge ${badge.className}`}>{badge.label}</span>
+                          {(e.status === 'suppressed' || e.status === 'failed') && e.error && (
+                            <div className="email-log-reason">{e.error}</div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
     </>
   );
 }

@@ -12,11 +12,28 @@ const {
   notifySubstitutionAvailable,
   notifySubstitutionClaimed,
   notifyCancellationRequested,
+  notifyShiftAssigned,
+  notifyShiftModified,
 } = require('../services/notificationService');
 const { rankCandidates } = require('../services/substitutionMatcher');
 const audit = require('../services/auditService');
 
 const SHIFT_TYPES = ['fixed', 'mobile', 'volante'];
+
+// Etichetta leggibile del "quando" di un turno per le notifiche (Fase E3): i turni singoli/Sostituzioni
+// hanno una data concreta; i turni fissi hanno una ricorrenza (date = NULL) da descrivere a parole.
+const IT_DAYS = { SUN: 'Dom', MON: 'Lun', TUE: 'Mar', WED: 'Mer', THU: 'Gio', FRI: 'Ven', SAT: 'Sab' };
+function describeShiftWhen(shift) {
+  if (shift.type === 'fixed') {
+    try {
+      const p = parseRecurrenceRule(shift.recurrence_rule);
+      return p.freq === 'daily' ? 'ogni giorno' : `ogni ${p.days.map((d) => IT_DAYS[d] || d).join(', ')}`;
+    } catch {
+      return 'ricorrente';
+    }
+  }
+  return toDateOnly(shift.date);
+}
 
 // GET /api/calendar?start=YYYY-MM-DD&end=YYYY-MM-DD&areaId=<obbligatoria>&userId=<solo admin/dirigente>
 // Il calendario è sempre quello di una specifica area operativa (ogni area ha il proprio, non
@@ -351,6 +368,20 @@ async function createShift(req, res) {
       endTime: createdShift.end_time.slice(0, 5),
       actorUserId: req.user.id,
     });
+  } else if (createdShift.user_id) {
+    // Turno fisso/singolo assegnato a un dipendente: avvisalo (in-app + email, Fase E3).
+    await notifyShiftAssigned({
+      companyId: req.user.companyId,
+      userId: createdShift.user_id,
+      shiftId: createdShift.id,
+      areaId: createdShift.area_id,
+      sedeId: createdShift.sede_id,
+      date: describeShiftWhen(createdShift),
+      startTime: createdShift.start_time.slice(0, 5),
+      endTime: createdShift.end_time.slice(0, 5),
+      assignedByUsername: req.user.username,
+      assignedByUserId: req.user.id,
+    });
   }
 
   await audit.logFromReq(req, { action: 'shift.create', entityType: 'shift', entityId: createdShift.id, metadata: { type: createdShift.type, areaId: createdShift.area_id } });
@@ -361,7 +392,7 @@ async function createShift(req, res) {
 // PUT /api/shifts/:id (responsabile o dirigente)
 async function updateShift(req, res) {
   const { id } = req.params;
-  const { userId, type, startTime, endTime, note, date, recurrenceRule } = req.body;
+  const { userId, type, startTime, endTime, note, date, recurrenceRule, reason } = req.body;
 
   const { rows: existingRows } = await pool.query('SELECT * FROM shifts WHERE id = $1', [id]);
   const existing = existingRows[0];
@@ -434,9 +465,47 @@ async function updateShift(req, res) {
     ]
   );
 
+  const updated = rows[0];
+  // Notifica al dipendente assegnato (Fase E3, in-app + email, best-effort). Le Sostituzioni (volante)
+  // hanno il proprio flusso e non sono coperte qui. Se il turno è stato RIASSEGNATO a un dipendente
+  // diverso, per il nuovo è un'assegnazione; per lo stesso dipendente è una modifica (vecchio→nuovo).
+  if (updated.type !== 'volante') {
+    if (updated.user_id && updated.user_id === existing.user_id) {
+      await notifyShiftModified({
+        companyId: req.user.companyId,
+        userId: updated.user_id,
+        shiftId: updated.id,
+        areaId: updated.area_id,
+        sedeId: updated.sede_id,
+        oldDate: describeShiftWhen(existing),
+        oldStartTime: existing.start_time.slice(0, 5),
+        oldEndTime: existing.end_time.slice(0, 5),
+        newDate: describeShiftWhen(updated),
+        newStartTime: updated.start_time.slice(0, 5),
+        newEndTime: updated.end_time.slice(0, 5),
+        reason: reason || null,
+        modifiedByUsername: req.user.username,
+        modifiedByUserId: req.user.id,
+      });
+    } else if (updated.user_id && updated.user_id !== existing.user_id) {
+      await notifyShiftAssigned({
+        companyId: req.user.companyId,
+        userId: updated.user_id,
+        shiftId: updated.id,
+        areaId: updated.area_id,
+        sedeId: updated.sede_id,
+        date: describeShiftWhen(updated),
+        startTime: updated.start_time.slice(0, 5),
+        endTime: updated.end_time.slice(0, 5),
+        assignedByUsername: req.user.username,
+        assignedByUserId: req.user.id,
+      });
+    }
+  }
+
   await audit.logFromReq(req, { action: 'shift.update', entityType: 'shift', entityId: id });
 
-  return res.json({ shift: toSafeShift(rows[0]) });
+  return res.json({ shift: toSafeShift(updated) });
 }
 
 // DELETE /api/shifts/:id (responsabile o dirigente: cancellazione forzata, qualunque tipo)

@@ -81,17 +81,17 @@ async function fetchPendingRequestOr404(id, companyId, res) {
 // In entrambi i casi viene generata automaticamente una nuova Sostituzione (type='volante',
 // non assegnata) con lo stesso orario/area operativa, collegata al turno originale via
 // origin_shift_id.
-async function approveRequest(req, res) {
-  const { id } = req.params;
-  const request = await fetchPendingRequestOr404(id, req.user.companyId, res);
-  if (!request) return;
-
+// Cuore dell'approvazione, ESTRATTO (Fase E5) per essere riusato dall'handler HTTP e dalle Email
+// Actions (approvazione da bottone nell'email). Riceve la richiesta (già verificata pendente e della
+// società) e l'id dell'attore; esegue update + storico turno + nuova Sostituzione + notifiche.
+// Ritorna la riga aggiornata. Comportamento invariato rispetto all'inline precedente.
+async function approveRequestCore({ request, actorUserId }) {
   const { rows } = await pool.query(
     `UPDATE cancellation_requests
         SET status = 'approved', decided_by = $1, decided_at = NOW()
       WHERE id = $2
       RETURNING *`,
-    [req.user.id, id]
+    [actorUserId, request.id]
   );
 
   if (request.shift_id) {
@@ -124,7 +124,7 @@ async function approveRequest(req, res) {
           request.shift_end_time,
           request.shift_date,
           request.shift_note,
-          req.user.id,
+          actorUserId,
           shift.area_id,
           shift.sede_id,
           shift.id,
@@ -141,7 +141,7 @@ async function approveRequest(req, res) {
         date: toDateOnly(newShift.date),
         startTime: newShift.start_time.slice(0, 5),
         endTime: newShift.end_time.slice(0, 5),
-        actorUserId: req.user.id,
+        actorUserId,
       });
     }
   }
@@ -157,23 +157,29 @@ async function approveRequest(req, res) {
     approved: true,
   });
 
-  await audit.logFromReq(req, { action: 'cancellation.approve', entityType: 'cancellation_request', entityId: request.id, metadata: { shiftId: request.shift_id } });
-
-  return res.json({ request: toSafeRequest(rows[0]) });
+  return rows[0];
 }
 
-// POST /api/cancellation-requests/:id/reject (responsabile o dirigente)
-async function rejectRequest(req, res) {
+async function approveRequest(req, res) {
   const { id } = req.params;
   const request = await fetchPendingRequestOr404(id, req.user.companyId, res);
   if (!request) return;
 
+  const updated = await approveRequestCore({ request, actorUserId: req.user.id });
+
+  await audit.logFromReq(req, { action: 'cancellation.approve', entityType: 'cancellation_request', entityId: request.id, metadata: { shiftId: request.shift_id } });
+
+  return res.json({ request: toSafeRequest(updated) });
+}
+
+// Cuore del rifiuto, ESTRATTO (Fase E5) per il riuso HTTP + Email Actions.
+async function rejectRequestCore({ request, actorUserId }) {
   const { rows } = await pool.query(
     `UPDATE cancellation_requests
         SET status = 'rejected', decided_by = $1, decided_at = NOW()
       WHERE id = $2
       RETURNING *`,
-    [req.user.id, id]
+    [actorUserId, request.id]
   );
 
   // Avvisa il dipendente richiedente che la sua cancellazione è stata rifiutata (best-effort).
@@ -187,9 +193,38 @@ async function rejectRequest(req, res) {
     approved: false,
   });
 
-  await audit.logFromReq(req, { action: 'cancellation.reject', entityType: 'cancellation_request', entityId: request.id, metadata: { shiftId: request.shift_id } });
-
-  return res.json({ request: toSafeRequest(rows[0]) });
+  return rows[0];
 }
 
-module.exports = { listRequests, listMyRequests, approveRequest, rejectRequest };
+// POST /api/cancellation-requests/:id/reject (responsabile o dirigente)
+async function rejectRequest(req, res) {
+  const { id } = req.params;
+  const request = await fetchPendingRequestOr404(id, req.user.companyId, res);
+  if (!request) return;
+
+  const updated = await rejectRequestCore({ request, actorUserId: req.user.id });
+
+  await audit.logFromReq(req, { action: 'cancellation.reject', entityType: 'cancellation_request', entityId: request.id, metadata: { shiftId: request.shift_id } });
+
+  return res.json({ request: toSafeRequest(updated) });
+}
+
+// Carica una richiesta ANCORA PENDENTE della società indicata (senza scrivere su res): usato dalle
+// Email Actions (Fase E5).
+async function loadPendingRequest(id, companyId) {
+  const { rows } = await pool.query(
+    "SELECT * FROM cancellation_requests WHERE id = $1 AND company_id = $2 AND status = 'pending'",
+    [id, companyId]
+  );
+  return rows[0] || null;
+}
+
+module.exports = {
+  listRequests,
+  listMyRequests,
+  approveRequest,
+  rejectRequest,
+  approveRequestCore,
+  rejectRequestCore,
+  loadPendingRequest,
+};
