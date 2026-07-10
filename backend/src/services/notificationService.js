@@ -1,5 +1,7 @@
 const pool = require('../config/db');
 const { MANAGER_ROLES } = require('../middleware/auth');
+const { deliverEventEmail } = require('./notificationChannels/emailChannel');
+const { createActionToken } = require('./emailActionService');
 
 // Servizio notifiche: isolato dai controller (dominio separato, coerente con la modularità
 // richiesta). Le funzioni notify* sono BEST-EFFORT — catturano e loggano i propri errori senza
@@ -59,6 +61,18 @@ async function excludeOptedOut(userIds, date) {
 async function areaName(areaId) {
   if (!areaId) return null;
   const { rows } = await pool.query('SELECT name FROM operational_areas WHERE id = $1', [areaId]);
+  return rows[0]?.name || null;
+}
+
+async function sedeName(sedeId) {
+  if (!sedeId) return null;
+  const { rows } = await pool.query('SELECT name FROM sedi WHERE id = $1', [sedeId]);
+  return rows[0]?.name || null;
+}
+
+async function companyName(companyId) {
+  if (!companyId) return null;
+  const { rows } = await pool.query('SELECT name FROM companies WHERE id = $1', [companyId]);
   return rows[0]?.name || null;
 }
 
@@ -146,6 +160,30 @@ async function notifyCancellationRequested({ companyId, areaId, requestId, date,
       message: `${requesterUsername} ha richiesto la cancellazione del turno del ${date} ${startTime}-${endTime}`,
       payload: { kind: 'cancellation', requestId, areaId, date },
     });
+
+    // Canale email (best-effort): avvisa i responsabili della richiesta da approvare. Email Actions
+    // (E5): ogni responsabile riceve i PROPRI token Approva/Rifiuta (buildData async, per-destinatario).
+    const name = await areaName(areaId);
+    await deliverEventEmail({
+      companyId,
+      userIds: managers,
+      eventType: 'cancellation_requested',
+      template: 'cancellation_requested',
+      buildData: async (r) => {
+        let approveUrl = null;
+        let rejectUrl = null;
+        try {
+          const ap = await createActionToken({ userId: r.id, companyId, action: 'cancellation_approve', entityType: 'cancellation_request', entityId: requestId });
+          const rj = await createActionToken({ userId: r.id, companyId, action: 'cancellation_reject', entityType: 'cancellation_request', entityId: requestId });
+          approveUrl = ap.url;
+          rejectUrl = rj.url;
+        } catch (err) {
+          console.error('[notifications] token azione cancellazione non generati (non bloccante):', err.message);
+        }
+        return { username: r.username, requesterUsername, date, startTime, endTime, areaName: name, approveUrl, rejectUrl };
+      },
+      payload: { kind: 'cancellation', requestId, areaId, date },
+    });
   } catch (err) {
     console.error('[notifications] notifyCancellationRequested fallita (non bloccante):', err.message);
   }
@@ -162,6 +200,16 @@ async function notifyCancellationDecision({ companyId, requesterUserId, requestI
       message: approved
         ? `La tua richiesta di cancellazione del turno del ${date} ${startTime}-${endTime} è stata approvata`
         : `La tua richiesta di cancellazione del turno del ${date} ${startTime}-${endTime} è stata rifiutata`,
+      payload: { kind: 'cancellation', requestId, date },
+    });
+
+    // Canale email (best-effort): comunica l'esito al dipendente richiedente.
+    await deliverEventEmail({
+      companyId,
+      userIds: [requesterUserId],
+      eventType: approved ? 'cancellation_approved' : 'cancellation_rejected',
+      template: approved ? 'cancellation_approved' : 'cancellation_rejected',
+      buildData: (r) => ({ username: r.username, date, startTime, endTime }),
       payload: { kind: 'cancellation', requestId, date },
     });
   } catch (err) {
@@ -183,6 +231,29 @@ async function notifySubstitutionProposal({ companyId, proposedUserId, proposalI
       message: `Ti è stata proposta una sostituzione${where}: ${date} ${startTime}-${endTime}`,
       payload: { kind: 'proposal', proposalId, shiftId, areaId, sedeId, date },
     });
+
+    // Email Actions (E5): genera i token Accetta/Rifiuta per il dipendente proposto, così può
+    // rispondere direttamente dalla mail. Se la generazione fallisce, l'email ripiega sul link all'app.
+    let acceptUrl = null;
+    let declineUrl = null;
+    try {
+      const acc = await createActionToken({ userId: proposedUserId, companyId, action: 'proposal_accept', entityType: 'proposal', entityId: proposalId });
+      const dec = await createActionToken({ userId: proposedUserId, companyId, action: 'proposal_decline', entityType: 'proposal', entityId: proposalId });
+      acceptUrl = acc.url;
+      declineUrl = dec.url;
+    } catch (err) {
+      console.error('[notifications] token azione proposta non generati (non bloccante):', err.message);
+    }
+
+    // Canale email (best-effort): notifica personale al dipendente proposto.
+    await deliverEventEmail({
+      companyId,
+      userIds: [proposedUserId],
+      eventType: 'substitution_proposed',
+      template: 'substitution_proposal',
+      buildData: (r) => ({ username: r.username, date, startTime, endTime, areaName: name, acceptUrl, declineUrl }),
+      payload: { kind: 'proposal', proposalId, shiftId, areaId, sedeId, date },
+    });
   } catch (err) {
     console.error('[notifications] notifySubstitutionProposal fallita (non bloccante):', err.message);
   }
@@ -200,6 +271,17 @@ async function notifyProposalDeclined({ companyId, areaId, sedeId, shiftId, date
       userIds: managers,
       type: 'substitution_proposal_declined',
       message: `${declinerUsername} ha rifiutato la proposta di sostituzione del ${date} ${startTime}-${endTime}${where}`,
+      payload: { kind: 'substitution', shiftId, areaId, sedeId, date },
+      excludeUserId: declinerUserId,
+    });
+
+    // Canale email (best-effort): avvisa i responsabili così possono proporla a un altro dipendente.
+    await deliverEventEmail({
+      companyId,
+      userIds: managers,
+      eventType: 'substitution_proposal_declined',
+      template: 'substitution_proposal_declined',
+      buildData: (r) => ({ username: r.username, declinerUsername, date, startTime, endTime, areaName: name }),
       payload: { kind: 'substitution', shiftId, areaId, sedeId, date },
       excludeUserId: declinerUserId,
     });
@@ -230,6 +312,72 @@ async function notifySubstitutionEscalated({ companyId, areaId, sedeId, shiftId,
   }
 }
 
+// Nuovo turno assegnato a un dipendente (Fase E3): notifica personale al dipendente (in-app + email).
+// Non riguarda le Sostituzioni (volante), che hanno il proprio flusso (notifySubstitutionAvailable):
+// qui si tratta di un turno fisso/singolo assegnato direttamente a una persona.
+async function notifyShiftAssigned({ companyId, userId, shiftId, areaId, sedeId, date, startTime, endTime, assignedByUsername, assignedByUserId = null }) {
+  try {
+    if (!userId) return;
+    const [aName, sName, cName] = [await areaName(areaId), await sedeName(sedeId), await companyName(companyId)];
+    const where = aName ? ` (${aName})` : '';
+    await createNotifications({
+      companyId,
+      userIds: [userId],
+      type: 'shift_assigned',
+      message: `Ti è stato assegnato un turno${where}: ${date} ${startTime}-${endTime}`,
+      payload: { kind: 'shift', shiftId, areaId, sedeId, date },
+      excludeUserId: assignedByUserId,
+    });
+    await deliverEventEmail({
+      companyId,
+      userIds: [userId],
+      eventType: 'shift_assigned',
+      template: 'shift_assigned',
+      buildData: (r) => ({ username: r.username, companyName: cName, date, startTime, endTime, areaName: aName, sedeName: sName, assignedBy: assignedByUsername }),
+      payload: { kind: 'shift', shiftId, areaId, sedeId, date },
+      excludeUserId: assignedByUserId,
+    });
+  } catch (err) {
+    console.error('[notifications] notifyShiftAssigned fallita (non bloccante):', err.message);
+  }
+}
+
+// Turno modificato (Fase E3): avvisa il dipendente assegnato mostrando vecchi e nuovi valori
+// (+ eventuale motivo, non persistito, passato dal responsabile). In-app + email.
+async function notifyShiftModified({ companyId, userId, shiftId, areaId, sedeId, oldDate, oldStartTime, oldEndTime, newDate, newStartTime, newEndTime, reason = null, modifiedByUsername, modifiedByUserId = null }) {
+  try {
+    if (!userId) return;
+    const [aName, sName, cName] = [await areaName(areaId), await sedeName(sedeId), await companyName(companyId)];
+    const where = aName ? ` (${aName})` : '';
+    await createNotifications({
+      companyId,
+      userIds: [userId],
+      type: 'shift_modified',
+      message: `Un tuo turno${where} è stato modificato: da ${oldDate} ${oldStartTime}-${oldEndTime} a ${newDate} ${newStartTime}-${newEndTime}`,
+      payload: { kind: 'shift', shiftId, areaId, sedeId, date: newDate },
+      excludeUserId: modifiedByUserId,
+    });
+    await deliverEventEmail({
+      companyId,
+      userIds: [userId],
+      eventType: 'shift_modified',
+      template: 'shift_modified',
+      buildData: (r) => ({
+        username: r.username,
+        companyName: cName,
+        oldDate, oldStartTime, oldEndTime,
+        newDate, newStartTime, newEndTime,
+        areaName: aName, sedeName: sName, reason,
+        modifiedBy: modifiedByUsername,
+      }),
+      payload: { kind: 'shift', shiftId, areaId, sedeId, date: newDate },
+      excludeUserId: modifiedByUserId,
+    });
+  } catch (err) {
+    console.error('[notifications] notifyShiftModified fallita (non bloccante):', err.message);
+  }
+}
+
 module.exports = {
   createNotifications,
   resolveManagerRecipients,
@@ -241,4 +389,6 @@ module.exports = {
   notifySubstitutionProposal,
   notifyProposalDeclined,
   notifySubstitutionEscalated,
+  notifyShiftAssigned,
+  notifyShiftModified,
 };

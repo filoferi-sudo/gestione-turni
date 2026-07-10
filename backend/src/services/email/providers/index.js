@@ -15,6 +15,8 @@ function getProvider() {
   switch (name) {
     case 'noop':
       return noopProvider;
+    case 'resend': // Invio reale via API Resend (fetch nativo, nessuna dipendenza) — Fase E1.
+      return require('./resendProvider');
     // case 'smtp':  // Futuro: return require('./smtpProvider');  (richiederà `nodemailer`)
     // case 'sendgrid': // Futuro: return require('./sendgridProvider');
     default:

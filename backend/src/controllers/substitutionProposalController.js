@@ -273,16 +273,13 @@ async function acceptProposal(req, res) {
   return res.json({ shift: toSafeShift(result.shift) });
 }
 
-// POST /api/proposals/:id/decline (dipendente) - rifiuta una propria proposta pendente. Avvisa i
-// responsabili (così possono proporla ad altri) e lascia traccia (storico per il motore, Fase 6).
-async function declineProposal(req, res) {
-  const { id } = req.params;
-  const proposal = await loadOwnProposal(id, req.user.id);
-  if (!proposal) {
-    return res.status(404).json({ error: 'Proposta non trovata' });
-  }
+// Cuore del rifiuto di una proposta, ESTRATTO (come acceptProposalForUser) per essere riusato dai
+// due percorsi che NON devono divergere: il rifiuto HTTP del dipendente (declineProposal) e le Email
+// Actions (Fase E5, rifiuto da bottone nell'email). Riceve la proposta (riga) e l'utente
+// ({ id, username, companyId }); ritorna un esito mappabile su HTTP.
+async function declineProposalForUser({ proposal, user }) {
   if (proposal.status !== 'pending') {
-    return res.status(409).json({ error: 'Questa proposta non è più valida' });
+    return { ok: false, code: 409, error: 'Questa proposta non è più valida' };
   }
 
   await pool.query(
@@ -295,18 +292,33 @@ async function declineProposal(req, res) {
   const shift = shiftRows[0];
   if (shift) {
     await notifyProposalDeclined({
-      companyId: req.user.companyId,
+      companyId: user.companyId,
       areaId: shift.area_id,
       sedeId: shift.sede_id,
       shiftId: shift.id,
       date: toDateOnly(shift.date),
       startTime: shift.start_time.slice(0, 5),
       endTime: shift.end_time.slice(0, 5),
-      declinerUsername: req.user.username,
-      declinerUserId: req.user.id,
+      declinerUsername: user.username,
+      declinerUserId: user.id,
     });
   }
 
+  return { ok: true };
+}
+
+// POST /api/proposals/:id/decline (dipendente) - rifiuta una propria proposta pendente. Avvisa i
+// responsabili (così possono proporla ad altri) e lascia traccia (storico per il motore, Fase 6).
+async function declineProposal(req, res) {
+  const { id } = req.params;
+  const proposal = await loadOwnProposal(id, req.user.id);
+  if (!proposal) {
+    return res.status(404).json({ error: 'Proposta non trovata' });
+  }
+  const result = await declineProposalForUser({ proposal, user: req.user });
+  if (!result.ok) {
+    return res.status(result.code).json({ error: result.error });
+  }
   return res.json({ status: 'declined' });
 }
 
@@ -317,4 +329,5 @@ module.exports = {
   acceptProposal,
   acceptProposalForUser,
   declineProposal,
+  declineProposalForUser,
 };

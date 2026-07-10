@@ -34,6 +34,8 @@ const staffingRoutes = require('./routes/staffing');
 const notificationRoutes = require('./routes/notifications');
 const substitutionProposalRoutes = require('./routes/substitutionProposals');
 const auditRoutes = require('./routes/audit');
+const emailActionRoutes = require('./routes/emailActions');
+const emailLogRoutes = require('./routes/emailLog');
 const demoRoutes = require('./routes/demo');
 
 const app = express();
@@ -71,6 +73,8 @@ app.use('/api/staffing', staffingRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/proposals', substitutionProposalRoutes);
 app.use('/api/audit-logs', auditRoutes);
+app.use('/api/email-actions', emailActionRoutes);
+app.use('/api/email-log', emailLogRoutes);
 app.use('/api/demo', demoRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));

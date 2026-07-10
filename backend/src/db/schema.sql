@@ -697,6 +697,12 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, enti
 --   * two_factor_enabled = predisposizione per la 2FA via email (default FALSE, non ancora usata).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+-- pending_email (Fase E2) = nuovo indirizzo in attesa di conferma nel flusso di CAMBIO email. Finché
+-- non viene verificato tramite il link inviato al nuovo indirizzo, `email` (quello attivo/funzionante)
+-- resta invariato: un errore di battitura non interrompe le comunicazioni. Alla conferma del token,
+-- pending_email viene promosso a `email` (con ri-controllo dell'unicità) e azzerato. NULL = nessun
+-- cambio in corso.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email VARCHAR(255);
 
 -- Tabella generica dei token di autenticazione monouso e a scadenza. Un'unica struttura copre tre
 -- scopi futuri distinti (verifica email, reset password, 2FA) tramite la colonna `purpose`.
@@ -763,3 +769,98 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_demo_state_scenario ON demo_state(scenario
 -- al demo-login (Fase D3) di trovare l'utente della persona scelta senza conoscere gli username
 -- interni. Colonna con DEFAULT: aggiunta idempotente e sicura su una tabella eventualmente già creata.
 ALTER TABLE demo_state ADD COLUMN IF NOT EXISTS personas JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- ============================================================================
+-- Storico invii email (Fase E1 - iniziativa Email Automation)
+-- ============================================================================
+-- Registro di OGNI tentativo di invio email generato dal sistema (canale email delle notifiche).
+-- È il pendant "email" della tabella notifications (notifiche in-app), a canale separato: la stessa
+-- logica di evento (services/notificationService.js) alimenta entrambi i canali.
+--   * company_id / user_id = ON DELETE SET NULL (log storico: sopravvive alla cancellazione della
+--     società o dell'utente, stesso principio di audit_logs). to_email è salvato in chiaro così il
+--     record resta autoconsistente anche se l'utente viene poi rimosso.
+--   * event_type = il tipo di evento applicativo (es. substitution_proposed, cancellation_approved).
+--   * template = il template email usato (services/email/templates), utile per il debug.
+--   * status:
+--       - sent       = consegnato al provider senza errori.
+--       - failed     = il provider ha risposto con errore (dettaglio in `error`); l'azione applicativa
+--                      NON è stata annullata (invio best-effort, non bloccante).
+--       - suppressed = invio volutamente NON tentato: ambiente demo (email fittizie, nessun invio
+--                      reale) oppure destinatario senza email verificata (gate v1). Motivo in `error`.
+--       - pending    = stato transitorio predisposto per un futuro sistema di retry/coda (non scritto
+--                      in E1, che registra sempre l'esito finale del tentativo sincrono).
+--   * provider / provider_message_id = quale provider ha gestito l'invio e l'id del messaggio remoto
+--     (per tracciare la consegna nella dashboard del provider).
+--   * payload = riferimenti dell'evento (shiftId/requestId/proposalId/...), come notifications.payload.
+CREATE TABLE IF NOT EXISTS email_log (
+  id                   SERIAL PRIMARY KEY,
+  company_id           INTEGER REFERENCES companies(id) ON DELETE SET NULL,
+  user_id              INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  to_email             VARCHAR(255) NOT NULL,
+  event_type           VARCHAR(60) NOT NULL,
+  template             VARCHAR(60) NOT NULL,
+  subject              VARCHAR(255),
+  status               VARCHAR(20) NOT NULL DEFAULT 'pending'
+                         CHECK (status IN ('pending', 'sent', 'failed', 'suppressed')),
+  error                TEXT,
+  provider             VARCHAR(30),
+  provider_message_id  VARCHAR(200),
+  payload              JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  sent_at              TIMESTAMPTZ
+);
+
+-- Consultazione tipica: storico invii di una società, in ordine cronologico inverso (futura UI
+-- "Comunicazioni" per il Dirigente).
+CREATE INDEX IF NOT EXISTS idx_email_log_company_created ON email_log(company_id, created_at DESC);
+-- Storico invii verso un singolo destinatario.
+CREATE INDEX IF NOT EXISTS idx_email_log_user ON email_log(user_id, created_at DESC);
+
+-- ============================================================================
+-- Token per le Email Actions (Fase E5 - iniziativa Email Automation)
+-- ============================================================================
+-- Token dedicati per eseguire un'azione direttamente da un bottone nell'email (accetta/rifiuta una
+-- proposta di sostituzione, approva/rifiuta una richiesta di cancellazione) senza aprire il portale.
+-- Separati da `auth_tokens` (verifica email/reset/2FA) perché legano il token a un'ENTITÀ e a
+-- un'AZIONE specifiche, non solo all'utente.
+--   * token_hash = si salva SOLO l'hash SHA-256 del token (mai il valore in chiaro), come auth_tokens.
+--   * user_id    = destinatario/attore dell'azione (il token agisce "come" questo utente). CASCADE.
+--   * action     = azione da eseguire ('proposal_accept'|'proposal_decline'|'cancellation_approve'|
+--                  'cancellation_reject'). entity_type/entity_id = l'entità su cui agire.
+--   * expires_at = scadenza; used_at = monouso (valorizzato al primo utilizzo). La mutazione avviene
+--                  solo tramite POST dopo conferma nel frontend (i link in GET non modificano nulla:
+--                  i client email prefetchano i link, stesso principio di verify-email in E2).
+CREATE TABLE IF NOT EXISTS email_action_tokens (
+  id           SERIAL PRIMARY KEY,
+  token_hash   VARCHAR(64) NOT NULL,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  company_id   INTEGER REFERENCES companies(id) ON DELETE SET NULL,
+  action       VARCHAR(40) NOT NULL
+                 CHECK (action IN ('proposal_accept', 'proposal_decline', 'cancellation_approve', 'cancellation_reject')),
+  entity_type  VARCHAR(30) NOT NULL,
+  entity_id    INTEGER NOT NULL,
+  expires_at   TIMESTAMPTZ NOT NULL,
+  used_at      TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Lookup in fase di consumo/peek: per hash.
+CREATE INDEX IF NOT EXISTS idx_email_action_tokens_hash ON email_action_tokens(token_hash);
+
+-- ============================================================================
+-- Preferenze notifiche utente (Fase E6 - iniziativa Email Automation)
+-- ============================================================================
+-- Ogni utente può scegliere quali email di EVENTO ricevere. Riguarda SOLO il canale email degli
+-- eventi (non le notifiche in-app, che restano il registro completo dell'attività; e non le email
+-- transazionali di verifica/reset, sempre inviate). 1:1 con users (UNIQUE user_id); l'ASSENZA di
+-- riga = default "tutte" (retrocompatibile: gli utenti esistenti ricevono tutto).
+--   * email_mode = 'all' (tutte) | 'important' (solo le categorie importanti) | 'none' (nessuna).
+--   * disabled_categories = array JSONB di categorie (event_type) disattivate esplicitamente, valido
+--     in modalità 'all'/'important' (disattivazione fine oltre alla modalità).
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  id                   SERIAL PRIMARY KEY,
+  user_id              INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  email_mode           VARCHAR(20) NOT NULL DEFAULT 'all' CHECK (email_mode IN ('all', 'important', 'none')),
+  disabled_categories  JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

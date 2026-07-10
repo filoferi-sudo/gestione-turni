@@ -1046,7 +1046,7 @@ di test; utente temporaneo `resp_test` creato e poi eliminato.)
 
 # Iniziativa: Demo Framework (fasi D1–D6)
 
-> **Scopo**: rendere PoolShift capace di generare **ambienti dimostrativi realistici per qualsiasi
+> **Scopo**: rendere Planivo capace di generare **ambienti dimostrativi realistici per qualsiasi
 > settore** come funzionalità permanente: un layer "Demo Framework" sopra il software esistente in
 > cui cambiano SOLO i dati caricati, mai la logica del gestionale. Piano completo e decisioni in
 > `~/.claude/plans` (sessione 2026-07-10) e in `PROJECT_CONTEXT.md` → sezione "Demo Framework".
@@ -1394,7 +1394,7 @@ gli helper reali, mai duplicando logica.
 
 ## Riepilogo finale — Demo Framework (D1–D6)
 
-**Obiettivo raggiunto**: PoolShift può generare ambienti dimostrativi realistici per qualsiasi
+**Obiettivo raggiunto**: Planivo può generare ambienti dimostrativi realistici per qualsiasi
 settore, come layer permanente sopra il gestionale. Il software resta unico: **cambiano solo i dati
 caricati**, mai la logica (le stesse funzionalità funzionano identiche in demo e in reale — provato
 usando gli endpoint reali su dati demo).
@@ -1435,3 +1435,409 @@ per-cliente/temporanee (`demo_state` pronta per `instance_key`/`expires_at`), de
 - Il tour commerciale è pensato per la persona **Dirigente** (approvazioni/proposte). Le personas
   Responsabile/Dipendente entrano nella Demo Libera; si potranno aggiungere tour dedicati (una nuova
   definizione in `constants/tours/`, nessuna modifica all'engine).
+
+# Iniziativa: Email Automation, Notification Center e Email Actions (fasi E1–E8)
+
+> Obiettivo: trasformare Planivo da gestionale "a consultazione" a piattaforma **proattiva** che
+> invia comunicazioni automatiche (email, poi WhatsApp/SMS/Push) sugli eventi del sistema, con
+> verifica email, azioni direttamente dalla mail, storico e preferenze. Costruita come **layer
+> additivo** sopra i flussi esistenti, riusando le predisposizioni delle fasi Sicurezza S4
+> (`auth_tokens`, `email_verified`) e S5 (modulo `services/email/`).
+
+## Architettura scelta
+
+- **Notification Service centralizzato a canali**: `services/notificationService.js` resta il layer
+  eventi (le `notify*`, una per evento, call site nei controller invariati). Sotto di esso ogni
+  canale è un modulo con la stessa interfaccia: il canale in-app (tabella `notifications`, già
+  esistente) e il nuovo **canale email** (`services/notificationChannels/emailChannel.js`).
+  Aggiungere WhatsApp/SMS/Push in futuro = un modulo fratello + una riga di aggancio negli eventi,
+  senza toccare la logica di evento.
+- **Vincolo serverless (Vercel)**: nessun cron/coda/worker. Gli invii sono sincroni e **best-effort**
+  in coda ai flussi, come le notifiche in-app (un errore di invio non fa mai fallire l'azione).
+- **Additività**: `claimShift`/`approveRequest`/`createShift`/... non vengono modificati; le email
+  partono dalle stesse `notify*` già chiamate in coda.
+
+## Stato fasi
+
+- **E1 — Canale email + storico**: ✅ completata e testata in locale (2026-07-10). Vedi sotto.
+- **E2 — Verifica email**: ✅ completata e testata in locale (2026-07-10). Vedi sotto.
+- **E3 — Nuovi eventi turno**: ✅ completata e testata in locale (2026-07-10). Vedi sotto.
+- **E4 — Template email professionali**: ✅ completata e testata in locale (2026-07-10). Vedi sotto.
+- **E5 — Email Actions**: ✅ completata e testata in locale (2026-07-10). Vedi sotto.
+- **E6 — Preferenze notifiche**: ✅ completata e testata in locale (2026-07-10). Vedi sotto.
+- **E7 — Demo + UI storico comunicazioni + piano di test finale**: ✅ completata e testata in locale
+  (2026-07-10). Vedi sotto.
+- **E8 — Configurazione provider guidata** (dominio, SPF/DKIM/DMARC, API key, test invio): ✅
+  completata con l'utente (2026-07-10). Provider **Resend** configurato, dominio **`planivo.it`
+  verificato** (DKIM + SPF via record TXT su Aruba; l'MX del return-path non disponibile su Aruba ma
+  non necessario — DKIM allineato copre il DMARC), `EMAIL_FROM=Planivo <no-reply@planivo.it>`.
+  **Invio reale riuscito** verso un indirizzo esterno qualsiasi. Resta da replicare la configurazione
+  nelle env di produzione (Vercel) e da eseguire le migrazioni in produzione, su conferma.
+
+## Fase E1 — Canale email + storico ✅
+
+Introduce il canale email come secondo canale delle notifiche, con storico degli invii, provider
+reale (Resend) e soppressione in ambiente demo. Aggancia le email agli eventi mirati **già
+esistenti** (proposta di sostituzione, richiesta/esito cancellazione, proposta rifiutata). Additivo
+puro: nessuna modifica ai controller, solo aggiunte in coda alle `notify*`.
+
+### File toccati
+
+- **Schema** (`backend/src/db/schema.sql`): nuova tabella `email_log` (storico invii) + 2 indici.
+  Idempotente, additiva. `company_id`/`user_id` con `ON DELETE SET NULL` (log storico, stesso
+  principio di `audit_logs`); `to_email` in chiaro per record autoconsistente.
+- **Nuovo** `backend/src/services/notificationChannels/emailChannel.js`: `deliverEventEmail(...)`,
+  best-effort (non lancia mai). Risolve i destinatari (una query per id), rileva l'ambiente demo,
+  applica il gate "solo email verificate", renderizza il template, consegna al provider e registra
+  SEMPRE l'esito in `email_log` (`sent`/`failed`/`suppressed`).
+- **Nuovo** `backend/src/services/email/providers/resendProvider.js`: invio via API Resend con
+  `fetch` nativo (nessuna dipendenza). Registrato nello switch di `providers/index.js` (`resend`).
+- `backend/src/services/email/emailService.js`: estratto `deliver({to,subject,text,html})` (invio di
+  contenuto già renderizzato, unico punto verso il provider); `sendEmail` ora lo riusa (no doppio
+  render).
+- `backend/src/services/email/templates/index.js`: 4 nuovi template testuali —
+  `cancellation_requested`, `cancellation_approved`, `cancellation_rejected`,
+  `substitution_proposal_declined` (stile coerente con gli esistenti; E4 li rivestirà in HTML pro).
+- `backend/src/services/notificationService.js`: import di `deliverEventEmail` e aggiunta del canale
+  email in coda a 4 funzioni evento — `notifySubstitutionProposal` (→ dipendente proposto),
+  `notifyCancellationRequested` (→ responsabili), `notifyCancellationDecision` (→ richiedente,
+  approvata/rifiutata), `notifyProposalDeclined` (→ responsabili, escluso chi rifiuta). Le funzioni
+  restano best-effort; l'in-app resta invariato.
+- `backend/.env.example`: sezione email aggiornata (`EMAIL_PROVIDER=resend`, `RESEND_API_KEY`,
+  `EMAIL_FROM`, `APP_BASE_URL`, `EMAIL_REQUIRE_VERIFIED`).
+
+### Decisioni specifiche della fase
+
+- **Solo eventi mirati via email, non broadcast**: `notifySubstitutionAvailable` (nuova sostituzione
+  disponibile a TUTTA l'area) resta **solo in-app** — via email sarebbe spam e brucerebbe quota
+  provider. Le email E1 hanno sempre un destinatario specifico.
+- **Gate v1 "solo email verificate"** (`EMAIL_REQUIRE_VERIFIED`, default `true`): i destinatari non
+  verificati producono una riga `suppressed` (motivo "email non verificata"), non un invio. Tutti
+  gli account esistenti nascono `email_verified=FALSE`: fino alla Fase E2 nessuna email reale parte
+  (a meno di impostare `EMAIL_REQUIRE_VERIFIED=false` per i test). Scelta deliberata, coerente col
+  requisito.
+- **Soppressione demo**: per società `is_demo=TRUE` la pipeline è identica (evento → template →
+  storico) ma **non** si contatta il provider (email fittizie `@demo-…example` = solo bounce). Riga
+  `suppressed` (motivo "ambiente demo"). La demo ha la **precedenza** sul gate di verifica. Nessun
+  codice demo separato: la stessa `deliverEventEmail` gestisce il caso.
+- **Provider Resend**: API REST con `fetch` nativo di Node 18+ → **zero dipendenze npm nuove**
+  (filosofia del progetto). Astrazione provider invariata: cambiare provider = un modulo + una riga.
+- **`deliver` estratto in `emailService`**: unico punto verso il provider, riusato sia dal canale
+  (che rende il template per conto proprio, per loggare il subject e gestire la soppressione) sia da
+  `sendEmail` (invii singoli futuri: verifica/reset). Nessun doppio render.
+
+### Verifica svolta (locale)
+
+- **Migrazione idempotente** 2× (seconda no-op). Struttura `email_log` verificata.
+- **Test canale (13/13)**: `sent` (non-demo verificato, provider noop), `suppressed`/non-verificato,
+  `suppressed`/demo (demo batte il gate), `sent` con gate disattivato, `excludeUserId` (0 righe).
+- **Test integrazione (10/10)**: le 4 `notify*` reali alimentano ENTRAMBI i canali (notifica in-app
+  + riga `email_log` con template/event_type corretti); esclusione dell'attore su
+  `notifyProposalDeclined`.
+- **Percorso di fallimento**: con `EMAIL_PROVIDER=resend` senza `RESEND_API_KEY`, `deliverEventEmail`
+  **non lancia** (best-effort) e registra `failed` con l'errore corretto.
+- **Boot app** OK. Dati di test rimossi (DB pulito, 0 residui). Nessuna dipendenza aggiunta.
+
+### In sospeso
+
+- **Migrazione produzione** della tabella `email_log`: da eseguire con `npm run migrate` (insieme
+  alle altre migrazioni additive in sospeso) solo su conferma esplicita.
+- **Nessun retry** per gli invii `failed` in v1 (restano tracciati; un retry lazy in stile
+  escalation Fase 7 è un'estensione futura).
+- Attivazione invii reali: richiede E8 (configurazione dominio + provider) e E2 (verifica email) per
+  superare il gate. Fino ad allora il default `noop` non invia nulla.
+
+## Fase E2 — Verifica e cambio email ✅
+
+Sistema completo di conferma dell'indirizzo email + cambio email self-service, sopra le
+predisposizioni S4 (`auth_tokens`, `email_verified`). Riusa il canale email (E1) in modalità
+transazionale (invio anche a indirizzi non ancora verificati).
+
+### File toccati
+- **Schema** (`schema.sql`): `users.pending_email` (colonna nullable, idempotente) = nuovo indirizzo
+  in attesa di conferma nel cambio email. `email` (attivo) resta invariato finché non si conferma.
+- **`emailChannel.js`** (refactor additivo): estratto il core `sendOne` e aggiunta
+  `deliverTransactionalEmail` — invio a UN indirizzo esplicito **NON gated** (le email di verifica
+  devono partire proprio verso indirizzi non ancora verificati), con soppressione demo + logging.
+  `deliverEventEmail` invariata nel comportamento.
+- **Nuovo** `services/emailVerificationService.js`: `issueAndSendVerification` (emette token
+  `email_verification` via `authTokenService` + invio transazionale del template `email_verification`).
+- **Nuovo** `controllers/emailVerificationController.js`: `sendVerification` (self, reinvio),
+  `changeEmail` (self, salva `pending_email` + invia link al nuovo indirizzo), `verifyEmail`
+  (**pubblico**: consuma il token; se c'è `pending_email` lo promuove a `email`, altrimenti marca
+  verificata). Ri-controllo di unicità in promozione (409 se preso nel frattempo), gestione violazione
+  UNIQUE concorrente.
+- **Route** (`routes/auth.js`): `POST /auth/verify-email` (pubblico), `POST /auth/send-verification`
+  e `POST /auth/change-email` (authenticate).
+- **`userController.js`**: `createUser` invia il link di verifica al nuovo account (best-effort);
+  `toSafeUser` espone `emailVerified`/`pendingEmail`. **Anche `authController.toSafeUser`** aggiornato
+  (le due copie vanno sempre allineate — trappola nota).
+- **Frontend**: pagina pubblica `pages/VerifyEmail.jsx` (rotta `/verifica-email`, POST del token con
+  guard anti-doppio-consumo per StrictMode), `components/notifications/EmailVerificationBanner.jsx`
+  (banner in `AppLayout`, nascosto in demo/se già verificata), `components/profile/EmailManager.jsx`
+  (scheda Email in `MyProfile`: stato + reinvio + cambio), `AuthContext.refreshUser`, 3 metodi in
+  `client.js`, classi `.email-*`/`.badge-success`/`.success` in `styles.css`.
+
+### Decisioni specifiche della fase
+- **Cambio email con `pending_email`**: il nuovo indirizzo non sostituisce subito quello attivo; il
+  link va al NUOVO indirizzo e solo alla conferma viene promosso. Un errore di battitura non
+  interrompe le comunicazioni verso l'indirizzo funzionante.
+- **`verify-email` pubblico e via POST**: il token è la prova (nessuna sessione); la mutazione avviene
+  con una POST dalla pagina frontend, non con la sola apertura del link (i client email prefetchano i
+  link in GET — stesso principio di sicurezza che userà E5 per le Email Actions).
+- **Gate "solo verificate"**: già in `emailChannel` (E1); E2 fornisce agli utenti il modo di
+  verificarsi. Le email di verifica **bypassano** il gate (transazionali), la demo resta soppressa.
+- **`toSafeUser` duplicata**: `emailVerified`/`pendingEmail` aggiunti in ENTRAMBE le copie.
+
+### Verifica svolta (locale)
+- Migrazione idempotente 2×. **Test backend 22/22** (invio, no-op se già verificata, cambio con
+  pending + email attiva invariata, errori formato/uguale/duplicato, verify current, promozione
+  pending, token non valido/riuso monouso, conflitto in promozione). Provider forzato `noop` nel test.
+- Build frontend OK. **Smoke browser**: pagina `/verifica-email` con token valido → successo +
+  `email_verified=true` a DB; token riusato → errore "non valido o scaduto" (monouso). Dati di test
+  rimossi.
+
+### In sospeso
+- Migrazione produzione di `users.pending_email` (con `email_log` di E1), su conferma.
+- Smoke browser di banner + EmailManager (cambio email end-to-end) rimandato alla sessione condivisa
+  (richiede login di un utente reale): logica già coperta dai test backend.
+
+## Fase E3 — Email assegnazione e modifica turno ✅
+
+Nuovi eventi che finora non generavano alcuna notifica: l'assegnazione di un turno a un dipendente e
+la modifica di un turno assegnato. Additivo puro, in coda a `createShift`/`updateShift`. Nessuna
+modifica di schema.
+
+### File toccati
+- **`services/email/templates/index.js`**: nuovi template `shift_assigned` e `shift_modified`
+  (quest'ultimo mostra Prima/Adesso + eventuale motivo).
+- **`services/notificationService.js`**: helper `sedeName`/`companyName`; funzioni `notifyShiftAssigned`
+  e `notifyShiftModified` (in-app + email, best-effort, escludono l'attore). Risolvono i nomi
+  (azienda/area/sede) dagli id; il nome del dipendente è lo `username` del destinatario.
+- **`controllers/shiftController.js`**: helper `describeShiftWhen` (data concreta per singoli/volante,
+  etichetta di ricorrenza per i fissi, es. "ogni Lun, Mer"); hook in `createShift` (turno
+  fisso/singolo con `user_id` → `notifyShiftAssigned`; il volante resta sul flusso Sostituzioni) e in
+  `updateShift` (stesso dipendente → `notifyShiftModified` con vecchi/nuovi valori; riassegnazione a
+  un altro → `notifyShiftAssigned` al nuovo). Nuovo campo opzionale `reason` nel body di `updateShift`
+  (non persistito, solo per la comunicazione).
+
+### Decisioni specifiche della fase
+- **Assegnazione ≠ Sostituzione**: `notifyShiftAssigned` riguarda i turni fissi/singoli assegnati
+  direttamente a una persona; le Sostituzioni (volante) mantengono il proprio flusso broadcast
+  (`notifySubstitutionAvailable`), non toccato.
+- **Turni fissi**: niente data concreta (ricorrenza), descritta a parole da `describeShiftWhen`.
+- **Riassegnazione**: se cambia il dipendente assegnato, per il nuovo è un'assegnazione. Un evento
+  "turno rimosso" per il vecchio dipendente non è previsto in v1 (estensione futura).
+- **`reason`**: motivo della modifica opzionale, passato dal responsabile, non salvato a DB (nessuna
+  colonna nuova); appare solo nella comunicazione.
+
+### Verifica svolta (locale)
+- **Test controller 15/15** (provider forzato noop): assegnazione singolo (in-app + email, subject con
+  data/orario), modifica stesso dipendente (Prima/Adesso), riassegnazione (nuovo dipendente riceve
+  "assegnato"), turno fisso (subject con "ogni Lun, Mer"), volante che NON genera `shift_assigned`.
+  Dati di test rimossi.
+
+### In sospeso
+- Nessuna migrazione. I template testuali verranno rivestiti dal layout HTML professionale in E4.
+
+## Fase E4 — Template email professionali ✅
+
+Layout HTML email condiviso, responsive e brandizzato, applicato a tutti i template. Nessuna
+modifica alle firme dei dati (i chiamanti E1–E3 restano invariati) né allo schema.
+
+### File toccati
+- **Nuovo** `services/email/templates/layout.js`: `renderLayout({ heading, contentHtml, previewText })`
+  (documento HTML completo con header brand verde, corpo, footer) + helper compositivi `paragraph`,
+  `button`, `buttonRow` (già pronto per le Email Actions E5: Accetta/Rifiuta affiancati),
+  `detailBox` (riquadro etichetta/valore), `highlightBox` (codice 2FA). Brand da `EMAIL_BRAND_NAME`
+  (default "Planivo").
+- **`services/email/templates/index.js`**: ogni `html` ricostruito col layout (subject e text
+  invariati). Coperti tutti i template richiesti: verifica email, reset, 2FA, proposta sostituzione,
+  richiesta/approvazione/rifiuto cancellazione, proposta rifiutata, turno assegnato, turno modificato,
+  generico.
+
+### Decisioni specifiche della fase
+- **Tabelle + stili inline + nessuna risorsa esterna**: vincoli dei client email (Outlook & co.),
+  non pagine web. Brand a testo (nessuna immagine remota), max 600px, responsive.
+- **Escape dei dati nei template** (non nel layout): il template ha i dati grezzi ed è già il punto in
+  cui si applica `escapeHtml`, coerente con E1.
+- **`buttonRow` predisposto per E5**: i bottoni Accetta/Rifiuta delle Email Actions useranno questo
+  helper (varianti primary/danger/neutral).
+
+### Verifica svolta (locale)
+- **Render di tutti i template 55/55** (subject/text presenti, `<!DOCTYPE html>`, brand presente,
+  nessun `undefined`/`[object Object]`). **Anteprima visiva nel browser** (file temporaneo in
+  `frontend/public`, poi rimosso): header brand, riquadro dettagli e bottoni CTA resi correttamente
+  su email_verification e shift_assigned.
+
+### In sospeso
+- Nessuna. Le Email Actions (E5) aggiungeranno i bottoni Accetta/Rifiuta usando `buttonRow`.
+
+## Fase E5 — Email Actions ✅
+
+Esecuzione di un'azione direttamente da un bottone nell'email (accetta/rifiuta una proposta di
+sostituzione, approva/rifiuta una richiesta di cancellazione) senza aprire il portale.
+
+### File toccati
+- **Schema** (`schema.sql`): tabella `email_action_tokens` (token dedicati: `token_hash` SHA-256,
+  `user_id` attore, `action` con CHECK, `entity_type`/`entity_id`, `expires_at`/`used_at`) + indice.
+- **Nuovo** `services/emailActionService.js`: `createActionToken` / `peekActionToken` (valida senza
+  consumare, per la conferma) / `consumeActionToken` (marca used ATOMICO, per l'esecuzione) /
+  `actionLink`. Solo hash a DB, valore in chiaro una volta.
+- **Estrazioni core** (riuso, nessuna divergenza): `declineProposalForUser` (da `declineProposal`),
+  `approveRequestCore`/`rejectRequestCore` + `loadPendingRequest` (da approve/reject cancellazione).
+  Gli handler HTTP restano wrapper a comportamento invariato. `acceptProposalForUser` già esisteva.
+- **Nuovo** `controllers/emailActionController.js`: `describeAction` (GET pubblico, non muta) +
+  `executeAction` (POST pubblico: consuma il token, ri-verifica lo stato dell'entità e
+  l'autorizzazione, esegue via i core, audit). **Route** `routes/emailActions.js` + `app.js`.
+- **`emailChannel.js`**: `buildData` ora può essere ASYNC (per generare un token per-destinatario),
+  con try/catch per destinatario.
+- **`notificationService.js`**: `notifySubstitutionProposal` genera i token Accetta/Rifiuta per il
+  dipendente; `notifyCancellationRequested` genera i token Approva/Rifiuta **per ciascun responsabile**.
+- **Template**: `substitution_proposal` e `cancellation_requested` mostrano i bottoni azione
+  (`buttonRow`) quando gli URL sono presenti, altrimenti un link all'app.
+- **Frontend**: pagina pubblica `pages/EmailAction.jsx` (rotta `/azione-email`: describe on-load →
+  Conferma → execute), 2 metodi in `client.js`.
+
+### Decisioni specifiche della fase (SICUREZZA)
+- **Mutazione solo via POST dopo conferma**: il link nell'email è un GET a una pagina che DESCRIVE
+  l'azione; l'esecuzione avviene solo col POST esplicito. Così i prefetch dei client email (che
+  aprono i link in GET) non innescano l'azione. Stesso principio di `verify-email` (E2).
+- **Token dedicati**: hash-only, scadenza (default 7 giorni, `EMAIL_ACTION_TTL_MINUTES`), **monouso
+  atomico** (consume), vincolati a utente+azione+entità.
+- **Ri-verifica al momento dell'esecuzione**: stato dell'entità (proposta/richiesta ancora
+  azionabile) + autorizzazione (per le cancellazioni, l'attore dev'essere un responsabile della
+  società del token). "Già gestita" → messaggio, non errore.
+- **Riuso dei core, nessuna divergenza**: le Email Actions passano dagli stessi core del percorso
+  HTTP (invariante coerente con `assignVolanteToUser`/`acceptProposalForUser`).
+
+### Verifica svolta (locale)
+- Migrazione idempotente. **Test backend 21/21**: accetta/rifiuta proposta, approva/rifiuta
+  cancellazione, monouso (2° uso 400), **autorizzazione** (token cancellazione a un non-manager →
+  403), già-gestita (done:false), token scaduto, integrazione notify→token→email (token creati +
+  email registrata). Provider forzato noop.
+- Build frontend. **Smoke browser end-to-end**: describe ("Accetta la sostituzione" + dettagli +
+  Conferma) → esecuzione → a DB proposta `accepted`, turno assegnato, token `used_at` valorizzato.
+  Dati di test rimossi.
+
+### In sospeso
+- Migrazione produzione di `email_action_tokens` (con le altre), su conferma.
+
+## Fase E6 — Preferenze notifiche ✅
+
+Ogni utente sceglie quali email di EVENTO ricevere. Riguarda solo il canale email degli eventi: le
+notifiche in-app restano il registro completo, le email transazionali (verifica/reset) non sono mai
+filtrate.
+
+### File toccati
+- **Schema** (`schema.sql`): tabella `notification_preferences` (1:1 con users, `email_mode`
+  all/important/none + `disabled_categories` JSONB). Assenza di riga = default "tutte" (retrocompatibile).
+- **Nuovo** `services/notificationPreferencesService.js`: catalogo `EMAIL_CATEGORIES` (le 7 categorie
+  email di evento, con flag `important`), `getPreferences`, `isEmailAllowed(prefs, eventType)`,
+  `sanitizePreferences`.
+- **`emailChannel.js`**: `fetchRecipients` fa LEFT JOIN sulle preferenze; `sendOne` (solo percorso
+  gated) applica `isEmailAllowed` → riga `suppressed` con motivo "preferenze notifiche utente".
+- **Nuovo** `controllers/notificationPreferencesController.js` (`getMyPreferences`/`updateMyPreferences`,
+  UPSERT) + rotte `GET/PUT /api/notifications/preferences` (`authenticate`, self).
+- **Frontend**: `components/notifications/NotificationPreferences.jsx` (radio modalità + checkbox
+  categorie in modalità "tutte"), montato in `MyProfile` (dipendente) e in `ImpostazioniPage`
+  (responsabile — che ora ha anche `EmailManager`); 2 metodi in `client.js`; classi `.pref-*`.
+
+### Decisioni specifiche della fase
+- **Solo canale email di evento**: le preferenze non toccano le notifiche in-app (registro completo)
+  né le email transazionali (verifica/reset, sempre inviate — passano `gated=false`).
+- **Importanza**: tutte le categorie sono "importanti" tranne "proposta rifiutata (responsabili)".
+  In modalità "solo importanti" solo quella viene soppressa; le categorie fini si gestiscono in "tutte".
+- **Default = tutte**: nessuna migrazione dati, gli utenti esistenti continuano a ricevere tutto.
+
+### Verifica svolta (locale)
+- Migrazione idempotente. **Test 12/12** (default invia; `none` sopprime tutto; `important` invia le
+  importanti e sopprime le altre; categoria disattivata soppressa; transazionale NON filtrata; sanitize
+  di modalità/categorie non valide; controller get/update). Provider noop. Build frontend OK.
+
+### In sospeso
+- Migrazione produzione di `notification_preferences` (con le altre), su conferma.
+- Smoke browser del form preferenze rimandato alla sessione condivisa (logica coperta dai test).
+
+## Fase E7 — Storico comunicazioni + demo ✅
+
+Vista di consultazione dello storico email per responsabile/dirigente (requisito 7) e verifica del
+comportamento in demo (requisito 9). Nessuna modifica di schema.
+
+### File toccati
+- **Nuovo** `controllers/emailLogController.js` (`listEmailLog`, scoped `company_id`, LIMIT) +
+  `routes/emailLog.js` (`GET /api/email-log`, `requireManager`) + `app.js`.
+- **Frontend**: `pages/sections/ComunicazioniPage.jsx` estesa con la sezione "Email inviate"
+  (solo responsabile/dirigente): tabella con Quando / Destinatario / Comunicazione / Stato (badge
+  Inviata/Non inviata/Fallita + motivo per suppressed/failed). `api.listEmailLog`, classi
+  `.email-log-*`/`.badge-danger`/`.table-scroll`.
+
+### Demo (requisito 9)
+- **Nessun codice demo separato**: gli eventi generati durante l'uso della demo passano dagli stessi
+  controller e canale email; per una società `is_demo` l'invio è **soppresso** (riga `email_log`
+  `suppressed`), quindi lo storico Comunicazioni in demo mostra le email "che sarebbero state inviate"
+  senza contattare il provider. Verificato (test E7 [3]).
+- Il loader dello scenario NON è stato modificato (dati storici creati via SQL diretto non generano
+  email): lo storico demo si popola man mano che la persona demo compie azioni (proposte,
+  approvazioni). Scelta coerente con la filosofia "cambiano solo i dati, mai la logica".
+
+### Verifica svolta (locale)
+- **Test E7 9/9**: scoping società (A non vede le email di B), storico demo con riga `suppressed`,
+  campi restituiti (recipientUsername/eventType/subject). Build frontend OK.
+
+### In sospeso
+- Nessuna migrazione. Smoke browser della pagina Comunicazioni (sezione email) rimandato alla
+  sessione condivisa (endpoint + rendering coperti da test + build).
+
+## Riepilogo finale — Iniziativa Email Automation (E1–E7)
+
+**Completata** (2026-07-10) la parte software (E1–E7); E8 (configurazione provider) in corso con
+l'utente. Tutto verificato in locale; migrazioni produzione in sospeso su conferma.
+
+### Implementato
+- **Canale email a eventi** fratello dell'in-app, best-effort non bloccante, con storico `email_log`
+  (E1). Provider **Resend** via `fetch` nativo (zero dipendenze), astrazione provider invariata.
+- **Verifica e cambio email** self-service con `pending_email`, pagina pubblica, banner, gate "solo
+  verificate" (E2).
+- **Email su assegnazione/modifica turno** (E3).
+- **Template HTML professionali** responsive brandizzati per tutte le comunicazioni (E4).
+- **Email Actions**: accetta/rifiuta proposta e approva/rifiuta cancellazione dai bottoni nella mail,
+  con token dedicati monouso, conferma frontend e POST finale (E5).
+- **Preferenze notifiche** per utente (tutte / solo importanti / nessuna + categorie) (E6).
+- **Storico comunicazioni** consultabile dal gestionale (E7).
+
+### Predisposto (non costruito)
+- WhatsApp / SMS / Push: il `notificationService` separa evento e canale; aggiungere un canale =
+  un modulo fratello di `emailChannel` + una riga di aggancio negli eventi.
+- Retry degli invii `failed` (oggi tracciati, non ritentati): un retry lazy in stile escalation
+  Fase 7 è un'estensione naturale.
+- 2FA via email: template + `authTokenService` (purpose `two_factor`) già pronti.
+
+### Migrazioni produzione — ESEGUITE (2026-07-10)
+- `email_log`, `users.pending_email`, `email_action_tokens`, `notification_preferences` applicate al
+  DB **Neon di produzione** (`npm run migrate`, idempotente — verificata no-op alla seconda esecuzione).
+- **`schema.sql` è cumulativo**: la stessa esecuzione ha allineato la produzione all'intero schema,
+  applicando anche tutte le migrazioni additive rimaste in sospeso dalle iniziative precedenti
+  (Sicurezza S2–S4, Sostituzioni fasi 1–7, Demo Framework). Nessun errore, nessuna perdita dati.
+
+### Env da impostare in produzione (Vercel, backend)
+- `EMAIL_PROVIDER=resend`, `RESEND_API_KEY=...`, `EMAIL_FROM="Planivo <no-reply@dominio-verificato>"`,
+  `APP_BASE_URL=<url frontend>`, `EMAIL_REQUIRE_VERIFIED=true`. Opzionali: `EMAIL_ACTION_TTL_MINUTES`,
+  `EMAIL_BRAND_NAME`. Finché `EMAIL_PROVIDER` resta `noop` (default) non parte alcuna email.
+
+### Piano di test finale (requisito 11) — copertura automatizzata locale
+| Flusso | Copertura |
+|---|---|
+| Registrazione nuovo utente → email di verifica | E2 (createUser hook) + E1 (log) |
+| Verifica email (successo/errore/monouso) | E2 22/22 + smoke browser |
+| Assegnazione turno → email | E3 15/15 |
+| Modifica turno → email (vecchi/nuovi valori) | E3 |
+| Richiesta cancellazione → email responsabili + azioni | E5 21/21 |
+| Approvazione/rifiuto dalla mail | E5 + smoke browser (accept end-to-end) |
+| Proposta sostituzione → email + azioni | E5 |
+| Accettazione/rifiuto dalla mail | E5 |
+| Gestione errori (token scaduto/riusato, non autorizzato) | E5 |
+| Preferenze (tutte/importanti/nessuna/categorie) | E6 12/12 |
+| Storico comunicazioni (scoping società) | E7 9/9 |
+| Funzionamento in demo (soppressione + storico) | E1 + E7 |
+| Best-effort non bloccante (provider ko) | E1 (failed non lancia) |

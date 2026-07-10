@@ -31,6 +31,15 @@ export function AuthProvider({ children }) {
     setUser(newUser);
   }
 
+  // Ricarica l'utente dal backend (dopo cambi che non passano da un nuovo login: verifica/cambio
+  // email, ecc.). Aggiorna in place `user` con i campi freschi (emailVerified/pendingEmail/...).
+  async function refreshUser() {
+    if (!token) return null;
+    const { user: fresh } = await api.me(token);
+    setUser(fresh);
+    return fresh;
+  }
+
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
@@ -38,7 +47,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ token, user, loading, loginWithToken, logout }}>
+    <AuthContext.Provider value={{ token, user, loading, loginWithToken, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

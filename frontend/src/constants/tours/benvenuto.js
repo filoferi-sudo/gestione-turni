@@ -3,11 +3,11 @@
 // Il tour commerciale completo è in tourCommerciale.js (Fase D5).
 export default {
   id: 'benvenuto',
-  name: 'Benvenuto in PoolShift',
+  name: 'Benvenuto in Planivo',
   steps: [
     {
       id: 'welcome',
-      title: 'Benvenuto in PoolShift',
+      title: 'Benvenuto in Planivo',
       body: 'Ti mostriamo in pochi passi come funziona il gestionale. Puoi uscire quando vuoi.',
       target: null, // step centrato
       advanceOn: { type: 'next' },
