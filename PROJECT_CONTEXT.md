@@ -142,7 +142,12 @@ turni-app/
                                 EmployeeTurni (mie richieste), EmployeeSostituzioni (proposte +
                                 disponibili), EmployeeImpostazioni (profilo/disponibilità/opt-out)
         sections/                pagine condivise tra ruoli: ComunicazioniPage (elenco notifiche
-                                completo), ReportPage (HoursStats + placeholder report futuri)
+                                completo), ReportPage (istrada al Report manager o self-service
+                                secondo il ruolo — vedi sezione "Sezione Report")
+        reports/                 componenti della sezione Report (vedi sezione dedicata):
+                                ManagerReport (filtri + griglia schede + dettaglio inline),
+                                EmployeeReport (self-service, solo propri dati), EmployeeReportCard,
+                                EmployeeReportDetail, ReportFilters, reportPeriods.js, reportFormat.jsx
         superadmin/              SuperAdminHome (statistiche piattaforma), SocietaPage (anagrafica
                                 società + primo dirigente)
         dirigente/SediManagement.jsx   CRUD sedi (solo Dirigente), ora dentro ImpostazioniPage
@@ -961,7 +966,7 @@ dedicata per sezione**, con rotte annidate di react-router (`<Outlet />`).
 | Sostituzioni | pannelli manage per area (+ Trova sostituzione/proposte) | idem | proposte ricevute + disponibili per area |
 | Fabbisogno | regole per area (modali settimanale/singolo riusati; la copertura resta nel Calendario) | idem | — |
 | Comunicazioni | elenco notifiche completo (pagina condivisa) | idem | idem |
-| Report | HoursStats aggregato + placeholder report avanzati | idem | HoursStats self-service |
+| Report | analisi operativa del personale: griglia schede dipendente (ore/contratto/turni/richieste) con filtri periodo/sede/area/dipendente + scheda dettaglio (confronto periodi, alert informativi, storico) | idem | vista self-service (solo propri dati) |
 | Impostazioni | account + Sedi + Aree operative + escalation sostituzioni | solo account (struttura riservata al Dirigente) | MyProfile (profilo/disponibilità/opt-out) |
 
 Super Admin (/superadmin/*): solo **Dashboard** (statistiche piattaforma) e **Società** — coerente
@@ -1428,9 +1433,93 @@ Architettura: **Framework → Scenario → Dataset → Tour guidato → Software
   richieste di cancellazione + opt-out con nota "Ferie"; logo aziendale → placeholder solo frontend
   nel metadata dello scenario (nessuna colonna DB); gestione documenti esclusa dalla v1.
 
+## Sezione Report (analisi operativa del personale)
+
+Strumento di analisi del personale per il titolare/responsabile: dà una fotografia immediata di
+ciascun dipendente (ore, rispetto del contratto, turni, richieste). **Livello puramente additivo,
+sola lettura**: non introduce tabelle/colonne nuove, non modifica alcun flusso esistente — aggrega
+dati già presenti riusando le stesse logiche del resto del sistema. **Non è una valutazione del
+dipendente**: mostra solo dati oggettivi + alert informativi; nessuna classifica, nessun giudizio,
+nessuna decisione HR (disclaimer esplicito in UI: "la valutazione finale spetta sempre al responsabile").
+
+### Riuso dei dati esistenti (nessun sistema parallelo)
+
+- **Ore lavorate/pianificate**: `services/shiftExpansion.getExpandedShifts` + `shiftDurationHours`
+  (stesse funzioni di `statsController`). `plannedHours` = tutti i turni assegnati nel periodo;
+  `workedHours` = solo quelli con data ≤ oggi.
+- **Rispetto del contratto**: tabella `user_contracts` (Fase 1). Il "monte ore previsto" per il
+  periodo è **proporzionato** dal massimale settimanale (preferito) o mensile alla durata del periodo
+  (`expectedHoursForPeriod`). `difference = plannedHours − expectedHours` (null se nessun massimale).
+- **Richieste di cancellazione**: `cancellation_requests` raggruppate per stato (tot/approvate/
+  rifiutate/in attesa), filtrate per `created_at` nel periodo.
+- **Proposte di sostituzione ricevute**: `substitution_proposals` (Fase 5) per stato; scoping società
+  via JOIN su `shifts` (la tabella non ha `company_id`, vedi "Tabelle principali").
+- **Sostituzioni prese**: turni `type='volante'` assegnati al dipendente (claim o proposta accettata).
+- **Aree = "ruolo/reparto"**: nel modello dati il "ruolo" operativo di un dipendente è l'area/e a cui
+  è assegnato (`user_areas`), usate come etichetta e come filtro.
+
+### Backend (`services/reportService.js` + `controllers/reportController.js` + `routes/reports.js`)
+
+- `buildOverview({companyId,start,end,areaId,sedeId,userId})` → vista generale: una scheda per
+  dipendente. `buildDetail({companyId,userId,start,end})` → scheda dettaglio + **confronto col periodo
+  immediatamente precedente della stessa durata** (`previousPeriod`) + storico turni.
+- **Nessun N+1**: una sola `getExpandedShifts` sull'intera società + due query aggregate (cancellazioni,
+  proposte) raggruppate per utente — stesso spirito del fix di `listAvailableShifts`.
+- **Alert informativi** (soglie in `ALERT_THRESHOLDS`, costanti nel service): ore pianificate molto
+  sopra/sotto il monte previsto; ≥5 richieste di cancellazione nel periodo. **Solo di supporto**, mai
+  un giudizio. **Stato operativo** (`no_contract`/`on_track`/`over`/`under`): descrizione oggettiva
+  delle ore vs contratto (tolleranza `STATUS_TOLERANCE_HOURS`).
+- **Rotte**: `GET /api/reports/employees` (`requireManager`); `GET /api/reports/employees/:id`
+  (solo `authenticate`, autorizzazione fine nel controller: un dipendente vede **solo i propri**
+  dati → 403 su altri; manager qualunque dipendente della società → 404 fuori società). Stesso
+  pattern di `/api/users/:id/availability`. Periodo default = mese corrente; validazione `start`/`end`.
+
+### Frontend (`components/reports/`)
+
+- `ReportPage` istrada per ruolo: manager → `ManagerReport`, dipendente → `EmployeeReport`.
+- `ManagerReport`: `ReportFilters` (preset periodo/personalizzato + sede/area/dipendente, opzioni aree
+  caricate da `listAreas` per tutte le sedi della società) + griglia `EmployeeReportCard`; click su una
+  scheda → `EmployeeReportDetail` **inline** (nessuna rotta nuova, "Torna all'elenco"). Polling 60s
+  solo sull'elenco (sospeso mentre si consulta un dettaglio). L'ancora `data-tour="hours-stats"` è
+  **spostata** sulla card filtri del Report (il tour commerciale `tourCommerciale.js` la cerca su
+  `{base}/report`): non rimuoverla o il passo "statistiche" del tour perde il target.
+- `EmployeeReport`: selettore periodo + `EmployeeReportDetail` sui **propri** dati (nessun filtro
+  sede/area/dipendente, nessun "torna all'elenco").
+- `HoursStats.jsx` resta nel codice/statsController invariato (endpoint `/api/stats/hours` ancora
+  attivo), ma non è più montato nella pagina Report: il nuovo Report copre e amplia quelle statistiche.
+- Stili `.report-*` in coda a `styles.css`, palette esistente (nessun colore nuovo di rilievo).
+
+### Cosa NON fa (vincoli da mantenere)
+
+- Non valuta i dipendenti, non crea classifiche/graduatorie, non suggerisce decisioni HR. Se in futuro
+  si aggiungono metriche, restano **dati oggettivi** con lo stesso disclaimer.
+- Non scrive nulla: è sola lettura. Nessuna nuova tabella/colonna è stata creata per il Report.
+
 ## Changelog / aggiornamenti
 
 Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cosa ricordare.
+
+- **2026-07-10** — **Sezione Report (analisi operativa del personale)**. Nuova sezione, sola lettura e
+  puramente additiva, per titolare/responsabile: vista generale con scheda per dipendente (ore lavorate/
+  pianificate, monte ore da contratto proporzionato, differenza, turni, richieste di cancellazione,
+  sostituzioni prese, stato operativo, alert informativi) con filtri periodo/sede/area/dipendente, e
+  scheda dettaglio (analisi ore, analisi richieste, statistiche operative, **confronto col periodo
+  precedente**, alert, storico turni). Il dipendente vede **solo i propri dati**. **Nessuna nuova
+  tabella/colonna**: aggrega `shifts`(getExpandedShifts)/`user_contracts`/`cancellation_requests`/
+  `substitution_proposals`/`user_areas` riusando le logiche esistenti; **nessun sistema parallelo**.
+  **File**: backend `services/reportService.js`, `controllers/reportController.js`, `routes/reports.js`
+  (+ registrazione in `app.js`); frontend `pages/sections/ReportPage.jsx` (riscritta), nuova cartella
+  `components/reports/` (ManagerReport, EmployeeReport, EmployeeReportCard, EmployeeReportDetail,
+  ReportFilters, reportPeriods.js, reportFormat.jsx), `api/client.js` (+`getReportOverview`/
+  `getEmployeeReport`), stili `.report-*` in `styles.css`. **Tour**: l'ancora `data-tour="hours-stats"`
+  è stata spostata sulla card filtri del Report (il passo "statistiche" di `tourCommerciale.js` naviga a
+  `{base}/report`). **Decisioni**: Report = raccolta/organizzazione di dati oggettivi, **mai** valutazione
+  automatica dei dipendenti (disclaimer esplicito in UI); "ruolo/reparto" del report = area operativa
+  (`user_areas`); il monte ore previsto è proporzionato dal massimale contrattuale settimanale/mensile
+  alla durata del periodo. **Nessuna migrazione DB.** Verificato in locale su scenario demo "ristorante"
+  (32 dipendenti): service (overview/detail/confronto), HTTP 200/400/401/403/404 (permessi self vs
+  manager, isolamento società), UI end-to-end (griglia, filtro area, dettaglio con tutte le sezioni,
+  vista dipendente self), build frontend OK.
 
 - **2026-07-10** — **Brand "Planivo" + migrazione produzione ESEGUITA**. (1) Rinominato il brand da
   "PoolShift" a **Planivo** ovunque (default `EMAIL_BRAND_NAME` in `templates/layout.js`, `EMAIL_FROM`,

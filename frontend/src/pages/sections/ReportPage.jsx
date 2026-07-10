@@ -1,10 +1,15 @@
 import { useAuth } from '../../context/AuthContext';
-import HoursStats from '../../components/stats/HoursStats';
+import ManagerReport from '../../components/reports/ManagerReport';
+import EmployeeReport from '../../components/reports/EmployeeReport';
 
-// Sezione Report (tutti i ruoli di società): oggi contiene le statistiche delle ore lavorate
-// (vista aggregata per manager, self-service per il dipendente — stesso componente HoursStats,
-// il backend forza il filtro per i dipendenti). La sezione è volutamente predisposta a crescere
-// (report avanzati, esportazioni, statistiche di copertura) senza cambiare la navigazione.
+// Sezione Report: strumento di analisi del personale.
+// - Responsabile/Dirigente: vista generale di tutti i dipendenti (schede riepilogative) con filtri
+//   per periodo/sede/area/dipendente, e scheda dettaglio per ciascuno (ore, richieste, statistiche
+//   operative, confronto periodi, alert informativi).
+// - Dipendente: vede solo i propri dati (self-service), stessa scheda dettaglio.
+// Tutti i dati sono aggregati da tabelle già esistenti (turni, contratti, richieste): nessun
+// sistema parallelo. Il Report raccoglie e organizza dati oggettivi — non valuta i dipendenti né
+// prende decisioni HR: la decisione finale resta sempre al responsabile.
 export default function ReportPage() {
   const { user } = useAuth();
   const isManager = user.role === 'admin' || user.role === 'dirigente';
@@ -14,19 +19,11 @@ export default function ReportPage() {
       <h1>Report</h1>
       <p className="subtitle">
         {isManager
-          ? 'Statistiche sulle ore lavorate del personale della società.'
-          : 'Statistiche sulle tue ore lavorate.'}
+          ? 'Analisi operativa del personale: ore, contratto, turni e richieste per periodo.'
+          : 'Analisi delle tue ore, dei tuoi turni e delle tue richieste per periodo.'}
       </p>
 
-      <HoursStats />
-
-      <section className="card placeholder">
-        <h2>Report avanzati</h2>
-        <p className="hint">
-          In arrivo: esportazioni, statistiche di copertura del fabbisogno e report periodici. Questa sezione
-          è predisposta per ospitarli.
-        </p>
-      </section>
+      {isManager ? <ManagerReport /> : <EmployeeReport />}
     </>
   );
 }
