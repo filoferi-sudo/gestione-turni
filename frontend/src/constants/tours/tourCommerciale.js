@@ -1,0 +1,115 @@
+// Tour COMMERCIALE: racconta una vera giornata lavorativa per mostrare il VALORE del software, non
+// solo le funzionalità. Persona consigliata: Dirigente. Scenario-agnostico nella forma (referenzia
+// solo id [data-tour], route con {base} e nomi di azioni/check demo): i riferimenti al ristorante
+// vivono solo nei testi, coerenti con lo scenario che dichiara questo tour (metadata.tours).
+//
+// Flusso a due attori: il responsabile agisce dalla UI reale (approva, propone); l'azione del
+// DIPENDENTE (accetta) è simulata lato server dal framework demo, riusando gli helper reali.
+export default {
+  id: 'commerciale',
+  name: 'Una giornata con PoolShift',
+  steps: [
+    {
+      id: 'benvenuto',
+      title: 'Benvenuto in PoolShift',
+      body: 'Ti mostriamo come il software gestisce da solo un imprevisto quotidiano: un turno che resta scoperto. Bastano pochi clic.',
+      target: null,
+      advanceOn: { type: 'next' },
+    },
+    {
+      id: 'dashboard',
+      title: 'La tua dashboard',
+      body: 'Ogni mattina trovi qui il quadro della giornata: turni scoperti, richieste in attesa e copertura del personale.',
+      route: '{base}',
+      target: '[data-tour="nav-dashboard"]',
+      placement: 'right',
+      advanceOn: { type: 'next' },
+    },
+    {
+      id: 'turni',
+      title: 'Un cameriere è assente',
+      body: 'Giulia ha chiesto di non lavorare il suo turno serale. La sua richiesta ti aspetta qui, nella sezione Turni.',
+      route: '{base}/turni',
+      target: '[data-tour="cancellation-requests"]',
+      placement: 'bottom',
+      advanceOn: { type: 'next' },
+    },
+    {
+      id: 'approva',
+      title: 'Approva la richiesta',
+      body: 'Clicca "Approva" sulla richiesta di Giulia. Il suo turno diventerà automaticamente una sostituzione scoperta da coprire.',
+      target: '[data-tour="approve-request"]',
+      placement: 'left',
+      hint: 'Clicca "Approva" per proseguire.',
+      advanceOn: { type: 'click', target: '[data-tour="approve-request"]' },
+    },
+    {
+      id: 'scoperto',
+      title: 'Il turno è scoperto',
+      body: 'Ecco la sostituzione appena generata, nella sezione Sostituzioni. Ora bisogna trovare chi la copre.',
+      route: '{base}/sostituzioni',
+      target: '[data-tour="substitutions-panel"]',
+      placement: 'top',
+      advanceOn: { type: 'next' },
+    },
+    {
+      id: 'trova',
+      title: 'Trova i candidati migliori',
+      body: 'Non devi telefonare a tutti: apri "Trova sostituzione" e lascia che il sistema individui i candidati più adatti.',
+      target: '[data-tour="find-replacement"]',
+      placement: 'left',
+      hint: 'Clicca "Trova sostituzione" per proseguire.',
+      advanceOn: { type: 'click', target: '[data-tour="find-replacement"]' },
+    },
+    {
+      id: 'candidati',
+      title: 'Una classifica trasparente',
+      body: 'Il motore ordina i dipendenti per compatibilità (disponibilità, contratto, carico di lavoro) e spiega ogni punteggio.',
+      target: '[data-tour="find-replacement-modal"]',
+      placement: 'right',
+      advanceOn: { type: 'next' },
+    },
+    {
+      id: 'invia',
+      title: 'Invia una proposta mirata',
+      body: 'Seleziona il candidato migliore e invia la proposta: la riceverà solo lui, senza disturbare tutti gli altri.',
+      target: '[data-tour="send-proposal"]',
+      placement: 'top',
+      hint: 'Seleziona un candidato e clicca "Invia proposta".',
+      advanceOn: { type: 'click', target: '[data-tour="send-proposal"]' },
+    },
+    {
+      id: 'dipendente-accetta',
+      title: 'Il dipendente riceve la notifica',
+      body: 'Sul telefono del dipendente arriva la proposta. Simuliamo la sua risposta: accetta il turno.',
+      target: null,
+      action: { kind: 'simulate', name: 'collega-accetta-proposta', label: 'Il collega accetta ✓' },
+      advanceOn: { type: 'next' },
+    },
+    {
+      id: 'assegnato',
+      title: 'Turno assegnato!',
+      body: 'Il turno è coperto e sparisce dalle sostituzioni aperte: nessuna telefonata, nessun buco in sala.',
+      route: '{base}/sostituzioni',
+      target: '[data-tour="substitutions-panel"]',
+      placement: 'top',
+      advanceOn: { type: 'poll', check: 'turno-assegnato', interval: 2500 },
+    },
+    {
+      id: 'statistiche',
+      title: 'Le statistiche si aggiornano',
+      body: 'Ore lavorate e coperture si aggiornano da sole: hai sempre il controllo del costo del personale.',
+      route: '{base}/report',
+      target: '[data-tour="hours-stats"]',
+      placement: 'top',
+      advanceOn: { type: 'next' },
+    },
+    {
+      id: 'conclusione',
+      title: 'Ecco il valore di PoolShift',
+      body: 'Un imprevisto risolto in un minuto, senza caos. Ora esplora liberamente: la demo è tutta tua.',
+      target: null,
+      advanceOn: { type: 'next' },
+    },
+  ],
+};

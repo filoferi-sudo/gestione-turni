@@ -38,7 +38,7 @@ export default function CancellationRequestsPanel() {
   }
 
   return (
-    <section className="card">
+    <section className="card" data-tour="cancellation-requests">
       <h2>Richieste di cancellazione turno</h2>
 
       {error && <div className="error">{error}</div>}
@@ -47,14 +47,18 @@ export default function CancellationRequestsPanel() {
         <p className="hint">Nessuna richiesta in attesa.</p>
       ) : (
         <ul className="shift-list">
-          {requests.map((r) => (
+          {requests.map((r, index) => (
             <li key={r.id} className="shift-list-item">
               <span>
                 <strong>{r.requestedByUsername}</strong> · {r.shiftDate} · {r.shiftStartTime}-{r.shiftEndTime}
                 {r.shiftNote ? ` · ${r.shiftNote}` : ''}
               </span>
               <span>
-                <button disabled={busyId === r.id} onClick={() => handleDecision(r, 'approve')}>
+                <button
+                  data-tour={index === 0 ? 'approve-request' : undefined}
+                  disabled={busyId === r.id}
+                  onClick={() => handleDecision(r, 'approve')}
+                >
                   Approva
                 </button>
                 <button

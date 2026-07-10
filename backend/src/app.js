@@ -34,6 +34,7 @@ const staffingRoutes = require('./routes/staffing');
 const notificationRoutes = require('./routes/notifications');
 const substitutionProposalRoutes = require('./routes/substitutionProposals');
 const auditRoutes = require('./routes/audit');
+const demoRoutes = require('./routes/demo');
 
 const app = express();
 
@@ -70,6 +71,7 @@ app.use('/api/staffing', staffingRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/proposals', substitutionProposalRoutes);
 app.use('/api/audit-logs', auditRoutes);
+app.use('/api/demo', demoRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

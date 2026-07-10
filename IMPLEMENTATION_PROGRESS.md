@@ -1040,3 +1040,398 @@ di test; utente temporaneo `resp_test` creato e poi eliminato.)
   `payload` delle notifiche può diventare navigabile — limite v1 dichiarato in Fase 3).
 - Eventuale endpoint di riepilogo dedicato per le Dashboard se i conteggi multipli diventassero
   pesanti su società grandi.
+
+---
+---
+
+# Iniziativa: Demo Framework (fasi D1–D6)
+
+> **Scopo**: rendere PoolShift capace di generare **ambienti dimostrativi realistici per qualsiasi
+> settore** come funzionalità permanente: un layer "Demo Framework" sopra il software esistente in
+> cui cambiano SOLO i dati caricati, mai la logica del gestionale. Piano completo e decisioni in
+> `~/.claude/plans` (sessione 2026-07-10) e in `PROJECT_CONTEXT.md` → sezione "Demo Framework".
+> Architettura: Framework (motore generico) → Scenario (modulo dati autocontenuto) → Dataset
+> (offset di date + ref simbolici) → Tour guidato → Software (invariato).
+
+**Decisioni vincolanti prese con l'utente (2026-07-10)**:
+1. Isolamento: società demo nello **stesso DB**, flag `companies.is_demo`; il framework rifiuta di
+   scrivere su società non-demo (`assertDemoCompany`, chokepoint unico).
+2. Ingresso: bottone "Prova la demo" nel Login (visibile solo con `DEMO_MODE=true`), scelta persona
+   Dirigente/Responsabile/Dipendente.
+3. Tour multi-attore: azioni dell'altro attore **simulate lato server** riusando gli helper
+   esistenti (mai logica duplicata).
+4. Voci di spec senza funzionalità corrispondente: ferie → richieste di cancellazione + opt-out con
+   nota "Ferie"; logo → placeholder solo frontend; documenti esclusi dalla v1.
+
+## Stato fasi
+
+- **D1 — Fondamenta: migrazione + framework core + guardie + status** ✅ *completata (2026-07-10)*
+- **D2 — Scenario ristorante + loader completo + npm run demo:load** ✅ *completata (2026-07-10)*
+- **D3 — Demo login (lazy re-anchor) + bottone Login + banner (Demo Libera)** ✅ *completata (2026-07-10)*
+- **D4 — Tour engine frontend (scenario-agnostico)** ✅ *completata (2026-07-10)*
+- **D5 — Tour commerciale + azioni simulate** ✅ *completata (2026-07-10)*
+- **D6 — Rifiniture: badge Demo superadmin, stats, documentazione finale** ✅ *completata (2026-07-10)*
+
+---
+
+## D1 — Fondamenta: migrazione, framework core, guardie, /api/demo/status ✅
+
+**Completata**: 2026-07-10. Additivo puro (2 righe in `app.js`, il resto è tutto nuovo).
+
+### Cosa è stato fatto
+- **Schema** (migrazione idempotente in coda a `schema.sql`): `companies.is_demo BOOLEAN NOT NULL
+  DEFAULT FALSE` + indice parziale; tabella **`demo_state`** (`company_id` UNIQUE FK CASCADE,
+  `scenario_id` UNIQUE — una istanza per scenario in v1, `dataset_version`, `anchor_date`,
+  `loaded_at`, `tour_context JSONB` per i "ganci" dei tour risolti in id reali).
+- **`backend/src/demo/framework/`** (ZERO logica di settore):
+  - `config.js` — env `DEMO_MODE` (default spenta), `DEMO_RESEED_AFTER_DAYS` (default 7),
+    `DEMO_PERSONA_PASSWORD` (solo dev); lette a runtime, mai hardcoded.
+  - `guard.js` — `requireDemoEnabled` (middleware: demo spenta ⇒ 404 identico al 404 globale) e
+    **`assertDemoCompany(companyId, db)`** — chokepoint anti-dati-reali, PRIMA istruzione di ogni
+    percorso di scrittura del framework; accetta il client di transazione.
+  - `rng.js` — PRNG deterministico seedato (xmur3+mulberry32, zero dipendenze): ogni reload di uno
+    scenario produce lo stesso "mondo" traslato sulla nuova ancora.
+  - `anchor.js` — conversioni offset→data/timestamp TZ-safe (riusa `formatLocalDate`/`DAY_CODES`
+    di `utils/recurrence.js`), `weekdayOfOffset` per i generatori.
+  - `registry.js` — registro scenari: aggiungere uno scenario = una cartella + una riga qui.
+  - `loader.js` — **motore generico completo**: `loadScenario(id,{force})` in TRANSAZIONE UNICA
+    (`pool.connect()` → BEGIN/COMMIT, primo uso di transazioni nel progetto, confinato qui) con
+    `pg_advisory_xact_lock` per scenario (load concorrenti serializzati, stato riletto dentro il
+    lock); `isStateStale` (ancora più vecchia di `DEMO_RESEED_AFTER_DAYS` o version bump del
+    dataset); `insertDataset` consuma le sezioni generiche del contratto scenario (documentato in
+    testa al file: company, sedi, aree, utenti, contratti, disponibilita, optouts, fabbisogni,
+    eccezioni*, turni, corsi, richiesteCancellazione, proposte, notifiche, auditLogs, tourContext)
+    risolvendo i ref simbolici in id reali; INSERT multi-riga a blocchi da 200 per lo storico;
+    UNA sola password bcrypt per load (casuale, o `DEMO_PERSONA_PASSWORD` in dev); username demo
+    validati col prefisso obbligatorio `demo-`; payload notifiche con chiavi `*Ref` risolte come
+    nei flussi reali.
+  - `reset.js` — `resetScenarioCompany(client, companyId)`: guardia, DELETE espliciti di
+    `audit_logs` (FK SET NULL) e `demo_state`, poi `DELETE FROM companies WHERE id=$1 AND
+    is_demo=TRUE` (predicato ridondante; rowCount 0 ⇒ errore, mai silenzioso). Il CASCADE della
+    company elimina tutto il resto.
+- **`controllers/demoController.js`** + **`routes/demo.js`** (montato su `/api/demo` in `app.js`):
+  `GET /api/demo/status` pubblico — `{enabled:false}` a demo spenta, altrimenti scenari registrati
+  (solo metadati di presentazione). Le rotte operative future useranno `requireDemoEnabled`.
+- `backend/.env.example` — sezione Demo Framework (DEMO_MODE / DEMO_RESEED_AFTER_DAYS /
+  DEMO_PERSONA_PASSWORD).
+
+### Decisioni della fase
+- **Demo = dominio proprio (`/api/demo/*`), non legato al Super Admin**: caricare/resettare uno
+  scenario è gestione di dati operativi, che il Super Admin per vincolo non tocca. Il framework si
+  auto-amministra (lazy al demo-login + reset self-service); al Super Admin resterà solo la
+  visibilità (badge "Demo", Fase D6).
+- **Default sicuro**: `DEMO_MODE` assente ⇒ rotte demo 404 (indistinguibili da rotte inesistenti),
+  bottone frontend non renderizzato.
+- **Una istanza per scenario (v1)**: UNIQUE su `demo_state.scenario_id`; le future demo
+  per-cliente/temporanee aggiungeranno `instance_key`/`expires_at` rimuovendo il vincolo.
+
+### Verifica svolta (locale, DB reale)
+- Migrazione idempotente (2×, seconda no-op); struttura `demo_state`/`is_demo`/indici confermata;
+  le società esistenti restano `is_demo=false`.
+- Guardia: società reale → rifiutata; id inesistente → rifiutato; società demo di test → passa
+  (creata e rimossa); registry con scenario ignoto → errore esplicito.
+- Server live: `GET /api/demo/status` → `{enabled:false}` senza `DEMO_MODE`, `{enabled:true,
+  scenarios:[]}` con; rotta demo non registrata → `404 {"error":"Risorsa non trovata"}`;
+  regressione `GET /api/health` e login reale (200, token) OK. `node --check` su tutti i nuovi
+  file; app carica senza cicli di require.
+
+### In sospeso
+- Migrazione produzione di `is_demo`/`demo_state`: con le altre pendenti, solo su conferma esplicita.
+
+### Ripresa
+- **La Fase D2 riparte da**: creare `backend/src/demo/scenarios/ristorante/` secondo il contratto
+  documentato in `loader.js`, registrarlo in `registry.js`, aggiungere `demo/cli.js` + npm script
+  `demo:load`/`demo:reset`, e verificare il load end-to-end.
+
+---
+
+## D2 — Scenario ristorante + loader completo + npm run demo:load ✅
+
+**Completata**: 2026-07-10. Primo scenario reale + verifica end-to-end del motore generico.
+
+### Cosa è stato fatto
+- **`backend/src/demo/scenarios/ristorante/`** (modulo dati puro, nessun accesso DB):
+  - `structure.js` — società "Ristorante Da Mario S.r.l." (escalation 24h), 1 sede (calendario
+    09:00-23:30), 5 aree: Sala/Cucina/Bar/Accoglienza (`shifts`) + Eventi & Formazione (`courses`).
+    Ristorante chiuso il lunedì (nessun turno/fabbisogno MON).
+  - `people.js` — **35 persone hand-authored** (1 dirigente titolare, 2 responsabili, 32
+    dipendenti; alcuni multi-area). Contratti differenziati (tempo pieno/part-time 20/24/30/
+    apprendistato/extra con massimali e note), disponibilità per profilo (studenti sere+weekend,
+    "ignota" per i full-timer per esercitare quel ramo del motore), pattern settimanale di turni.
+  - `planning.js` — orari per area (pranzo/cena), 48 fabbisogni fissi (per giorno/fascia, con
+    rinforzo weekend), conversione dei pattern in **55 turni fissi ricorrenti ancorati a -90 gg**
+    (backbone "operativo da mesi"), 4 corsi (HACCP fisso + 2 degustazioni singole + 1 volante).
+  - `timeline.js` — **presente + storico**: gancio del tour (assenza pendente di Giulia), richiesta
+    ferie pendente, 3 sostituzioni scoperte (oggi/domani/+3, una da cancellazione con
+    origin_shift_id), 3 proposte mirate (2 pending + 1 declined con snapshot score/reasons),
+    notifiche non lette per gestori/dipendenti, 2 opt-out "Ferie" (attivo + storico), 10 cancellazioni
+    storiche decise (con sostituzioni coperte da colleghi), turni extra recenti, 12 audit_logs
+    distribuiti. Storico di riempimento con **RNG deterministico** (stabile fra i reload), stati
+    visibili scritti a mano.
+  - `metadata.js` — 3 personas (Dirigente/Responsabile/Dipendente), logoPlaceholder (iniziali DM +
+    colore, solo frontend), tour `commerciale`, `version:1`.
+  - `index.js` — implementa il contratto scenario: assembla le sezioni, deriva username/email nel
+    namespace `demo-ristorante-*`, e applica un **invariante fail-fast** (nessun dipendente supera il
+    monte ore settimanale contrattuale con i turni fissi) PRIMA di toccare il DB.
+- **`backend/src/demo/cli.js`** + npm `demo:load`/`demo:reset` (load/reset da terminale, TZ-safe).
+- **`registry.js`** — scenario `ristorante` registrato (unica riga).
+- Fix additivo: `utils/recurrence.js` esporta ora anche `formatLocalDate` (helper puro già
+  esistente, serve ad `anchor.js`; nessun cambio di comportamento).
+
+### Verifica svolta (locale, DB reale)
+- Build a secco (senza DB): 35 utenti / 34 contratti / 215 disponibilità / 48 fabbisogni / 84 turni
+  / 4 corsi / 12 richieste / 3 proposte / 2 opt-out / 9 notifiche / 12 audit; invariante ore
+  superato (4 pattern eccedenti corretti a mano, poi verde).
+- `demo:load`: **127 ms** (≪ limite serverless 10s). Conteggi a DB coerenti (35 utenti = 1+2+32,
+  5 aree, 55 turni fissi, 3 volante scoperti, 2 richieste pendenti, 3 proposte, 6 notifiche non
+  lette). `tour_context` risolto in id reali. **Zero sovrapposizioni** turni (self-join), **zero**
+  turni fuori finestra sede, **zero** incoerenze area/sede.
+- **Idempotenza**: secondo `demo:load` stesso giorno → no-op; `--force` → ricrea con id nuovi,
+  rimuove il precedente. `demo:reset` → 0 società demo / 0 demo_state residui, **società reali
+  intatte** (`is_demo=false`).
+- **Usabilità attraverso il software reale** (login normale con `DEMO_PERSONA_PASSWORD`): login del
+  dirigente demo OK; `/api/sedi`, `/api/calendar` (73 turni settimana corrente inclusi 2 volante;
+  **69 turni una settimana di 3 mesi fa** → operatività da mesi), `/api/staffing/coverage` (12
+  occorrenze, 1 con posti scoperti) — tutto risponde identico al reale, nessuna logica demo nei
+  controller.
+- Ambiente di test rimosso al termine (DB locale pulito). `node --check` su tutti i nuovi file OK.
+
+### Ripresa
+- **La Fase D3 riparte da**: aggiungere `POST /api/demo/login` (lazy load via `loadScenario` +
+  emissione JWT di sessione della persona), `POST /api/demo/reset`, `isDemo` in **entrambe** le
+  copie di `toSafeUser` (authController esporta già `toSafeUserWithAreas`), i componenti frontend
+  `DemoBanner`/`DemoPersonaPicker`, il bottone "Prova la demo" in `Login.jsx` e i metodi in
+  `client.js`.
+
+---
+
+## D3 — Ingresso demo: demo-login (lazy), bottone Login, banner = Demo Libera ✅
+
+**Completata**: 2026-07-10. La Demo Libera è pienamente usabile: si entra scegliendo una persona,
+si trova il software popolato, si usa tutto senza limiti.
+
+### Cosa è stato fatto
+- **Schema** (idempotente): `demo_state.personas JSONB` — mappa persona-key → user_id reale,
+  risolta dal loader dopo l'inserimento utenti (il demo-login trova l'utente senza conoscere gli
+  username interni).
+- **Backend**:
+  - `authController.js` — `toSafeUser` espone `isDemo` (JOIN `companies.is_demo` in `login` e `me`);
+    estratto `signSessionToken(user)` (JWT sessione 8h, identico all'inline di login) ed esportati
+    `toSafeUserWithAreas`/`signSessionToken` per riuso.
+  - `userController.js` — `isDemo` anche nella **seconda copia** di `toSafeUser` (+ JOIN in
+    `listUsers`); pitfall "toSafeUser duplicata" onorato.
+  - `demoController.js` — `demoLogin` (lazy `loadScenario` → risolve la persona → JWT di sessione;
+    risposta identica a `/auth/login`), `demoReset` (force reload della propria società demo →
+    token+user freschi). `guard.js` — middleware `requireDemoCompany` (403 su società reale).
+  - `routes/demo.js` — `POST /demo/login` (pubblico, dietro `requireDemoEnabled`),
+    `POST /demo/reset` (`authenticate` + `requireDemoCompany`).
+- **Frontend**:
+  - `api/client.js` — `demoStatus`/`demoLogin`/`demoReset`.
+  - `components/demo/DemoPersonaPicker.jsx` — selettore persona (da `/demo/status`), entra via
+    `demoLogin` + `loginWithToken`; persiste la persona in `localStorage` (`turni_demo_persona`).
+  - `pages/Login.jsx` — bottone "Prova la demo" (solo se `demoStatus().enabled`), espande il picker.
+  - `components/demo/DemoBanner.jsx` — banner permanente (se `user.isDemo`) con "Reinizializza"
+    (chiama `demoReset`, `loginWithToken`, reload); montato in `AppLayout.jsx`.
+  - `styles.css` — classi `.demo-*` (palette invariata).
+
+### Verifica svolta
+- **Backend (curl)**: demo-login per le 3 personas (forma identica a `/auth/login`, `isDemo:true`,
+  aree risolte; token valido su `/auth/me` che ritorna `isDemo:true`); persona non valida → 400;
+  **staleness** (ancora −10gg → il login successivo ri-seeda, nuova società); **reset** demo →
+  token nuovo, reset da utente **reale** → **403**, senza token → **401**; regressione `/auth/me`
+  utente reale → `isDemo:false`. Demo spenta (`DEMO_MODE` vuoto): `/demo/login` e `/demo/reset` →
+  **404**, `/demo/status` → `{enabled:false}`.
+- **Browser (preview)**: pagina login mostra "Prova la demo — Ristorante Da Mario" solo con demo
+  attiva; picker con 3 personas; ingresso come Dirigente → `/dirigente`, banner "MODALITÀ DEMO"
+  visibile, dashboard popolata (3 sostituzioni aperte, 2 richieste, 2 posti scoperti oggi, copertura
+  fabbisogno reale), campanella con badge; calendario con 5 tab area, 222 blocchi turno, 58 chip
+  fabbisogno. **Nessun errore console.**
+- `.env` locale: aggiunto `DEMO_MODE=true` per il preview. Build frontend OK (101 moduli).
+
+### In sospeso
+- Migrazione produzione di `demo_state.personas` (con `is_demo`/`demo_state`), su conferma esplicita.
+
+### Ripresa
+- **La Fase D4 riparte da**: creare l'engine tour frontend (`tour/TourProvider|TourOverlay|
+  useTourTarget`, `constants/tours/`), aggiungere gli attributi `data-tour` alle voci nav e il
+  bottone "Tour guidato" nel `DemoBanner`, con overlay z-index 70.
+
+---
+
+## D4 — Tour engine frontend (scenario-agnostico) ✅
+
+**Completata**: 2026-07-10. Motore del Tour Guidato config-driven, indipendente dagli scenari e
+dai dati. Solo frontend (nessuna modifica backend): fase deployabile da sola.
+
+### Cosa è stato fatto
+- **`frontend/src/tour/`**:
+  - `useTourTarget.js` — `useTargetRect(selector)`: risolve un `[data-tour=…]` nel suo
+    `getBoundingClientRect` con **retry** (l'elemento può non essere ancora montato), scroll-into-view,
+    ricalcolo su scroll/resize + intervallo leggero. Target assente dopo timeout ⇒ `found:false`
+    (lo step degrada a "centrato", il tour non si blocca mai). **Nessuna coordinata hardcoded.**
+  - `TourProvider.jsx` — state machine `{tourId, stepIndex}` persistita in **sessionStorage**
+    (`turni_demo_tour`): `start/next/goTo/stop`. Risolve `{base}` per ruolo (una definizione, tre
+    ruoli). Naviga alla `route` dello step; criteri di avanzamento **`next`** (bottone), **`route`**
+    (l'utente naviga), **`click`** (listener delegato sul selettore); predisposti `poll`/`action`
+    (Fase D5). Si spegne al logout ma **non durante il caricamento auth** (fix: preserva il tour a
+    un refresh a metà, quando `user` è momentaneamente null).
+  - `TourOverlay.jsx` — portale su `document.body`, **z-index 70** (sopra `.notif-panel` 60 e
+    `.modal-overlay` 50): spotlight a 4 pannelli attorno al target (+ anello verde) con
+    `pointer-events:none` (l'app resta usabile), tooltip con titolo/descrizione/progresso/comandi
+    e clamp al viewport secondo `placement`; step centrato se non c'è target.
+  - `constants/tours/benvenuto.js` — mini-tour di validazione (5 step: welcome centrato → dashboard
+    → click su Calendario → sostituzioni → fine); `constants/tours/index.js` — registro
+    (`getTour`/`listTours`, `DEFAULT_TOUR_ID`).
+- **Wiring**: `App.jsx` avvolge le rotte in `<TourProvider>`; `AppLayout.jsx` rende `data-tour` sulle
+  voci nav; `ManagerLayout`/`EmployeeLayout` assegnano `tourId` (`nav-dashboard`/`nav-calendario`/…,
+  indipendente dal ruolo); `DemoBanner.jsx` — bottone "Tour guidato" (`start(DEFAULT_TOUR_ID)`).
+  `styles.css` — classi `.tour-*` (palette invariata).
+
+### Verifica svolta (browser, preview)
+- Attributi `data-tour` corretti su tutte le nav; bottone "Tour guidato" nel banner demo.
+- Avvio tour: step 1 **centrato** con dim; "Avanti" → step 2 con **spotlight** (anello verde sulla
+  nav Dashboard, resto oscurato, tooltip "2/5", vedi screenshot).
+- Criterio **click**: allo step 3, click sulla nav Calendario → avanza a step 4 **e** l'app naviga
+  a `/dirigente/calendario`.
+- **Persistenza**: refresh a metà tour → il tour **riprende** allo stesso step (dopo il fix
+  auth-loading). "Esci" → overlay chiuso e sessionStorage pulita.
+- **Nessun errore console** (dopo riavvio dev server; gli errori HMR erano residui transitori del
+  momento in cui l'index tour importava un file non ancora creato). Build Vite OK.
+
+### Ripresa
+- **La Fase D5 riparte da**: creare `constants/tours/tourCommerciale.js` (13 step della giornata
+  lavorativa), registrarlo in `constants/tours/index.js` + `DEFAULT_TOUR_ID='commerciale'`, i
+  `data-tour` sui componenti coinvolti (SubstitutionsPanel/FindReplacementModal/MyProposalsPanel/
+  NotificationsBell/HoursStats/TurniPage), e gli endpoint backend di simulazione azioni/check
+  (`framework/simulations.js` + estrazione `acceptProposalForUser`).
+
+---
+
+## D5 — Tour commerciale + azioni simulate ✅
+
+**Completata**: 2026-07-10. Il primo tour racconta una vera giornata lavorativa (un imprevisto
+risolto in un minuto) e mostra il VALORE del software. Il flusso a due attori è gestito riusando
+gli helper reali, mai duplicando logica.
+
+### Cosa è stato fatto
+- **Backend**:
+  - `substitutionProposalController.js` — **estratto `acceptProposalForUser({ proposal, user })`**
+    (cuore dell'accettazione: `assignVolanteToUser` + accepted/gemelle-expired + notifica);
+    `acceptProposal` è ora un wrapper HTTP a **comportamento invariato**. Stesso precedente
+    documentato di `claimShift → assignVolanteToUser`.
+  - `demo/framework/simulations.js` — **nuovo**: azione `collega-accetta-proposta` (accetta la
+    proposta pendente **più recente** della società demo — quella appena inviata dal responsabile,
+    a prescindere da quale turno scoperto abbia scelto: robusto, non legato a un turno specifico —
+    impersonando il dipendente SOLO lato server via `acceptProposalForUser`); check
+    `turno-assegnato` (esiste una proposta `accepted` nella società demo: falso nel dataset
+    iniziale, vero solo dopo la simulazione).
+  - `demoController.js` — `tourAction`/`tourCheck`; `routes/demo.js` —
+    `POST /demo/tour/actions/:name` e `GET /demo/tour/checks/:name` (`authenticate` +
+    `requireDemoCompany`: un utente reale non può innescarli → 403).
+- **Frontend**:
+  - `api/client.js` — `demoTourAction`/`demoTourCheck`.
+  - `tour/TourProvider.jsx` — `runAction` (chiama l'endpoint, avanza a esito positivo, mostra
+    l'errore senza avanzare su un passo mancato) + criterio **`poll`** (interroga un check a
+    intervallo, avanza quando soddisfatto).
+  - `tour/TourOverlay.jsx` — bottone azione (`step.action`) + stato attesa/errore; su step `poll`
+    nasconde "Avanti" e mostra "in attesa".
+  - `constants/tours/tourCommerciale.js` — **12 step** (benvenuto → dashboard → assenza di Giulia →
+    approva [click reale] → turno scoperto → trova sostituzione [click] → classifica candidati →
+    invia proposta [click reale] → il collega accetta [azione simulata] → turno assegnato [poll] →
+    statistiche → conclusione); registrato in `constants/tours/index.js`, `DEFAULT_TOUR_ID='commerciale'`.
+  - `data-tour` aggiunti (stringhe statiche): `cancellation-requests`/`approve-request`
+    (CancellationRequestsPanel), `substitutions-panel`/`find-replacement` (SubstitutionsPanel),
+    `find-replacement-modal`/`send-proposal` (FindReplacementModal), `hours-stats` (HoursStats),
+    `notifications-bell` (NotificationsBell). `styles.css` — `.tour-action`/`.tour-error`.
+
+### Verifica svolta
+- **Backend (script HTTP e2e, 13/13)**: check iniziale `false` → approva richiesta di Giulia
+  (genera volante) → candidati dal motore → invia proposta → **azione simulata accetta** (assegna
+  al candidato proposto) → check `turno-assegnato` `true`; guardie **404** (azione/check ignoti),
+  **401** (senza token), **403** (utente reale). **Regressione del path reale `acceptProposal`**
+  (token firmato per cam_sara sulla proposta pre-caricata): `/proposals/mine` mostra la proposta →
+  accept **200** turno assegnato → ri-accept **409**. Comportamento invariato dopo l'estrazione.
+- **Browser (preview, tour completo end-to-end)**: percorsi tutti e 12 gli step come Dirigente —
+  approvazione reale (avanza + naviga), apertura "Trova sostituzione", classifica candidati,
+  selezione + invio proposta reale, **bottone "Il collega accetta ✓"** (azione simulata → turno
+  assegnato), **poll** che avanza da solo, pagina Report con statistiche. Screenshot dello step
+  finale. "Fine" chiude il tour e pulisce sessionStorage. **Console pulita** in sessione normale
+  (i 404 su `/auth/me` visti in corso d'opera erano dovuti al reset del DB demo durante i test
+  backend, non a un bug: scenario non reale). Build Vite OK.
+
+### In sospeso
+- Nessuna migrazione DB nuova. Migrazioni produzione pendenti invariate (is_demo/demo_state/personas).
+
+### Ripresa
+- **La Fase D6 riparte da**: `companyController.js` (`is_demo` in `listCompanies`, esclusione demo
+  da `getPlatformStats` previa riconferma), badge "Demo" in `SocietaPage.jsx`, sezione "Demo
+  Framework" in `PROJECT_CONTEXT.md` già presente da D1 (integrare tour/simulazioni), riepilogo
+  finale e checklist produzione.
+
+---
+
+## D6 — Rifiniture e visibilità piattaforma ✅
+
+**Completata**: 2026-07-10. Chiusura del piano Demo Framework.
+
+### Cosa è stato fatto
+- **`companyController.js`**: `is_demo` esposto in `listCompanies` (`toSafeCompany`); **`getPlatformStats`
+  esclude le società demo** (`WHERE is_demo = FALSE` sulle società e sugli utenti; il super admin,
+  `company_id NULL`, continua a contare) — decisione dell'utente: gli ambienti demo non gonfiano i
+  numeri di piattaforma.
+- **`SocietaPage.jsx`**: badge "Demo" accanto al nome delle società demo (tooltip "escluso dalle
+  statistiche"); `styles.css` — classe `.demo-tag`.
+- **Documentazione**: sezione "Demo Framework" in `PROJECT_CONTEXT.md` (da D1, integrata nel
+  changelog D2–D5); questo file completo fase per fase; riepilogo finale + checklist produzione qui sotto.
+
+### Verifica svolta
+- Super admin: `GET /api/companies` mostra `isDemo:true` per la società demo; `GET /api/companies/stats`
+  con un ambiente demo caricato (35 utenti) → `companiesTotal:2` (solo reali), `usersTotal:3`
+  (reali + super admin): **demo correttamente escluse**. Build frontend OK; app backend carica.
+- Ambiente demo di test rimosso (0 società demo residue). DB locale pulito.
+
+---
+
+## Riepilogo finale — Demo Framework (D1–D6)
+
+**Obiettivo raggiunto**: PoolShift può generare ambienti dimostrativi realistici per qualsiasi
+settore, come layer permanente sopra il gestionale. Il software resta unico: **cambiano solo i dati
+caricati**, mai la logica (le stesse funzionalità funzionano identiche in demo e in reale — provato
+usando gli endpoint reali su dati demo).
+
+**Cosa c'è**:
+- **Framework generico** (`backend/src/demo/framework/`): config, guardie (chokepoint
+  `assertDemoCompany`), RNG deterministico, ancoraggio date, registry, loader in transazione +
+  advisory lock, reset, simulazioni tour. Zero logica di settore.
+- **Scenario ristorante** (`backend/src/demo/scenarios/ristorante/`): azienda realistica operativa
+  "da mesi" (~35 persone, contratti/disponibilità/turni/fabbisogni/corsi/ferie/cancellazioni/
+  proposte/notifiche/audit coerenti). **Aggiungere uno scenario = una cartella + una riga in
+  `registry.js`** (contratto documentato in `loader.js`).
+- **Demo Libera**: bottone "Prova la demo" nel login → scelta persona → software popolato, tutto
+  usabile senza limiti. Re-anchoring lazy (senza cron), reset self-service.
+- **Tour Guidato**: engine config-driven scenario-agnostico (overlay, spotlight, criteri
+  next/route/click/poll/action) + **tour commerciale** (12 step, una giornata lavorativa) con azioni
+  del secondo attore simulate lato server riusando gli helper reali.
+- **Isolamento**: società demo nello stesso DB, flag `is_demo`, isolamento multi-tenant + guardia +
+  namespace username `demo-`. Escluse dalle statistiche di piattaforma.
+
+**Estendibilità predisposta** (non costruita): scenari multipli (registry già a lista), demo
+per-cliente/temporanee (`demo_state` pronta per `instance_key`/`expires_at`), demo localizzate
+(testi nello scenario), scenari da file di configurazione (contratto JSON-serializzabile tranne
+`build()`).
+
+### Migrazione produzione in sospeso (solo su conferma esplicita)
+- Colonna `companies.is_demo` + indice parziale; tabella `demo_state` (+ colonna `personas`).
+- Tutte idempotenti e additive. Applicare con `npm run migrate` (connection string di produzione).
+- Env da impostare sul progetto Vercel backend per attivare la demo in produzione: `DEMO_MODE=true`
+  (assente ⇒ demo spenta, rotte 404, bottone non mostrato). Opzionali: `DEMO_RESEED_AFTER_DAYS`
+  (default 7). **NON** impostare `DEMO_PERSONA_PASSWORD` in produzione (solo per ispezione locale).
+- Il frontend non richiede env nuove: `GET /api/demo/status` guida il rendering del bottone.
+
+### Note / limiti noti
+- Il caricamento scenario usa una **transazione** (`pool.connect()`), primo caso nel progetto,
+  confinato al loader demo: misurato ~130–150 ms in locale (≪ limite serverless). Se in produzione
+  il tempo salisse, valutare batch più grandi o il solo caricamento via CLI + re-anchor lazy corto.
+- Il tour commerciale è pensato per la persona **Dirigente** (approvazioni/proposte). Le personas
+  Responsabile/Dipendente entrano nella Demo Libera; si potranno aggiungere tour dedicati (una nuova
+  definizione in `constants/tours/`, nessuna modifica all'engine).

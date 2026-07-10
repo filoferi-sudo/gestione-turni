@@ -21,7 +21,7 @@ export default function HoursStats() {
   usePolling(load, { intervalMs: 60000 });
 
   return (
-    <section className="card">
+    <section className="card" data-tour="hours-stats">
       <h2>Statistiche ore lavorate</h2>
       <p className="hint">
         Ore settimana/mese calcolate sul periodo corrente; totale ed elenco turni si riferiscono ai turni già

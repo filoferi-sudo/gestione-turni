@@ -15,6 +15,7 @@ function toSafeCompany(row) {
     phone: row.phone,
     address: row.address,
     isActive: row.is_active,
+    isDemo: row.is_demo === true,
     createdBy: row.created_by,
     createdAt: row.created_at,
     dirigentiCount: row.dirigenti_count !== undefined ? Number(row.dirigenti_count) : undefined,
@@ -157,11 +158,20 @@ async function createCompanyDirigente(req, res) {
 
 // GET /api/companies/stats (super admin) - statistiche generali della piattaforma
 async function getPlatformStats(req, res) {
+  // Le società demo (is_demo=TRUE) sono ambienti dimostrativi, non clienti reali: NON contano nelle
+  // statistiche di piattaforma (decisione dell'utente). Restano visibili nell'elenco Società con un
+  // badge, ma non gonfiano i totali. Gli utenti demo (appartenenti a società demo) sono esclusi allo
+  // stesso modo; il super admin (company_id NULL) non è demo e continua a contare.
   const { rows: companyRows } = await pool.query(
-    `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE is_active)::int AS active FROM companies`
+    `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE is_active)::int AS active
+       FROM companies WHERE is_demo = FALSE`
   );
   const { rows: userRows } = await pool.query(
-    `SELECT role, COUNT(*)::int AS count FROM users GROUP BY role`
+    `SELECT u.role, COUNT(*)::int AS count
+       FROM users u
+       LEFT JOIN companies c ON c.id = u.company_id
+      WHERE c.id IS NULL OR c.is_demo = FALSE
+      GROUP BY u.role`
   );
 
   const usersByRole = { dirigente: 0, admin: 0, user: 0, superadmin: 0 };

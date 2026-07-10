@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import NotificationsBell from '../notifications/NotificationsBell';
+import DemoBanner from '../demo/DemoBanner';
 
 const ROLE_LABELS = { admin: 'Responsabile', dirigente: 'Dirigente', user: 'Dipendente', superadmin: 'Super Admin' };
 
@@ -34,6 +35,9 @@ export default function AppLayout({ navItems, sidebarExtra, showBell = true }) {
               key={item.to}
               to={item.to}
               end={item.end}
+              // data-tour: gancio stabile per il Tour Guidato (nessuna coordinata hardcoded). Deriva
+              // dall'ultimo segmento della rotta (es. 'nav-calendario'), 'nav-dashboard' per la home.
+              data-tour={item.tourId || `nav-${item.to.split('/').filter(Boolean).pop() || 'dashboard'}`}
               className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
             >
               {item.label}
@@ -54,6 +58,8 @@ export default function AppLayout({ navItems, sidebarExtra, showBell = true }) {
             </button>
           </div>
         </header>
+
+        <DemoBanner />
 
         <main className="content content-wide">
           <Outlet />

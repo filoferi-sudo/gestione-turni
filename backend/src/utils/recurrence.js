@@ -55,4 +55,4 @@ function expandRecurrenceDates(rule, anchorDateStr, rangeStart, rangeEnd) {
   return dates;
 }
 
-module.exports = { DAY_CODES, parseRecurrenceRule, occursOn, expandRecurrenceDates };
+module.exports = { DAY_CODES, formatLocalDate, parseRecurrenceRule, occursOn, expandRecurrenceDates };

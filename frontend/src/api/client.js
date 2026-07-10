@@ -57,6 +57,13 @@ export const api = {
     request('/auth/first-login-setup', { method: 'POST', body: { newPassword }, token: firstAccessToken }),
   me: (token) => request('/auth/me', { token }),
   passwordPolicy: () => request('/auth/password-policy'),
+  // Demo Framework: stato pubblico (bottone "Prova la demo"), ingresso per persona, reset ambiente.
+  demoStatus: () => request('/demo/status'),
+  demoLogin: (persona, scenarioId = 'ristorante') =>
+    request('/demo/login', { method: 'POST', body: { persona, scenarioId } }),
+  demoReset: (persona, token) => request('/demo/reset', { method: 'POST', body: { persona }, token }),
+  demoTourAction: (name, token) => request(`/demo/tour/actions/${name}`, { method: 'POST', token }),
+  demoTourCheck: (name, token) => request(`/demo/tour/checks/${name}`, { token }),
   createUser: (payload, token) => request('/users', { method: 'POST', body: payload, token }),
   listUsers: (token) => request('/users', { token }),
   getCalendar: (token, { start, end, areaId, userId }) => {

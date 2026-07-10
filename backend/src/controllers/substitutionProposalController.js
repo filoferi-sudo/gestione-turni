@@ -197,27 +197,28 @@ async function loadOwnProposal(proposalId, userId) {
 // CLAIM ATOMICO condiviso (assignVolanteToUser): identici doppi controlli e stessa UPDATE
 // condizionale di claimShift. Se un altro ha già coperto il turno (o l'ha preso una proposta
 // gemella) la proposta va in 'expired' e si risponde 409.
-async function acceptProposal(req, res) {
-  const { id } = req.params;
-  const proposal = await loadOwnProposal(id, req.user.id);
-  if (!proposal) {
-    return res.status(404).json({ error: 'Proposta non trovata' });
-  }
+// Cuore dell'accettazione di una proposta, ESTRATTO per essere riusato da due percorsi che NON
+// devono divergere: l'accettazione HTTP del dipendente (acceptProposal) e la simulazione del tour
+// commerciale (il framework demo impersona il candidato lato server). Stesso precedente documentato
+// di claimShift → assignVolanteToUser. Riceve una proposta (riga) e l'utente accettante
+// ({ id, username, companyId }); ritorna un esito mappabile su HTTP. Comportamento invariato
+// rispetto alla versione inline precedente.
+async function acceptProposalForUser({ proposal, user }) {
   if (proposal.status !== 'pending') {
-    return res.status(409).json({ error: 'Questa proposta non è più valida' });
+    return { ok: false, code: 409, error: 'Questa proposta non è più valida' };
   }
 
-  const shift = await loadOpenVolante(proposal.shift_id, req.user.companyId);
+  const shift = await loadOpenVolante(proposal.shift_id, user.companyId);
   if (!shift) {
     // Turno eliminato o già coperto: la proposta non è più azionabile.
     await pool.query(
       `UPDATE substitution_proposals SET status = 'expired', responded_at = NOW() WHERE id = $1 AND status = 'pending'`,
       [proposal.id]
     );
-    return res.status(409).json({ error: 'La sostituzione non è più disponibile' });
+    return { ok: false, code: 409, error: 'La sostituzione non è più disponibile' };
   }
 
-  const result = await assignVolanteToUser({ shiftRow: shift, user: req.user });
+  const result = await assignVolanteToUser({ shiftRow: shift, user });
   if (!result.ok) {
     if (result.gone) {
       await pool.query(
@@ -226,8 +227,8 @@ async function acceptProposal(req, res) {
       );
     }
     // Area/sovrapposizione (403/409 non-gone): la proposta resta pendente, la condizione potrebbe
-    // rientrare (es. una sovrapposizione temporanea). Il dipendente vede il motivo dell'errore.
-    return res.status(result.code).json({ error: result.error });
+    // rientrare (es. una sovrapposizione temporanea).
+    return { ok: false, code: result.code, error: result.error };
   }
 
   const claimed = result.claimed;
@@ -244,18 +245,32 @@ async function acceptProposal(req, res) {
 
   // Avvisa i responsabili che la Sostituzione è stata coperta (stessa notifica del claim autonomo).
   await notifySubstitutionClaimed({
-    companyId: req.user.companyId,
+    companyId: user.companyId,
     areaId: claimed.area_id,
     sedeId: claimed.sede_id,
     shiftId: claimed.id,
     date: toDateOnly(claimed.date),
     startTime: claimed.start_time.slice(0, 5),
     endTime: claimed.end_time.slice(0, 5),
-    claimantUsername: req.user.username,
-    claimantUserId: req.user.id,
+    claimantUsername: user.username,
+    claimantUserId: user.id,
   });
 
-  return res.json({ shift: toSafeShift(claimed) });
+  return { ok: true, shift: claimed };
+}
+
+async function acceptProposal(req, res) {
+  const { id } = req.params;
+  const proposal = await loadOwnProposal(id, req.user.id);
+  if (!proposal) {
+    return res.status(404).json({ error: 'Proposta non trovata' });
+  }
+
+  const result = await acceptProposalForUser({ proposal, user: req.user });
+  if (!result.ok) {
+    return res.status(result.code).json({ error: result.error });
+  }
+  return res.json({ shift: toSafeShift(result.shift) });
 }
 
 // POST /api/proposals/:id/decline (dipendente) - rifiuta una propria proposta pendente. Avvisa i
@@ -300,5 +315,6 @@ module.exports = {
   listShiftProposals,
   listMyProposals,
   acceptProposal,
+  acceptProposalForUser,
   declineProposal,
 };

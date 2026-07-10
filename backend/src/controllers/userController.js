@@ -16,6 +16,10 @@ function toSafeUser(user) {
     category: user.category,
     companyId: user.company_id,
     mustChangePassword: user.must_change_password,
+    // isDemo (colonna della società): tenuto allineato all'altra copia di toSafeUser in
+    // authController — vedi PROJECT_CONTEXT "toSafeUser duplicata". Fonte autoritativa per il
+    // frontend è comunque /auth/me; qui è per coerenza. false se la colonna non è nel result set.
+    isDemo: user.is_demo === true,
     // Il codice iniziale è visibile solo finché non è stato consumato al primo accesso
     initialCode: user.must_change_password ? user.initial_code : null,
     createdAt: user.created_at,
@@ -116,7 +120,9 @@ async function createUser(req, res) {
 // GET /api/users (responsabile o dirigente) - elenco utenti della propria società
 async function listUsers(req, res) {
   const { rows } = await pool.query(
-    'SELECT * FROM users WHERE company_id = $1 ORDER BY created_at DESC',
+    `SELECT u.*, c.is_demo AS is_demo
+       FROM users u LEFT JOIN companies c ON c.id = u.company_id
+      WHERE u.company_id = $1 ORDER BY u.created_at DESC`,
     [req.user.companyId]
   );
   const areasByUser = await fetchUserAreasBatch(rows.map((r) => r.id));

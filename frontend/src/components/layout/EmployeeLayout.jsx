@@ -4,13 +4,13 @@ import AppLayout from './AppLayout';
 // operative del dipendente arrivano da user.areas (AuthContext), quindi non serve alcun
 // contesto workspace aggiuntivo.
 const NAV_ITEMS = [
-  { to: '/dashboard', label: 'Dashboard', end: true },
-  { to: '/dashboard/calendario', label: 'Calendario' },
-  { to: '/dashboard/turni', label: 'Turni' },
-  { to: '/dashboard/sostituzioni', label: 'Sostituzioni' },
-  { to: '/dashboard/comunicazioni', label: 'Comunicazioni' },
-  { to: '/dashboard/report', label: 'Report' },
-  { to: '/dashboard/impostazioni', label: 'Impostazioni' },
+  { to: '/dashboard', label: 'Dashboard', end: true, tourId: 'nav-dashboard' },
+  { to: '/dashboard/calendario', label: 'Calendario', tourId: 'nav-calendario' },
+  { to: '/dashboard/turni', label: 'Turni', tourId: 'nav-turni' },
+  { to: '/dashboard/sostituzioni', label: 'Sostituzioni', tourId: 'nav-sostituzioni' },
+  { to: '/dashboard/comunicazioni', label: 'Comunicazioni', tourId: 'nav-comunicazioni' },
+  { to: '/dashboard/report', label: 'Report', tourId: 'nav-report' },
+  { to: '/dashboard/impostazioni', label: 'Impostazioni', tourId: 'nav-impostazioni' },
 ];
 
 export default function EmployeeLayout() {

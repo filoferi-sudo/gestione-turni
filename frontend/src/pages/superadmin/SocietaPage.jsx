@@ -82,7 +82,10 @@ export default function SocietaPage() {
           <tbody>
             {companies.map((c) => (
               <tr key={c.id}>
-                <td>{c.name}</td>
+                <td>
+                  {c.name}
+                  {c.isDemo && <span className="demo-tag" title="Ambiente dimostrativo, escluso dalle statistiche">Demo</span>}
+                </td>
                 <td>{c.email || '-'}</td>
                 <td>{c.phone || '-'}</td>
                 <td>

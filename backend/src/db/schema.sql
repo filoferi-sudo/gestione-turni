@@ -722,3 +722,44 @@ CREATE INDEX IF NOT EXISTS idx_auth_tokens_hash ON auth_tokens(token_hash);
 -- Gestione dei token attivi di un utente per scopo (es. invalidare i precedenti prima di emetterne
 -- uno nuovo).
 CREATE INDEX IF NOT EXISTS idx_auth_tokens_user_purpose ON auth_tokens(user_id, purpose);
+
+-- ============================================================================
+-- Demo Framework (Fase D1)
+-- ============================================================================
+-- Società dimostrative: vivono nello STESSO database delle società reali e riusano integralmente
+-- l'isolamento multi-tenant per company_id (una sessione demo è un normale utente di una società
+-- demo: non può vedere/toccare altre società per costruzione). is_demo è il discriminante che il
+-- framework demo verifica come guardia (assertDemoCompany) prima di QUALSIASI scrittura: il layer
+-- demo si rifiuta di operare su società non-demo, e il reset demo cancella solo righe con
+-- is_demo=TRUE (predicato ridondante di sicurezza). Colonna con DEFAULT: backfill implicito,
+-- nessun ordine multi-step necessario.
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT FALSE;
+-- Indice parziale: le società demo sono pochissime, serve solo a trovarle/escluderle in fretta.
+CREATE INDEX IF NOT EXISTS idx_companies_is_demo ON companies(is_demo) WHERE is_demo = TRUE;
+
+-- Stato di uno scenario demo caricato: quale società lo ospita, con quale versione del dataset e
+-- ancorato a quale data. anchor_date = il "giorno 0" dello scenario (tutte le date del dataset
+-- sono offset relativi a questa data): quando today - anchor_date supera la soglia configurata
+-- (DEMO_RESEED_AFTER_DAYS) o dataset_version è inferiore alla versione dello scenario nel codice,
+-- il framework ri-genera l'ambiente in modo LAZY al demo-login (nessun cron, vincolo serverless —
+-- stesso principio dell'escalation Fase 7).
+--   * tour_context = riferimenti (id reali post-caricamento) alle entità "gancio" dei tour guidati
+--     (es. il turno della richiesta di assenza usata dal tour commerciale), risolti dal loader.
+--   * UNIQUE su scenario_id = una sola istanza per scenario nella v1; le future demo per-cliente/
+--     temporanee aggiungeranno una colonna discriminante (instance_key) rimuovendo questo vincolo.
+CREATE TABLE IF NOT EXISTS demo_state (
+  id               SERIAL PRIMARY KEY,
+  company_id       INTEGER NOT NULL UNIQUE REFERENCES companies(id) ON DELETE CASCADE,
+  scenario_id      VARCHAR(50) NOT NULL,
+  dataset_version  INTEGER NOT NULL,
+  anchor_date      DATE NOT NULL,
+  loaded_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  tour_context     JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_demo_state_scenario ON demo_state(scenario_id);
+
+-- Mappa persona-key -> user_id reale (risolta dal loader dopo l'inserimento degli utenti): permette
+-- al demo-login (Fase D3) di trovare l'utente della persona scelta senza conoscere gli username
+-- interni. Colonna con DEFAULT: aggiunta idempotente e sicura su una tabella eventualmente già creata.
+ALTER TABLE demo_state ADD COLUMN IF NOT EXISTS personas JSONB NOT NULL DEFAULT '{}'::jsonb;
