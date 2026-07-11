@@ -1071,6 +1071,12 @@ di test; utente temporaneo `resp_test` creato e poi eliminato.)
 - **D4 — Tour engine frontend (scenario-agnostico)** ✅ *completata (2026-07-10)*
 - **D5 — Tour commerciale + azioni simulate** ✅ *completata (2026-07-10)*
 - **D6 — Rifiniture: badge Demo superadmin, stats, documentazione finale** ✅ *completata (2026-07-10)*
+- **Fix post-rilascio (2026-07-11) — tour pertinente al ruolo**: il banner proponeva a ogni persona
+  il tour 'commerciale' (azioni da manager, impossibili per il Cameriere). Ora ogni tour dichiara
+  `roles[]`, esiste il tour `giornata-dipendente` (solo azioni reali del ruolo user) e
+  `DemoBanner`/`TourProvider` avviano solo tour pertinenti. Permessi applicativi verificati dal
+  vivo: nessuna falla (17/17 endpoint riservati → 403 con token dipendente). Dettaglio nel
+  changelog di `PROJECT_CONTEXT.md`.
 
 ---
 

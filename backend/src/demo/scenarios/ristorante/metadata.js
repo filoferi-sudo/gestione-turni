@@ -17,5 +17,7 @@ module.exports = {
       description: 'Vede i propri turni, le proposte e le sostituzioni disponibili.' },
   ],
   // Tour guidati supportati da questo scenario (le definizioni vivono nel frontend, Fase D5).
-  tours: ['commerciale'],
+  // 'commerciale' per Dirigente/Responsabile; 'giornata-dipendente' per la persona Cameriere
+  // (il tour manager racconta azioni — approvare, proporre — che il ruolo user non può compiere).
+  tours: ['commerciale', 'giornata-dipendente'],
 };

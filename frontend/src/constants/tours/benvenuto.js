@@ -4,6 +4,9 @@
 export default {
   id: 'benvenuto',
   name: 'Benvenuto in Planivo',
+  // Il passo "Sostituzioni" parla di gestione dei turni scoperti e ricerca candidati (funzioni
+  // manager): il tour è pertinente solo a Dirigente/Responsabile, non al dipendente.
+  roles: ['dirigente', 'admin'],
   steps: [
     {
       id: 'welcome',
