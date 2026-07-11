@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const entitlements = require('../services/entitlements');
 
 // ============================================================================
 // Impostazioni società — regole aziendali configurabili dal Dirigente (Fase 7)
@@ -53,4 +54,23 @@ async function updateCompanySettings(req, res) {
   return res.json({ settings: toSafeSettings(rows[0]) });
 }
 
-module.exports = { getCompanySettings, updateCompanySettings };
+// GET /api/company/entitlements
+// Entitlements EFFETTIVI della propria società (piano + limiti + feature): li usa il frontend per
+// mostrare/nascondere voci e bottoni secondo il piano. Il backend resta comunque l'unico punto
+// autoritativo di enforcement (frontend "dumb"): questo endpoint è solo un aiuto UX. Accessibile a
+// tutti i ruoli con una società (authenticate): anche il dipendente ne ha bisogno per la propria UI.
+// Letto a DB (via cache TTL breve), MAI dal JWT: un cambio di piano vale subito.
+async function getMyEntitlements(req, res) {
+  const eff = await entitlements.getEntitlements(req.user.companyId);
+  return res.json({
+    entitlements: {
+      planCode: eff.planCode,
+      planName: eff.planName,
+      status: eff.status,
+      limits: eff.limits,
+      features: eff.features,
+    },
+  });
+}
+
+module.exports = { getCompanySettings, updateCompanySettings, getMyEntitlements };

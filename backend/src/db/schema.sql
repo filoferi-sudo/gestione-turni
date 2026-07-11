@@ -864,3 +864,110 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
   disabled_categories  JSONB NOT NULL DEFAULT '[]'::jsonb,
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- ============================================================================
+-- Layer SaaS: piani commerciali ed entitlements (infrastruttura configurabile)
+-- ============================================================================
+-- Predisposizione per la vendita di Planivo a tier differenziati. Interamente ADDITIVO sopra
+-- l'isolamento multi-tenant esistente (company_id): NON modifica alcuna tabella/flusso operativo.
+--
+-- FILOSOFIA "zero valori hardcoded" (vincolo esplicito): i limiti e le feature dei piani NON vivono
+-- nel codice ma in queste tabelle, modificabili dal Super Admin senza deploy. Il seed qui sotto crea
+-- solo dei CONTENITORI di piano vuoti (nessun limite, tutte le feature attive): i valori commerciali
+-- reali (max dipendenti/sedi/responsabili, quali feature includere) si configurano a runtime.
+--
+-- SEMANTICA (implementata in services/entitlements.js, documentata qui perché vincola i dati):
+--   * limits  = mappa JSONB { chiaveLimite: numero }. Chiave ASSENTE o null = ILLIMITATO. Un limite
+--               è applicato solo se valorizzato con un numero >= 0. Es. { "maxEmployees": 15 }.
+--   * features = mappa JSONB { chiaveFeature: bool }. Chiave ASSENTE = ABILITATA (default permissivo,
+--               retrocompatibile: un cliente esistente non perde funzioni e una feature nuova non si
+--               spegne da sola sui piani che non la menzionano). Per NEGARE una feature a un piano si
+--               imposta esplicitamente { "reports": false }.
+--
+-- Questa semantica garantisce che le società ESISTENTI, a cui la migrazione assegna il piano
+-- 'legacy' (limits {} / features {}), mantengano ESATTAMENTE il comportamento attuale: nessun
+-- limite, tutte le funzioni. Le società demo idem (devono mostrare tutto nei tour).
+CREATE TABLE IF NOT EXISTS plans (
+  id             SERIAL PRIMARY KEY,
+  code           VARCHAR(40) UNIQUE NOT NULL,   -- identificatore stabile ('starter'|'professional'|'enterprise'|'legacy'|...)
+  name           VARCHAR(100) NOT NULL,
+  description    TEXT,
+  is_active      BOOLEAN NOT NULL DEFAULT TRUE,  -- disattivato = non più assegnabile a nuove società; chi lo usa non è toccato
+  is_public      BOOLEAN NOT NULL DEFAULT TRUE,  -- FALSE = piano interno/legacy/custom, fuori dai listini
+  display_order  INTEGER NOT NULL DEFAULT 0,
+  limits         JSONB NOT NULL DEFAULT '{}'::jsonb,
+  features       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Abbonamento di UNA società a UN piano (1:1 con companies: UNIQUE company_id). Separata da
+-- companies (non una colonna) per: (a) restare additivi; (b) tenere storico/estensioni di billing
+-- futuri senza gonfiare companies; (c) permettere override per singolo cliente senza creare piani
+-- "fantasma" (limit_overrides/feature_overrides, stessa semantica di plans, applicati SOPRA il piano).
+CREATE TABLE IF NOT EXISTS company_subscriptions (
+  id                  SERIAL PRIMARY KEY,
+  company_id          INTEGER NOT NULL UNIQUE REFERENCES companies(id) ON DELETE CASCADE,
+  plan_id             INTEGER NOT NULL REFERENCES plans(id),
+  status              VARCHAR(20) NOT NULL DEFAULT 'active'
+                        CHECK (status IN ('trialing', 'active', 'past_due', 'canceled')),
+  trial_ends_at       TIMESTAMPTZ,
+  current_period_end  TIMESTAMPTZ,                 -- predisposizione billing futuro (rinnovo/scadenza)
+  limit_overrides     JSONB NOT NULL DEFAULT '{}'::jsonb,
+  feature_overrides   JSONB NOT NULL DEFAULT '{}'::jsonb,
+  external_ref        VARCHAR(200),                -- aggancio futuro a un provider di pagamenti (es. Stripe customer/subscription id)
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_company_subscriptions_plan_id ON company_subscriptions(plan_id);
+
+-- Mappatura piano -> prezzo del provider di pagamenti (es. Stripe Price ID), configurabile dal Super
+-- Admin (Step 8 - billing). NESSUN prezzo hardcoded nel codice: il prezzo vive nel provider, qui c'è
+-- solo il riferimento. Nullable: un piano senza riferimento non è acquistabile via checkout.
+ALTER TABLE plans ADD COLUMN IF NOT EXISTS external_price_ref VARCHAR(200);
+
+-- Seed idempotente dei piani. CONTENITORI VUOTI (nessun limite, tutte le feature attive): i valori
+-- commerciali reali si configurano dal pannello Super Admin, non qui. 'legacy' è il piano tecnico
+-- assegnato alle società preesistenti per preservarne il comportamento (illimitato); non è pubblico.
+-- ON CONFLICT (code) DO NOTHING: rilanciabile senza sovrascrivere valori già configurati a runtime.
+INSERT INTO plans (code, name, description, is_public, display_order)
+VALUES
+  ('legacy',       'Legacy (illimitato)', 'Piano tecnico delle società preesistenti: nessun limite, tutte le funzioni. Non in listino.', FALSE, 0),
+  ('starter',      'Starter',      'Piano base. Limiti e funzioni da configurare dal Super Admin.', TRUE, 1),
+  ('professional', 'Professional', 'Piano intermedio. Limiti e funzioni da configurare dal Super Admin.', TRUE, 2),
+  ('enterprise',   'Enterprise',   'Piano avanzato. Limiti e funzioni da configurare dal Super Admin.', TRUE, 3)
+ON CONFLICT (code) DO NOTHING;
+
+-- Backfill: ogni società senza abbonamento riceve il piano 'legacy' (illimitato), così NON cambia
+-- nulla del comportamento attuale (incluse le società demo, che devono mostrare tutte le funzioni).
+-- Le società create in futuro dal Super Admin ricevono un piano esplicito alla creazione.
+-- Idempotente: la WHERE NOT EXISTS evita doppioni e non tocca chi ha già un abbonamento.
+INSERT INTO company_subscriptions (company_id, plan_id, status)
+SELECT c.id, (SELECT id FROM plans WHERE code = 'legacy'), 'active'
+  FROM companies c
+ WHERE NOT EXISTS (SELECT 1 FROM company_subscriptions s WHERE s.company_id = c.id);
+
+-- ============================================================================
+-- Override permessi per utente (RBAC granulare — layer SaaS)
+-- ============================================================================
+-- I 4 ruoli restano invariati; questa tabella permette al Dirigente di personalizzare il singolo
+-- responsabile SOPRA i permessi di default del suo ruolo (es. "il responsabile B può solo vedere i
+-- turni, non approvare le cancellazioni"). Additiva: l'ASSENZA di righe = comportamento attuale
+-- (tutti i default di ruolo). Il catalogo dei permessi vive in config/permissions.js; qui si salva
+-- solo lo scostamento per-utente.
+--   * granted = TRUE (concesso in più rispetto al default) | FALSE (revocato rispetto al default).
+--   * UNIQUE (user_id, permission_key) = un solo override per coppia (upsert).
+CREATE TABLE IF NOT EXISTS user_permission_overrides (
+  id              SERIAL PRIMARY KEY,
+  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  permission_key  VARCHAR(60) NOT NULL,
+  granted         BOOLEAN NOT NULL,
+  granted_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  note            TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, permission_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_permission_overrides_user ON user_permission_overrides(user_id);

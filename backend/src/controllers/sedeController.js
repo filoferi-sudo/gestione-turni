@@ -1,4 +1,6 @@
 const pool = require('../config/db');
+const entitlements = require('../services/entitlements');
+const audit = require('../services/auditService');
 
 function toSafeSede(row) {
   return {
@@ -45,6 +47,25 @@ async function createSede(req, res) {
   const endTime = calendarEndTime || '23:00';
   const timesResult = validateTimes(startTime, endTime);
   if (timesResult.error) return res.status(400).json({ error: timesResult.error });
+
+  // Enforcement del limite di piano (layer SaaS): tetto al numero di sedi. Assente/null = illimitato
+  // ⇒ no-op di default. Letto a DB via entitlements, mai dal JWT.
+  const ent = await entitlements.getEntitlements(req.user.companyId);
+  const maxSedi = entitlements.limitFor(ent, 'maxSedi');
+  if (maxSedi !== null) {
+    const { rows: cnt } = await pool.query(
+      'SELECT COUNT(*)::int AS count FROM sedi WHERE company_id = $1',
+      [req.user.companyId]
+    );
+    if (cnt[0].count >= maxSedi) {
+      await audit.logFromReq(req, { action: 'plan.limit_reached', entityType: 'sede', metadata: { limit: maxSedi } });
+      return res.status(403).json({
+        error: `Limite del piano raggiunto: massimo ${maxSedi} sedi. Aggiorna il piano per aggiungerne altre.`,
+        code: 'PLAN_LIMIT',
+        limit: maxSedi,
+      });
+    }
+  }
 
   const { rows } = await pool.query(
     `INSERT INTO sedi (company_id, name, calendar_start_time, calendar_end_time)

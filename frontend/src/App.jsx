@@ -19,6 +19,7 @@ import PersonalePage from './pages/manager/PersonalePage';
 import SostituzioniPage from './pages/manager/SostituzioniPage';
 import FabbisognoPage from './pages/manager/FabbisognoPage';
 import ImpostazioniPage from './pages/manager/ImpostazioniPage';
+import OrganizzazionePage from './pages/manager/OrganizzazionePage';
 
 import EmployeeHome from './pages/employee/EmployeeHome';
 import EmployeeCalendario from './pages/employee/EmployeeCalendario';
@@ -31,6 +32,7 @@ import ReportPage from './pages/sections/ReportPage';
 
 import SuperAdminHome from './pages/superadmin/SuperAdminHome';
 import SocietaPage from './pages/superadmin/SocietaPage';
+import PianiPage from './pages/superadmin/PianiPage';
 
 const ROLE_HOME = { admin: '/admin', dirigente: '/dirigente', user: '/dashboard', superadmin: '/superadmin' };
 
@@ -56,6 +58,7 @@ function managerRoutes(base) {
       <Route path="fabbisogno" element={<FabbisognoPage />} />
       <Route path="comunicazioni" element={<ComunicazioniPage />} />
       <Route path="report" element={<ReportPage />} />
+      <Route path="organizzazione" element={<OrganizzazionePage />} />
       <Route path="impostazioni" element={<ImpostazioniPage />} />
       {/* Compatibilità con il vecchio percorso di creazione utente */}
       <Route path="users/new" element={<Navigate to={`${base}/personale/nuovo`} replace />} />
@@ -126,6 +129,7 @@ export default function App() {
       >
         <Route index element={<SuperAdminHome />} />
         <Route path="societa" element={<SocietaPage />} />
+        <Route path="piani" element={<PianiPage />} />
         <Route path="*" element={<Navigate to="/superadmin" replace />} />
       </Route>
 

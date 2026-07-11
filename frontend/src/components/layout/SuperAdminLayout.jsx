@@ -7,6 +7,7 @@ import AppLayout from './AppLayout';
 const NAV_ITEMS = [
   { to: '/superadmin', label: 'Dashboard', end: true },
   { to: '/superadmin/societa', label: 'Società' },
+  { to: '/superadmin/piani', label: 'Piani' },
 ];
 
 export default function SuperAdminLayout() {

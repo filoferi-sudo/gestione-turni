@@ -13,6 +13,7 @@ export default function SocietaPage() {
   const [notice, setNotice] = useState('');
   const [companyModal, setCompanyModal] = useState(null); // { company } | null
   const [dirigenteModal, setDirigenteModal] = useState(null); // { company } | null
+  const [subscriptionModal, setSubscriptionModal] = useState(null); // { company } | null
 
   function load() {
     api.listCompanies(token).then(({ companies }) => setCompanies(companies)).catch((err) => setError(err.message));
@@ -74,6 +75,7 @@ export default function SocietaPage() {
               <th>Email</th>
               <th>Telefono</th>
               <th>Stato</th>
+              <th>Piano</th>
               <th>Dirigenti</th>
               <th>Utenti totali</th>
               <th>Azioni</th>
@@ -95,11 +97,15 @@ export default function SocietaPage() {
                     {c.isActive ? 'Attiva' : 'Disattivata'}
                   </span>
                 </td>
+                <td>{c.planName || <span className="hint">—</span>}</td>
                 <td>{c.dirigentiCount}</td>
                 <td>{c.usersCount}</td>
                 <td className="actions-cell">
                   <button className="table-action" onClick={() => setCompanyModal({ company: c })}>
                     Modifica
+                  </button>
+                  <button className="table-action" onClick={() => setSubscriptionModal({ company: c })}>
+                    Piano
                   </button>
                   <button className="table-action" onClick={() => setDirigenteModal({ company: c })}>
                     + Dirigente
@@ -115,7 +121,7 @@ export default function SocietaPage() {
             ))}
             {companies.length === 0 && (
               <tr>
-                <td colSpan={7} className="hint">
+                <td colSpan={8} className="hint">
                   Nessuna società ancora creata.
                 </td>
               </tr>
@@ -139,7 +145,164 @@ export default function SocietaPage() {
           onClose={() => setDirigenteModal(null)}
         />
       )}
+
+      {subscriptionModal && (
+        <SubscriptionModal
+          company={subscriptionModal.company}
+          token={token}
+          onSaved={() => { setSubscriptionModal(null); setNotice('Piano aggiornato.'); load(); }}
+          onClose={() => setSubscriptionModal(null)}
+        />
+      )}
     </>
+  );
+}
+
+// Assegnazione del piano a una società + override per-cliente + consumi correnti (layer SaaS).
+function SubscriptionModal({ company, token, onSaved, onClose }) {
+  const [plans, setPlans] = useState([]);
+  const [catalog, setCatalog] = useState({ limits: {}, features: {} });
+  const [usage, setUsage] = useState(null);
+  const [entitlements, setEntitlements] = useState(null);
+  const [form, setForm] = useState({ planId: '', status: 'active' });
+  const [limitOverrides, setLimitOverrides] = useState({}); // key -> string ('' = nessun override)
+  const [featureOverrides, setFeatureOverrides] = useState({}); // key -> 'inherit'|'on'|'off'
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    Promise.all([api.listPlans(token), api.getPlanCatalog(token), api.getCompanySubscription(company.id, token)])
+      .then(([{ plans }, cat, sub]) => {
+        setPlans(plans);
+        setCatalog({ limits: cat.limits || {}, features: cat.features || {} });
+        setUsage(sub.usage);
+        setEntitlements(sub.entitlements);
+        const s = sub.subscription;
+        setForm({ planId: s ? String(s.planId) : '', status: s ? s.status : 'active' });
+        const lo = {};
+        for (const k of Object.keys(cat.limits || {})) lo[k] = s && s.limitOverrides && s.limitOverrides[k] != null ? String(s.limitOverrides[k]) : '';
+        setLimitOverrides(lo);
+        const fo = {};
+        for (const k of Object.keys(cat.features || {})) {
+          const v = s && s.featureOverrides ? s.featureOverrides[k] : undefined;
+          fo[k] = v === true ? 'on' : v === false ? 'off' : 'inherit';
+        }
+        setFeatureOverrides(fo);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [company.id, token]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    if (!form.planId) return setError('Seleziona un piano');
+
+    const limitOverridesPayload = {};
+    for (const [k, raw] of Object.entries(limitOverrides)) {
+      if (raw !== '' && raw !== null && raw !== undefined) {
+        const n = Number(raw);
+        if (!Number.isInteger(n) || n < 0) return setError(`Override "${catalog.limits[k].label}" non valido`);
+        limitOverridesPayload[k] = n;
+      }
+    }
+    const featureOverridesPayload = {};
+    for (const [k, v] of Object.entries(featureOverrides)) {
+      if (v === 'on') featureOverridesPayload[k] = true;
+      else if (v === 'off') featureOverridesPayload[k] = false;
+    }
+
+    setSubmitting(true);
+    try {
+      await api.setCompanySubscription(company.id, {
+        planId: Number(form.planId),
+        status: form.status,
+        limitOverrides: limitOverridesPayload,
+        featureOverrides: featureOverridesPayload,
+      }, token);
+      onSaved();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <form className="modal-card modal-card-wide" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+        <h2>Piano di "{company.name}"</h2>
+
+        {loading ? (
+          <p className="hint">Caricamento…</p>
+        ) : (
+          <>
+            {usage && (
+              <p className="hint">
+                Consumi attuali: {usage.employees} dipendenti · {usage.managers} responsabili · {usage.sedi} sedi.
+              </p>
+            )}
+
+            <label htmlFor="sub-plan">Piano</label>
+            <select id="sub-plan" value={form.planId} onChange={(e) => setForm((f) => ({ ...f, planId: e.target.value }))} required>
+              <option value="">— Seleziona —</option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id} disabled={!p.isActive}>
+                  {p.name}{!p.isActive ? ' (disattivato)' : ''}
+                </option>
+              ))}
+            </select>
+
+            <label htmlFor="sub-status">Stato</label>
+            <select id="sub-status" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}>
+              <option value="active">Attivo</option>
+              <option value="trialing">In prova</option>
+              <option value="past_due">Pagamento scaduto</option>
+              <option value="canceled">Annullato</option>
+            </select>
+
+            <h3 className="modal-subhead">Override limiti (opzionale, vuoto = come da piano)</h3>
+            <div className="contract-grid">
+              {Object.entries(catalog.limits).map(([k, meta]) => (
+                <div key={k}>
+                  <label htmlFor={`ov-${k}`}>{meta.label}</label>
+                  <input
+                    id={`ov-${k}`}
+                    type="number"
+                    min="0"
+                    value={limitOverrides[k] ?? ''}
+                    placeholder="Come da piano"
+                    onChange={(e) => setLimitOverrides((l) => ({ ...l, [k]: e.target.value }))}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <h3 className="modal-subhead">Override funzioni (opzionale)</h3>
+            <div className="contract-grid">
+              {Object.entries(catalog.features).map(([k, meta]) => (
+                <div key={k}>
+                  <label htmlFor={`fo-${k}`}>{meta.label}</label>
+                  <select id={`fo-${k}`} value={featureOverrides[k] ?? 'inherit'} onChange={(e) => setFeatureOverrides((f) => ({ ...f, [k]: e.target.value }))}>
+                    <option value="inherit">Come da piano</option>
+                    <option value="on">Forza attiva</option>
+                    <option value="off">Forza disattivata</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {error && <div className="error">{error}</div>}
+
+        <div className="modal-actions">
+          <button type="button" className="button-secondary" onClick={onClose}>Annulla</button>
+          <button type="submit" disabled={submitting || loading}>{submitting ? 'Salvataggio...' : 'Salva'}</button>
+        </div>
+      </form>
+    </div>
   );
 }
 

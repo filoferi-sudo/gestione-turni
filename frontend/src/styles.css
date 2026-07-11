@@ -1970,3 +1970,27 @@ textarea {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* Layer SaaS: sottotitoli nei modali (piani/permessi) e elenco funzioni della sezione Organizzazione */
+.modal-subhead {
+  margin: 18px 0 8px;
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+.org-features {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.org-feature-on {
+  color: #2f6f4f;
+}
+
+.org-feature-off {
+  color: #9ca3af;
+}
