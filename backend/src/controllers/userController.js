@@ -6,6 +6,8 @@ const { validatePassword } = require('../utils/passwordPolicy');
 const { bcryptRounds } = require('../config/security');
 const audit = require('../services/auditService');
 const { issueAndSendVerification } = require('../services/emailVerificationService');
+const entitlements = require('../services/entitlements');
+const { limitKeyForRole } = require('../config/planCatalog');
 
 function toSafeUser(user) {
   return {
@@ -89,6 +91,32 @@ async function createUser(req, res) {
   const targetAreaIds = targetRole === 'user' && Array.isArray(areaIds) ? areaIds.map(Number) : [];
   if (targetAreaIds.length > 0 && !(await assertAreasBelongToCompany(targetAreaIds, req.user.companyId))) {
     return res.status(400).json({ error: "Una o più aree operative non sono valide" });
+  }
+
+  // Enforcement del limite di piano (layer SaaS): conta gli account del ruolo target nella società e
+  // rifiuta al raggiungimento del tetto configurato. Limite assente/null = illimitato ⇒ no-op (è il
+  // caso di default finché il Super Admin non configura un piano con limiti). Letto a DB via
+  // entitlements, mai dal JWT: un upgrade di piano vale subito.
+  const limitKey = limitKeyForRole(targetRole);
+  if (limitKey) {
+    const ent = await entitlements.getEntitlements(req.user.companyId);
+    const limit = entitlements.limitFor(ent, limitKey);
+    if (limit !== null) {
+      const { rows: cnt } = await pool.query(
+        'SELECT COUNT(*)::int AS count FROM users WHERE company_id = $1 AND role = $2',
+        [req.user.companyId, targetRole]
+      );
+      if (cnt[0].count >= limit) {
+        const label = targetRole === 'admin' ? 'responsabili' : 'dipendenti';
+        // Audit best-effort: il raggiungimento di un limite è un segnale utile (governance + upsell).
+        await audit.logFromReq(req, { action: 'plan.limit_reached', entityType: 'user', metadata: { role: targetRole, limit } });
+        return res.status(403).json({
+          error: `Limite del piano raggiunto: massimo ${limit} ${label}. Aggiorna il piano per aggiungerne altri.`,
+          code: 'PLAN_LIMIT',
+          limit,
+        });
+      }
+    }
   }
 
   const existing = await pool.query(

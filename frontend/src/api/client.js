@@ -173,6 +173,40 @@ export const api = {
     request(`/companies/${companyId}/dirigente`, { method: 'POST', body: payload, token }),
   getPlatformStats: (token) => request('/companies/stats', { token }),
 
+  // Layer SaaS — piani (Super Admin). Il catalogo espone le chiavi limite/feature configurabili.
+  getPlanCatalog: (token) => request('/plans/catalog', { token }),
+  listPlans: (token) => request('/plans', { token }),
+  createPlan: (payload, token) => request('/plans', { method: 'POST', body: payload, token }),
+  updatePlan: (id, payload, token) => request(`/plans/${id}`, { method: 'PUT', body: payload, token }),
+  getCompanySubscription: (companyId, token) => request(`/plans/subscriptions/${companyId}`, { token }),
+  setCompanySubscription: (companyId, payload, token) =>
+    request(`/plans/subscriptions/${companyId}`, { method: 'PUT', body: payload, token }),
+
+  // Entitlements della propria società (tutti i ruoli): il frontend adatta la UI al piano.
+  getCompanyEntitlements: (token) => request('/company/entitlements', { token }),
+
+  // Permessi granulari per utente (RBAC, gestiti dal Dirigente).
+  getUserPermissions: (id, token) => request(`/users/${id}/permissions`, { token }),
+  setUserPermissions: (id, overrides, token) =>
+    request(`/users/${id}/permissions`, { method: 'PUT', body: { overrides }, token }),
+
+  // Audit trail (Dirigente: propria società; Super Admin: tutte / filtro companyId).
+  listAuditLogs: (token, { limit, action, entityType, companyId } = {}) => {
+    const params = new URLSearchParams();
+    if (limit) params.set('limit', limit);
+    if (action) params.set('action', action);
+    if (entityType) params.set('entityType', entityType);
+    if (companyId) params.set('companyId', companyId);
+    const qs = params.toString();
+    return request(`/audit-logs${qs ? `?${qs}` : ''}`, { token });
+  },
+
+  // Billing (layer SaaS, Step 8): predisposizione pagamenti. Spento di default (status.enabled=false).
+  getBillingStatus: (token) => request('/billing/status', { token }),
+  listBillingPlans: (token) => request('/billing/plans', { token }),
+  createBillingCheckout: (planId, token) =>
+    request('/billing/checkout', { method: 'POST', body: { planId }, token }),
+
   listSedi: (token) => request('/sedi', { token }),
   createSede: (payload, token) => request('/sedi', { method: 'POST', body: payload, token }),
   updateSede: (id, payload, token) => request(`/sedi/${id}`, { method: 'PUT', body: payload, token }),

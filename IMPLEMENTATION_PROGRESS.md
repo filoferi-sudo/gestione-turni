@@ -1902,3 +1902,250 @@ prese) · `user_contracts` (monte ore previsto) · `cancellation_requests` (rich
 - Da valutare in futuro (non fatto, per scelta di semplicità): esportazione CSV/PDF, assegnazione
   esclusiva della copertura, report di copertura del fabbisogno aggregati. Il Report deve restare
   **raccolta di dati oggettivi**, mai valutazione automatica del personale.
+
+---
+
+# Iniziativa: Multi-tenant SaaS (piani, entitlements, RBAC granulare)
+
+> **Scopo**: trasformare Planivo in un SaaS multi-tenant *commerciale*, aggiungendo sopra
+> l'isolamento per `company_id` (già esistente e in produzione) un **layer additivo** di piani
+> configurabili, controllo delle funzionalità (entitlements) e permessi granulari per utente. Piano
+> operativo approvato dall'utente il 2026-07-10. **Vincoli approvati** (non derogabili senza
+> riconferma): DB/schema condiviso + isolamento `company_id` (nessun DB/schema per cliente);
+> modifiche **additive** (turni/corsi/sostituzioni/fabbisogno/notifiche/Demo/email invariati); JWT
+> invariato (piani/feature/permessi **letti a DB**, mai nel token, così i cambi valgono subito);
+> ruoli invariati (superadmin/dirigente/admin/user, personalizzazione via permessi+override, **niente
+> ruoli custom in V1**); **niente RLS Postgres** in questa fase; **niente tabella dipendenti
+> separata**; **zero limiti hardcoded** — piani/limiti/feature interamente configurabili dal Super
+> Admin a runtime; **sicurezza per prima** (test cross-tenant + helper condivisi).
+
+## Roadmap (step rilasciabili singolarmente)
+
+| Step | Obiettivo | Stato |
+|---|---|---|
+| 0 | Harness isolamento cross-tenant + helper condiviso `tenantScope` | ✅ completato (2026-07-10) |
+| 1 | Fondamenta piani: `plans` + `company_subscriptions` + `entitlements` + CRUD Super Admin + endpoint entitlements tenant | ✅ completato (2026-07-10) |
+| 2 | Enforcement limiti (maxEmployees/maxManagers/maxSedi) in creazione | ✅ completato (2026-07-10) |
+| 3 | Feature gating (`requireFeature`) sui domini premium | ✅ completato (2026-07-10) — backend; sidebar condizionale frontend in Step 6 |
+| 4 | Catalogo permessi + `requirePermission`, agganciato a comportamento invariato | ✅ completato (2026-07-10) |
+| 5 | Override permessi per utente (`user_permission_overrides`) + endpoint | ✅ completato (2026-07-10) — UI in Step 6 |
+| 6 | Frontend: UI Super Admin piani + sezione "Organizzazione" (Dirigente) + sidebar condizionale | ✅ completato (2026-07-11) |
+| 7 | Hardening + audit degli eventi piano/permessi (+ pannello registro) | ✅ completato (2026-07-11) |
+| 8 | Billing (Stripe) — **predisposizione** testata, spenta di default | ✅ completato (2026-07-11) — attivazione live su conferma |
+
+## Step 0 — Harness isolamento + helper condiviso ✅
+
+### File toccati
+- `backend/scripts/testTenantIsolation.js` (nuovo) — harness e2e in-process: crea 2 società di test
+  (dirigente+dipendente+sede+area ciascuna) + un super admin temporaneo, verifica cross-tenant,
+  cleanup CASCADE finale. **25 asserzioni.**
+- `backend/src/utils/tenantScope.js` (nuovo) — `belongsToCompany`/`assertSameCompany`: rete di
+  sicurezza uniforme per l'isolamento (404 cross-tenant). Usato dal nuovo codice; NON è stato fatto
+  un refactor di massa dei ~20 controller esistenti (churn rischioso), ma resta lo standard per il
+  nuovo codice e per la futura migrazione graduale.
+- `backend/package.json` — script `npm run test:isolation`.
+
+### Cosa verifica (permanente, estendibile)
+Liste scoped (A vede i propri utenti/sedi, non quelli di B); mutazioni cross-tenant su utenti/sedi di
+B → **404**; scoping di ruolo del layer piani (dirigente su `/api/plans` → 403; super admin → 200);
+entitlements end-to-end (assegnazione piano → effetto immediato via invalidazione cache; il piano di
+A non tocca B); semantica unit di `entitlements` (limiti/feature).
+
+## Step 1 — Fondamenta piani ✅
+
+### File toccati
+- `backend/src/db/schema.sql` — tabelle `plans` (code/name/limits JSONB/features JSONB/is_active/
+  is_public/display_order) e `company_subscriptions` (1:1 con companies, plan_id, status,
+  limit_overrides/feature_overrides JSONB, trial/period, external_ref per billing futuro); seed
+  idempotente dei piani (**contenitori vuoti**: legacy + starter/professional/enterprise, nessun
+  valore commerciale); backfill del piano `legacy` (illimitato) a **tutte** le società esistenti,
+  demo comprese. Tutto idempotente (ON CONFLICT / WHERE NOT EXISTS).
+- `backend/src/services/entitlements.js` (nuovo) — unica fonte di verità: `getEntitlements(companyId)`
+  (merge piano+override, cache TTL 60s + `invalidate`), `limitFor`, `isFeatureEnabled`. **Letto a DB,
+  mai nel JWT.** Default sicuro (illimitato) se manca la subscription.
+- `backend/src/controllers/planController.js` + `backend/src/routes/plans.js` (nuovi) — Super Admin:
+  CRUD piani (no hard-delete, `is_active`; `code` immutabile; validazione JSONB limiti/feature),
+  get/set subscription di una società con **usage** (dipendenti/responsabili/sedi). Registrato in
+  `app.js`.
+- `backend/src/controllers/companySettingsController.js` + `routes/company.js` — `GET
+  /api/company/entitlements` (authenticate, tutti i ruoli): entitlements effettivi della propria
+  società per adattare la UI (enforcement resta lato backend).
+- `backend/src/controllers/companyController.js` — `listCompanies` espone `planCode/planName/
+  planStatus` (LEFT JOIN, safe).
+
+### Decisioni specifiche
+- **Semantica configurabile senza codice**: limite assente/null = illimitato; feature assente/true =
+  abilitata (`false` esplicito = negata). Retrocompatibile: il piano `legacy` (limits `{}`/features
+  `{}`) preserva esattamente il comportamento attuale delle società esistenti e demo.
+- **Fail-open commerciale** (non di sicurezza): senza subscription → illimitato + tutte le feature.
+  Il confine di sicurezza resta `company_id`, non il piano.
+- **Seed = solo contenitori**: nessun limite/prezzo hardcoded; Starter/Professional/Enterprise sono
+  righe editabili dal Super Admin (vincolo esplicito dell'utente).
+
+### Verifica svolta (locale, DB reale)
+- Migrazione idempotente **2×** (no-op alla seconda), seed 4 piani, backfill delle 3 società
+  (demo inclusa) al piano legacy.
+- `npm run test:isolation`: **25/25** asserzioni (isolamento, scoping ruoli, entitlements
+  end-to-end, semantica unit). Dati di test rimossi (0 residui, DB pulito).
+
+### In sospeso (produzione)
+- **Migrazione produzione** di `plans` + `company_subscriptions` (+ seed/backfill) da eseguire con
+  `npm run migrate` **solo su conferma esplicita** (stesso protocollo delle iniziative precedenti).
+  Il backfill assegnerà il piano `legacy` alle società di produzione: **nessun cambiamento di
+  comportamento** (illimitato). Nessuna migrazione ancora eseguita.
+
+## Step 2–5 — Sistema configurabile: limiti, feature, permessi ✅
+
+Tranche unica (backend) del "sistema configurabile" richiesto: i MECCANISMI di enforcement, gating e
+RBAC, con i VALORI interamente configurabili a runtime dal Super Admin (nessun limite/feature
+commerciale nel codice). **Tutto behavior-invariant di default**: finché il Super Admin non configura
+limiti/feature/override, il comportamento è identico a prima.
+
+### File toccati
+- `backend/src/config/planCatalog.js` (nuovo) — **vocabolario** delle chiavi limite (`maxEmployees`/
+  `maxManagers`/`maxSedi`) e feature (`reports`/`substitutionEngine`/`emailAutomation`): solo nomi/
+  etichette, **nessun valore**. Letto dalla UI Super Admin (`GET /api/plans/catalog`).
+- `backend/src/config/permissions.js` (nuovo) — catalogo permessi + matrice default per ruolo che
+  **replica il gate attuale**. V1 contiene solo `cancellations.approve` (realmente agganciato a una
+  rotta): niente toggle finti.
+- **Step 2** `controllers/userController.js` (`createUser`) + `controllers/sedeController.js`
+  (`createSede`) — conteggio vs `entitlements.limitFor`; `403 { code:'PLAN_LIMIT', limit }` al tetto.
+  Limite assente/null = illimitato ⇒ no-op.
+- **Step 3** `middleware/requireFeature.js` (nuovo) applicato a `routes/reports.js` (`reports`),
+  `routes/shifts.js` (candidates/proposals lato manager → `substitutionEngine`), `routes/emailLog.js`
+  (`emailAutomation`). `403 { code:'PLAN_FEATURE', feature }`. Default abilitato (retrocompatibile);
+  le rotte dipendente `/api/proposals/*` NON gated (per non intrappolare proposte già inviate).
+- **Step 4** `middleware/requirePermission.js` (nuovo) — permesso effettivo = default ruolo ±
+  override; Dirigente/Super Admin non soggetti a override (pavimento di sicurezza). Agganciato a
+  `POST /api/cancellation-requests/:id/approve|reject` (era `requireManager`; il default replica il
+  gate, quindi invariato). `403 { code:'PERMISSION_DENIED' }`.
+- **Step 5** `schema.sql` (tabella `user_permission_overrides`, idempotente), nuovo
+  `controllers/permissionController.js` + rotte `GET/PUT /api/users/:id/permissions`
+  (`requireDirigente`); `getCatalog` in `planController.js` + rotta `GET /api/plans/catalog`.
+
+### Decisioni specifiche
+- **Zero valori commerciali nel codice** (vincolo esplicito): il codice conosce solo *chiavi* e
+  *semantica*; quali limiti/feature per ogni piano è dato configurabile. Enforcement e gating sono
+  no-op finché non si configura.
+- **Comportamento invariato al rilascio**: la matrice permessi replica i gate esistenti; il default
+  dei limiti (assente) è illimitato; le feature sono abilitate salvo diniego esplicito.
+- **RBAC minimo ma reale in V1**: enforcement solo su `cancellations.approve` (il caso d'uso
+  richiesto). Estendere = una voce nel catalogo + `requirePermission(key)` sulla rotta desiderata,
+  con default = il gate attuale.
+- **Nessun ruolo custom** (vincolo): personalizzazione via permessi+override, ruoli invariati.
+
+### Verifica svolta (locale, DB reale)
+- Migrazione idempotente **2×** (tabella `user_permission_overrides`).
+- `npm run test:saas`: **28/28** — catalogo; enforcement limiti (no-op senza limite; 403 PLAN_LIMIT
+  al tetto; sblocco immediato all'aumento); feature gating (default 200; 403 PLAN_FEATURE se
+  disattivata; riattivazione); RBAC (revoca/ripristino approvazione al responsabile, Dirigente non
+  revocabile, isolamento cross-società 404, requireDirigente, validazione chiavi/valori).
+- `npm run test:isolation`: **25/25** (nessuna regressione dopo le modifiche alle rotte/controller).
+- Dati di test rimossi (DB pulito).
+
+### In sospeso (produzione)
+- **Migrazione produzione** di `user_permission_overrides` (con `plans`/`company_subscriptions`), su
+  conferma esplicita. Nessun impatto: tabella vuota = comportamento invariato.
+
+## Step 6 — Frontend (UI Super Admin piani + Organizzazione Dirigente + sidebar condizionale) ✅
+
+Interfaccia del layer SaaS: rende usabile dal Super Admin la configurazione dei piani (senza codice)
+e dà al Dirigente la vista organizzazione + gestione permessi del team. Nessuna modifica backend.
+
+### File toccati
+- `frontend/src/api/client.js` — metodi: `getPlanCatalog`, `listPlans`, `createPlan`, `updatePlan`,
+  `getCompanySubscription`, `setCompanySubscription`, `getCompanyEntitlements`, `getUserPermissions`,
+  `setUserPermissions`.
+- `frontend/src/context/AuthContext.jsx` — carica gli entitlements della società (se `companyId`)
+  ed espone `entitlements` + `hasFeature(key)` per la UI condizionale. Best-effort: se non caricati,
+  la UI non nasconde nulla.
+- **Super Admin** — nuova `pages/superadmin/PianiPage.jsx` (CRUD piani con editor limiti/feature
+  **guidato dal catalogo** `GET /api/plans/catalog`, così nuove chiavi compaiono senza toccare il
+  frontend); `pages/superadmin/SocietaPage.jsx` estesa con colonna Piano + `SubscriptionModal`
+  (assegna piano + override + mostra consumi); voce "Piani" in `SuperAdminLayout` + rotta in `App.jsx`.
+- **Dirigente** — nuova `pages/manager/OrganizzazionePage.jsx` (piano + utilizzo vs limiti +
+  funzioni incluse + `PermissionsModal` per responsabile con tri-state Predefinito/Consentito/Negato);
+  voce "Organizzazione" (solo Dirigente) in `ManagerLayout` + rotta in `App.jsx`.
+- **Sidebar condizionale** — `ManagerLayout`/`EmployeeLayout` nascondono la sezione Report se la
+  feature `reports` non è inclusa nel piano (`hasFeature`); "Organizzazione" solo per il Dirigente.
+- `frontend/src/styles.css` — classi `.modal-subhead`/`.org-features` (palette esistente).
+
+### Verifica svolta (browser, DB reale, dati di test ripristinati)
+- **Super Admin**: sezione Piani mostra i 4 piani; editor del piano Starter → impostato
+  `maxEmployees=15` + disattivata la feature `reports` → la riga riflette "max dipendenti: 15" e
+  "Escluse: Report". Modale società → assegnato Starter a "Società Principale" (consumi 1/0/1 mostrati).
+- **Dirigente** (token della stessa società): sezione **Organizzazione** mostra piano Starter,
+  utilizzo **1/15 dipendenti "Entro il limite"**, funzioni con **Report escluso**; il **Report
+  scompare dalla sidebar** (feature gated) mentre "Organizzazione" compare (solo Dirigente). Matrice
+  permessi di un responsabile → impostato "Negato" su `cancellations.approve` → override scritto a DB
+  (`granted=false`, `granted_by`=dirigente).
+- **Build**: `npm run build` OK (120 moduli). **Console**: nessun errore dai nuovi endpoint (gli unici
+  404 osservati, `/api/sedi/:id/areas`, sono pre-esistenti — selezione sede stantia in localStorage).
+- **Regressione backend**: `test:isolation` 25/25 + `test:saas` 28/28 dopo le modifiche.
+- **Stato ripristinato**: società/piani di test riportati allo stato originale, override e utenti
+  temporanei rimossi.
+
+### In sospeso
+- **Migrazione produzione** delle tabelle SaaS (con `user_permission_overrides`), su conferma.
+- Affinamento UX possibile: nella sezione Organizzazione, gestione self delle feature_overrides da
+  parte del Dirigente (oggi in sola lettura, il piano lo governa il Super Admin) — da valutare.
+
+## Step 7 — Hardening + audit degli eventi SaaS ✅
+
+L'audit dei principali eventi SaaS era già presente (plan.create/update, subscription.set,
+user.set_permissions, via `auditService`). Completato con:
+- **Audit `plan.limit_reached`** (best-effort) in `userController.createUser` e
+  `sedeController.createSede` quando una creazione è bloccata da un limite di piano — segnale utile
+  per governance e upsell.
+- **Pannello "Registro attività"** nella sezione Organizzazione del Dirigente
+  (`OrganizzazionePage.jsx`): legge `GET /api/audit-logs` (già `requireDirigente`, scoped società) e
+  mostra gli ultimi eventi con etichette leggibili (`ACTION_LABELS`). `api.listAuditLogs` in client.js.
+- Verificato nel browser: il registro mostra eventi reali del layer SaaS ("Modifica permessi",
+  "Piano aggiornato", accessi) con data/attore/azione tradotti.
+
+## Step 8 — Billing (predisposizione Stripe, spenta di default) ✅
+
+Infrastruttura pagamenti completa e testata, **senza addebiti reali** finché non attivata via env —
+stesso pattern del progetto per integrazioni esterne rischiose (email S5, cifratura S6).
+
+### File toccati (backend)
+- `db/schema.sql` — `plans.external_price_ref` (idempotente): mappatura piano → prezzo del provider,
+  configurabile dal Super Admin. **Nessun prezzo hardcoded**: vive nel provider.
+- `config/billing.js` — config da env: `BILLING_ENABLED` (default **false**), `STRIPE_SECRET_KEY`
+  (assente ⇒ checkout segnaposto), `STRIPE_WEBHOOK_SECRET`, URL, tolleranza firma. `isLive()`.
+- `services/billing/stripeProvider.js` — checkout via `fetch` (zero dipendenze) + `constructEvent`
+  (verifica firma HMAC-SHA256 dell'header `Stripe-Signature`, timing-safe, tolleranza timestamp).
+- `services/billing/billingService.js` — orchestrazione: `createCheckoutSession` (stub se non live),
+  `constructEvent`, `applyEvent` (sync `company_subscriptions` da `checkout.session.completed` /
+  `customer.subscription.updated|deleted` + `entitlements.invalidate`).
+- `controllers/billingController.js` + `routes/billing.js` — `GET /status`, `GET /plans` (pubblici
+  attivi), `POST /checkout` (`requireDirigente`), `POST /webhook` (pubblico, firma). Spento ⇒ mutazioni 404.
+- `app.js` — `express.raw` sul solo `/api/billing/webhook` **prima** di `express.json` (corpo grezzo
+  per la firma); registrazione route. `planController` gestisce `externalPriceRef`. `.env.example` esteso.
+
+### Frontend
+- `PianiPage` — campo "Riferimento prezzo" nell'editor piano. `OrganizzazionePage` — card
+  "Abbonamento" **gated su `GET /api/billing/status`** (compare solo se billing attivo): elenca i
+  piani pubblici con "Passa a questo piano" → checkout → redirect. `client.js`: `getBillingStatus`,
+  `listBillingPlans`, `createBillingCheckout`.
+
+### Sicurezza / decisioni
+- **Spento di default** (verificato sul server: `/status` enabled=false, `/checkout` → 404).
+- **Nessun prezzo hardcoded**: `plans.external_price_ref` configurabile dal Super Admin.
+- **Webhook = firma HMAC** (nessuna sessione): mutazione solo dopo verifica. Senza chiave Stripe il
+  checkout è un URL segnaposto (nessuna chiamata esterna).
+- **Nessuna nuova dipendenza** (fetch nativo + crypto di Node), coerente col progetto.
+
+### Verifica svolta (locale)
+- Migrazione idempotente 2× (`external_price_ref`).
+- `npm run test:billing`: **15/15** — status, checkout stub, plans pubblici, webhook firma
+  mancante/errata → 400, sync completa (completed→active+external_ref, updated→past_due+period_end,
+  deleted→canceled), entitlements invalidati, evento ignoto → 200 handled=false, checkout non-dirigente → 403.
+- Regressione: `test:isolation` 25/25 + `test:saas` 28/28 dopo il wiring del raw-body.
+- Build frontend OK; card Abbonamento correttamente nascosta con billing spento. Dati di test rimossi.
+
+### In sospeso (attivazione reale, su conferma)
+- Impostare le env Stripe in produzione (`BILLING_ENABLED`, chiavi, webhook secret, URL),
+  configurare i `external_price_ref` dei piani, registrare l'endpoint webhook su Stripe. Solo allora
+  il billing effettua transazioni reali. **Migrazione produzione** di `external_price_ref` con le
+  altre tabelle SaaS, su conferma.

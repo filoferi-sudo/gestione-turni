@@ -9,6 +9,10 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Entitlements della società (layer SaaS): piano + feature attive, per adattare la UI (sidebar
+  // condizionale, sezione Organizzazione). null finché non caricati / per il super admin (senza
+  // società). Il backend resta comunque l'unico punto autoritativo di enforcement.
+  const [entitlements, setEntitlements] = useState(null);
 
   useEffect(() => {
     if (!token) {
@@ -24,6 +28,25 @@ export function AuthProvider({ children }) {
       })
       .finally(() => setLoading(false));
   }, [token]);
+
+  // Carica gli entitlements quando c'è un utente con una società (il super admin non ne ha).
+  useEffect(() => {
+    if (!token || !user || !user.companyId) {
+      setEntitlements(null);
+      return;
+    }
+    api
+      .getCompanyEntitlements(token)
+      .then(({ entitlements }) => setEntitlements(entitlements))
+      .catch(() => setEntitlements(null)); // best-effort: la UI ricade sul default "tutto visibile"
+  }, [token, user]);
+
+  // Una feature è considerata attiva se non è esplicitamente disabilitata (default permissivo,
+  // coerente col backend). Se gli entitlements non sono ancora caricati, non nascondere nulla.
+  function hasFeature(key) {
+    if (!entitlements || !entitlements.features) return true;
+    return entitlements.features[key] !== false;
+  }
 
   function loginWithToken(newToken, newUser) {
     localStorage.setItem(TOKEN_KEY, newToken);
@@ -47,7 +70,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ token, user, loading, loginWithToken, logout, refreshUser }}>
+    <AuthContext.Provider value={{ token, user, loading, loginWithToken, logout, refreshUser, entitlements, hasFeature }}>
       {children}
     </AuthContext.Provider>
   );

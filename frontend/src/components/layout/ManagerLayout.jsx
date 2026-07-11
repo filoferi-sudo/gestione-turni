@@ -1,9 +1,12 @@
 import AppLayout from './AppLayout';
 import { ManagerWorkspaceProvider, useManagerWorkspace } from '../../context/ManagerWorkspaceContext';
+import { useAuth } from '../../context/AuthContext';
 
 // Le sezioni dell'area manager (stesse voci per Dirigente e Responsabile: le differenze di
 // permesso vivono dentro le singole pagine, es. Impostazioni mostra la gestione struttura solo
 // al Dirigente). `end: true` sulla Dashboard evita che resti evidenziata su tutte le sottopagine.
+//   * requiresFeature: la voce è nascosta se la feature non è inclusa nel piano (layer SaaS).
+//   * requiresRole: la voce è visibile solo a quel ruolo (Organizzazione = solo Dirigente).
 const SECTIONS = [
   { path: '', label: 'Dashboard', end: true },
   { path: 'calendario', label: 'Calendario' },
@@ -12,7 +15,8 @@ const SECTIONS = [
   { path: 'sostituzioni', label: 'Sostituzioni' },
   { path: 'fabbisogno', label: 'Fabbisogno' },
   { path: 'comunicazioni', label: 'Comunicazioni' },
-  { path: 'report', label: 'Report' },
+  { path: 'report', label: 'Report', requiresFeature: 'reports' },
+  { path: 'organizzazione', label: 'Organizzazione', requiresRole: 'dirigente' },
   { path: 'impostazioni', label: 'Impostazioni' },
 ];
 
@@ -48,13 +52,18 @@ function SedeSwitcher() {
 
 // base: '/dirigente' oppure '/admin' — stesse pagine, rotte separate per ruolo (vedi App.jsx).
 export default function ManagerLayout({ base }) {
-  const navItems = SECTIONS.map((s) => ({
-    to: s.path ? `${base}/${s.path}` : base,
-    label: s.label,
-    end: s.end,
-    // Gancio stabile per il Tour Guidato, indipendente dal ruolo/base (la home è 'nav-dashboard').
-    tourId: `nav-${s.path || 'dashboard'}`,
-  }));
+  const { user, hasFeature } = useAuth();
+  const navItems = SECTIONS
+    // Nasconde le sezioni non incluse nel piano (feature) o non pertinenti al ruolo. L'enforcement
+    // resta lato backend: questo è solo un adattamento della UI.
+    .filter((s) => (!s.requiresFeature || hasFeature(s.requiresFeature)) && (!s.requiresRole || user.role === s.requiresRole))
+    .map((s) => ({
+      to: s.path ? `${base}/${s.path}` : base,
+      label: s.label,
+      end: s.end,
+      // Gancio stabile per il Tour Guidato, indipendente dal ruolo/base (la home è 'nav-dashboard').
+      tourId: `nav-${s.path || 'dashboard'}`,
+    }));
 
   return (
     <ManagerWorkspaceProvider>

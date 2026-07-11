@@ -29,6 +29,7 @@ const reportRoutes = require('./routes/reports');
 const courseRoutes = require('./routes/courses');
 const companyRoutes = require('./routes/companies');
 const companySettingsRoutes = require('./routes/company');
+const planRoutes = require('./routes/plans');
 const sedeRoutes = require('./routes/sedi');
 const areaRoutes = require('./routes/areas');
 const staffingRoutes = require('./routes/staffing');
@@ -38,6 +39,7 @@ const auditRoutes = require('./routes/audit');
 const emailActionRoutes = require('./routes/emailActions');
 const emailLogRoutes = require('./routes/emailLog');
 const demoRoutes = require('./routes/demo');
+const billingRoutes = require('./routes/billing');
 
 const app = express();
 
@@ -55,6 +57,12 @@ app.use(helmet({ contentSecurityPolicy: false }));
 const corsOrigin = process.env.CORS_ORIGIN;
 app.use(cors(corsOrigin ? { origin: corsOrigin } : undefined));
 
+// Il webhook di billing (Step 8) ha bisogno del CORPO GREZZO per verificare la firma HMAC del
+// provider: va montato PRIMA di express.json, che altrimenti consumerebbe lo stream come JSON.
+// Scoped al solo path del webhook; tutto il resto continua a ricevere JSON. body-parser marca la
+// richiesta come già letta, quindi express.json più sotto non la riprocessa.
+app.use('/api/billing/webhook', express.raw({ type: '*/*', limit: '100kb' }));
+
 // Limite esplicito alla dimensione del corpo JSON: nessun endpoint riceve payload grandi, un
 // limite basso riduce la superficie di abuso (payload giganti / DoS applicativo).
 app.use(express.json({ limit: '100kb' }));
@@ -69,6 +77,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/companies', companyRoutes);
 app.use('/api/company', companySettingsRoutes);
+app.use('/api/plans', planRoutes);
 app.use('/api/sedi', sedeRoutes);
 app.use('/api/areas', areaRoutes);
 app.use('/api/staffing', staffingRoutes);
@@ -78,6 +87,7 @@ app.use('/api/audit-logs', auditRoutes);
 app.use('/api/email-actions', emailActionRoutes);
 app.use('/api/email-log', emailLogRoutes);
 app.use('/api/demo', demoRoutes);
+app.use('/api/billing', billingRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

@@ -20,6 +20,11 @@ function toSafeCompany(row) {
     createdAt: row.created_at,
     dirigentiCount: row.dirigenti_count !== undefined ? Number(row.dirigenti_count) : undefined,
     usersCount: row.users_count !== undefined ? Number(row.users_count) : undefined,
+    // Piano corrente (layer SaaS): presente se la società ha un abbonamento. LEFT JOIN, quindi
+    // null per società senza subscription (non dovrebbe accadere dopo il backfill, ma resta safe).
+    planCode: row.plan_code || null,
+    planName: row.plan_name || null,
+    planStatus: row.plan_status || null,
   };
 }
 
@@ -28,10 +33,13 @@ async function listCompanies(req, res) {
   const { rows } = await pool.query(
     `SELECT c.*,
             COUNT(u.id) FILTER (WHERE u.role = 'dirigente') AS dirigenti_count,
-            COUNT(u.id) AS users_count
+            COUNT(u.id) AS users_count,
+            p.code AS plan_code, p.name AS plan_name, s.status AS plan_status
        FROM companies c
        LEFT JOIN users u ON u.company_id = c.id
-      GROUP BY c.id
+       LEFT JOIN company_subscriptions s ON s.company_id = c.id
+       LEFT JOIN plans p ON p.id = s.plan_id
+      GROUP BY c.id, p.code, p.name, s.status
       ORDER BY c.created_at DESC`
   );
   return res.json({ companies: rows.map(toSafeCompany) });

@@ -10,7 +10,8 @@ const {
 const { getUserContract, upsertUserContract } = require('../controllers/contractController');
 const { getUserAvailability, replaceUserAvailability } = require('../controllers/availabilityController');
 const { getUserOptOuts, addUserOptOut, deleteUserOptOut } = require('../controllers/optOutController');
-const { authenticate, requireManager } = require('../middleware/auth');
+const { getUserPermissions, setUserPermissions } = require('../controllers/permissionController');
+const { authenticate, requireManager, requireDirigente } = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 
 const router = express.Router();
@@ -33,6 +34,10 @@ router.put('/:id/availability', authenticate, asyncHandler(replaceUserAvailabili
 router.get('/:id/optouts', authenticate, asyncHandler(getUserOptOuts));
 router.post('/:id/optouts', authenticate, asyncHandler(addUserOptOut));
 router.delete('/:id/optouts/:optoutId', authenticate, asyncHandler(deleteUserOptOut));
+// Permessi granulari per utente (RBAC, layer SaaS): solo il Dirigente personalizza i permessi dei
+// propri responsabili/dipendenti (override sopra i default del ruolo).
+router.get('/:id/permissions', authenticate, requireDirigente, asyncHandler(getUserPermissions));
+router.put('/:id/permissions', authenticate, requireDirigente, asyncHandler(setUserPermissions));
 router.delete('/:id', authenticate, requireManager, asyncHandler(deleteUser));
 
 module.exports = router;
