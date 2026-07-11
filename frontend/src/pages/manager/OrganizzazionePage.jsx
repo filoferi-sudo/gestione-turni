@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import Modal from '../../components/common/Modal';
+import { CheckIcon, XIcon } from '../../components/common/icons';
 
 // Sezione "Organizzazione" del Dirigente (layer SaaS): panoramica del piano e dei consumi della
 // propria società + gestione dei permessi granulari dei responsabili (RBAC con override). Il piano
@@ -86,7 +88,8 @@ export default function OrganizzazionePage() {
         <ul className="org-features">
           {FEATURE_LABELS.map(([key, label]) => (
             <li key={key} className={features[key] === false ? 'org-feature-off' : 'org-feature-on'}>
-              {features[key] === false ? '✕' : '✓'} {label}
+              {features[key] === false ? <XIcon size={15} aria-hidden="true" /> : <CheckIcon size={15} aria-hidden="true" />}
+              <span>{label}</span>
             </li>
           ))}
         </ul>
@@ -259,7 +262,7 @@ function PermissionsModal({ user, token, onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <div className="modal-card modal-card-wide" onClick={(e) => e.stopPropagation()}>
         <h2>Permessi di "{user.username}"</h2>
         {loading ? (
@@ -300,6 +303,6 @@ function PermissionsModal({ user, token, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

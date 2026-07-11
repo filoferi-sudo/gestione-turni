@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import Modal from '../../components/common/Modal';
 
 // Sezione Piani del Super Admin (layer SaaS): crea/modifica i piani commerciali. I VALORI (limiti,
 // feature incluse) sono interamente configurabili qui a runtime — non esistono valori commerciali
@@ -185,7 +186,7 @@ function PlanFormModal({ plan, catalog, onSave, onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <form className="modal-card modal-card-wide" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>{plan ? `Modifica piano "${plan.name}"` : 'Nuovo piano'}</h2>
 
@@ -256,6 +257,6 @@ function PlanFormModal({ plan, catalog, onSave, onClose }) {
           <button type="submit" disabled={submitting}>{submitting ? 'Salvataggio...' : 'Salva'}</button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

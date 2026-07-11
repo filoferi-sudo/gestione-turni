@@ -1654,6 +1654,27 @@ nessuna decisione HR (disclaimer esplicito in UI: "la valutazione finale spetta 
 
 Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cosa ricordare.
 
+- **2026-07-11** — **UX/Accessibilità (WCAG 2.1 AA) + design token + rebrand Planivo (solo
+  frontend, zero cambi di logica)**. Cinque interventi dall'audit del design system Impeccable:
+  **(1) A11y/interazione**: nuovo `components/common/Modal.jsx` (wrapper accessibile che clona la
+  card esistente: `role=dialog`+`aria-modal`, ESC, focus trap, ritorno focus, `aria-labelledby`
+  automatico) adottato dai 18 modali in 15 file; `utils/a11y.js` (`activateOnKey`) +
+  `tabIndex`/`onKeyDown` sui controlli custom (ShiftBlock, CourseBlock, StaffingChip); campanella con
+  `aria-expanded`/ESC e voci notifica come veri `<button>`; skip-link + landmark in AppLayout;
+  focus ring globale `:focus-visible` Forest Pine; `prefers-reduced-motion`. **(2) Design token**:
+  `:root` in `styles.css` con 54 variabili (colori/raggi/ombre/spaziature/z-index; base per futuri
+  temi per-società), ~205 hex sostituiti con `var()`, aspetto invariato. **(3) Touch**: target ≥44px
+  solo `@media (pointer: coarse)`; nav mobile con scroll-snap. **(4) Contrasto**: `--color-text-muted`
+  #6b7280→#5f6673 (AA su tutte le superfici chiare), placeholder espliciti. **(5) Polish**: chip
+  fabbisogno senza striscia laterale 4px (ora tinta+pallino di stato), icone emoji→SVG inline
+  (`components/common/icons.jsx`), z-index a scala semantica, `tabular-nums` sui numeri. Inoltre:
+  **fix** `FirstAccessSetup` (redirect dichiarativo `<Navigate>`, elimina warning React
+  setState-in-render) e **rebrand shell Planivo** (`components/common/Logo.jsx`; login con logo al
+  posto del sottotitolo — struttura/flow della card INVARIATI, incluso "Prova la demo"; sidebar;
+  title/favicon/theme-color/splash in `index.html`; loading brandizzato in ProtectedRoute). Nuovi
+  file di contesto design: `PRODUCT.md`, `DESIGN.md`, `.impeccable/`. **Verifica**: build OK, login
+  end-to-end nel browser (dirigente→dashboard), focus/contrasti calcolati, nessun nuovo warning.
+  **Ricordare**: i colori ora vivono SOLO in `:root` (styles.css); usare i token, non hex nuovi.
 - **2026-07-11** — **Migrazione produzione ESEGUITA (layer SaaS)**. `npm run migrate` lanciato sul DB
   Neon di produzione: create `plans`, `company_subscriptions`, `user_permission_overrides` +
   `plans.external_price_ref`; seed dei 4 piani; backfill del piano `legacy` (illimitato) a tutte le 5

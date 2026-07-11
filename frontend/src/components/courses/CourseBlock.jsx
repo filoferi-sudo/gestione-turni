@@ -1,4 +1,5 @@
 import { timeToMinutes, PX_PER_MIN, DEFAULT_TIME_WINDOW } from '../../utils/timeWindow';
+import { activateOnKey } from '../../utils/a11y';
 
 // Stesso principio di ShiftBlock.jsx (che riusa lo stesso utils/courseLayout): la posizione
 // orizzontale dipende da `lane`/`laneCount`, corsi sovrapposti nello stesso orario si affiancano
@@ -21,7 +22,9 @@ export default function CourseBlock({ course, draggable, onClick, onDragStart, t
       draggable={draggable}
       onDragStart={draggable ? (e) => onDragStart(e, course) : undefined}
       onClick={onClick ? () => onClick(course) : undefined}
+      onKeyDown={onClick ? activateOnKey(() => onClick(course)) : undefined}
       role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
     >
       <div className="course-block-name">{course.name}</div>
       <div className="course-block-time">

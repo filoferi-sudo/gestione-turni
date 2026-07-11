@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-11T00:00:00.000Z",
+  "title": "Design System: Planivo",
+  "extensions": {
+    "colorMeta": {
+      "forest-pine": {
+        "role": "primary",
+        "displayName": "Forest Pine",
+        "canonical": "oklch(0.52 0.09 158)",
+        "tonalRamp": [
+          "oklch(0.20 0.05 158)",
+          "oklch(0.30 0.07 158)",
+          "oklch(0.40 0.085 158)",
+          "oklch(0.52 0.09 158)",
+          "oklch(0.62 0.09 158)",
+          "oklch(0.72 0.07 158)",
+          "oklch(0.85 0.045 158)",
+          "oklch(0.95 0.02 158)"
+        ]
+      },
+      "slate-ink": {
+        "role": "secondary",
+        "displayName": "Slate Ink",
+        "canonical": "oklch(0.26 0.02 258)",
+        "tonalRamp": [
+          "oklch(0.18 0.02 258)",
+          "oklch(0.26 0.02 258)",
+          "oklch(0.35 0.025 258)",
+          "oklch(0.45 0.025 258)",
+          "oklch(0.55 0.02 258)",
+          "oklch(0.68 0.015 258)",
+          "oklch(0.82 0.01 258)",
+          "oklch(0.94 0.006 258)"
+        ]
+      },
+      "muted-gray": {
+        "role": "neutral",
+        "displayName": "Muted Gray",
+        "canonical": "oklch(0.55 0.02 256)",
+        "tonalRamp": [
+          "oklch(0.22 0.015 256)",
+          "oklch(0.32 0.018 256)",
+          "oklch(0.42 0.02 256)",
+          "oklch(0.55 0.02 256)",
+          "oklch(0.66 0.017 256)",
+          "oklch(0.78 0.012 256)",
+          "oklch(0.90 0.006 256)",
+          "oklch(0.97 0.003 256)"
+        ]
+      },
+      "warning-amber": {
+        "role": "tertiary",
+        "displayName": "Warning Amber",
+        "canonical": "oklch(0.66 0.16 55)",
+        "tonalRamp": [
+          "oklch(0.30 0.08 55)",
+          "oklch(0.42 0.11 55)",
+          "oklch(0.54 0.14 55)",
+          "oklch(0.66 0.16 55)",
+          "oklch(0.76 0.14 55)",
+          "oklch(0.85 0.10 55)",
+          "oklch(0.92 0.06 55)",
+          "oklch(0.97 0.03 55)"
+        ]
+      },
+      "danger-red": {
+        "role": "tertiary",
+        "displayName": "Danger Red",
+        "canonical": "oklch(0.52 0.19 27)",
+        "tonalRamp": [
+          "oklch(0.30 0.11 27)",
+          "oklch(0.40 0.15 27)",
+          "oklch(0.46 0.18 27)",
+          "oklch(0.52 0.19 27)",
+          "oklch(0.64 0.17 27)",
+          "oklch(0.76 0.12 27)",
+          "oklch(0.88 0.07 27)",
+          "oklch(0.96 0.03 27)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Big scanned numbers only — stat-card values. Pair with tabular numerals." },
+      "headline": { "displayName": "Headline", "purpose": "Page titles (h1), one per screen." },
+      "title": { "displayName": "Title", "purpose": "Section and modal headers, card titles." },
+      "body": { "displayName": "Body", "purpose": "Default text, table cells, inputs. Cap prose at 65–75ch." },
+      "label": { "displayName": "Label", "purpose": "Form field labels, workhorse UI weight." }
+    },
+    "shadows": [
+      { "name": "rest", "value": "0 1px 3px rgba(0, 0, 0, 0.08)", "purpose": "Whisper under cards and stat tiles at rest — lifts white off the gray field, no more." },
+      { "name": "raised", "value": "0 4px 12px rgba(0, 0, 0, 0.12)", "purpose": "Hover/active lift for interactive cards and popovers." },
+      { "name": "overlay", "value": "0 12px 32px rgba(15, 23, 42, 0.28)", "purpose": "Modals and dialogs floating above the dimmed backdrop." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0.33, 1, 0.68, 1)", "purpose": "Ease-out for state transitions (hover, focus, elevation change). ~150ms." },
+      { "name": "duration-state", "value": "150ms", "purpose": "Default duration for interactive state changes." }
+    ],
+    "breakpoints": [
+      { "name": "sidebar-collapse", "value": "900px", "purpose": "Below this the sidebar becomes a scrollable horizontal top bar." },
+      { "name": "form-stack", "value": "520px", "purpose": "Below this two-column form grids (contract maximals) collapse to one column." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one confirming action per context. Forest Pine fill, darkens on hover, visible focus ring.",
+      "html": "<button class=\"ds-btn-primary\">Approva richiesta</button>",
+      "css": ".ds-btn-primary { background: #2f6f4f; color: #fff; font-size: 15px; font-weight: 600; padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; transition: background 150ms cubic-bezier(0.33,1,0.68,1); } .ds-btn-primary:hover { background: #285f43; } .ds-btn-primary:focus-visible { outline: 2px solid #2f6f4f; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Quiet, non-committal actions (cancel, back). Hairline fill, slate text.",
+      "html": "<button class=\"ds-btn-secondary\">Annulla</button>",
+      "css": ".ds-btn-secondary { background: #e5e7eb; color: #1f2430; font-size: 15px; font-weight: 600; padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; transition: background 150ms cubic-bezier(0.33,1,0.68,1); } .ds-btn-secondary:hover { background: #d1d5db; } .ds-btn-secondary:focus-visible { outline: 2px solid #2f6f4f; outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "White fill, gray stroke, Forest Pine focus ring (the prescribed focus state the app currently lacks).",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Username</span><input class=\"ds-input\" type=\"text\" placeholder=\"nome.cognome\" /></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 6px; } .ds-field-label { font-size: 13px; font-weight: 600; color: #1f2430; } .ds-input { font-size: 14px; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: #1f2430; } .ds-input::placeholder { color: #6b7280; } .ds-input:focus-visible { outline: none; border-color: #2f6f4f; box-shadow: 0 0 0 3px rgba(47,111,79,0.35); }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "custom",
+      "refersTo": "button-primary",
+      "description": "The canonical multi-view switcher. Single pill, active segment in Forest Pine.",
+      "html": "<div class=\"ds-segmented\"><button class=\"ds-seg active\">Settimana</button><button class=\"ds-seg\">Giorno</button><button class=\"ds-seg\">Mese</button></div>",
+      "css": ".ds-segmented { display: inline-flex; border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden; } .ds-seg { margin: 0; background: #fff; color: #1f2430; border: none; border-right: 1px solid #d1d5db; border-radius: 0; padding: 6px 14px; font-size: 13px; cursor: pointer; } .ds-seg:last-child { border-right: none; } .ds-seg:hover:not(.active) { background: #f4f5f7; } .ds-seg.active { background: #2f6f4f; color: #fff; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "White surface on the gray field, 10px radius, soft rest shadow, no border.",
+      "html": "<div class=\"ds-card\"><h3 class=\"ds-card-title\">Turni scoperti</h3><p class=\"ds-card-body\">Nessun turno scoperto oggi. Tutta la copertura è assegnata.</p></div>",
+      "css": ".ds-card { background: #fff; border-radius: 10px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); } .ds-card-title { margin: 0 0 8px; font-size: 16px; font-weight: 600; color: #1f2430; } .ds-card-body { margin: 0; font-size: 14px; line-height: 1.5; color: #4b5563; }"
+    },
+    {
+      "name": "Stat Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Summary tile: big tabular number, small muted label, section link.",
+      "html": "<div class=\"ds-stat\"><span class=\"ds-stat-value\">3</span><span class=\"ds-stat-label\">Richieste in attesa</span><a class=\"ds-stat-link\" href=\"#\">Vai alle richieste</a></div>",
+      "css": ".ds-stat { display: flex; flex-direction: column; gap: 4px; background: #fff; border-radius: 10px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); } .ds-stat-value { font-size: 28px; font-weight: 700; line-height: 1.2; color: #1f2430; font-variant-numeric: tabular-nums; } .ds-stat-label { font-size: 13px; color: #6b7280; } .ds-stat-link { font-size: 13px; color: #2f6f4f; text-decoration: none; margin-top: 4px; } .ds-stat-link:hover { text-decoration: underline; }"
+    },
+    {
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "refersTo": "sidebar-link-active",
+      "description": "Slate rail with gray links; active link gets a lighter fill and a Spring Pine left marker.",
+      "html": "<nav class=\"ds-sidebar\"><a class=\"ds-navlink active\" href=\"#\">Dashboard</a><a class=\"ds-navlink\" href=\"#\">Calendario</a><a class=\"ds-navlink\" href=\"#\">Sostituzioni</a><a class=\"ds-navlink\" href=\"#\">Fabbisogno</a></nav>",
+      "css": ".ds-sidebar { display: flex; flex-direction: column; gap: 2px; width: 200px; background: #1f2430; padding: 12px; border-radius: 8px; } .ds-navlink { color: #d1d5db; text-decoration: none; padding: 9px 12px; border-radius: 6px; font-size: 14px; border-left: 3px solid transparent; } .ds-navlink:hover { background: rgba(255,255,255,0.06); color: #fff; } .ds-navlink.active { background: rgba(255,255,255,0.1); color: #fff; border-left-color: #4caf7d; }"
+    },
+    {
+      "name": "Coverage Chip (target treatment)",
+      "kind": "chip",
+      "refersTo": "card",
+      "description": "Per-slot staffing coverage indicator. Shown here in the PRESCRIBED form — tinted fill + leading status dot — replacing the legacy 4px left-stripe pattern.",
+      "html": "<div class=\"ds-chip covered\"><span class=\"ds-chip-dot\"></span><span>07:00–13:00 · 2/2 coperto</span></div>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 4px; font-size: 13px; line-height: 1.35; border: 1px solid transparent; } .ds-chip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; } .ds-chip.covered { background: #dcfce7; color: #166534; border-color: #bbf7d0; } .ds-chip.covered .ds-chip-dot { background: #2f6f4f; } .ds-chip.warning { background: #fef3c7; color: #92400e; border-color: #fde68a; } .ds-chip.warning .ds-chip-dot { background: #d97706; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Calm Control Room",
+    "overview": "Planivo is the room a shift manager walks into every morning to see the whole day at a glance — coverage, requests, gaps — without a single thing shouting at them. The interface behaves like a well-run operations desk: dark slate rails hold the navigation steady while the work happens on a quiet gray field, and a single deep green means go, confirmed, covered. Colour is spent, never sprinkled. This is the visual form of the product's promise — la calma è una funzionalità. Underneath the calm is exactness: this is also a ledger, where hours, coverage counts and costs are rendered with an accountant's precision, because real staffing decisions ride on them. The system rejects two neighbours: it is not a heavy enterprise ERP (no gray-on-gray field-forests, no learning cliff), and it is not a bare spreadsheet or admin dump (every surface is composed and given breathing room). Planivo sits precisely between them: specific, composed, and quiet.",
+    "keyCharacteristics": [
+      "Slate-and-green control-room palette; status colour spent sparingly and meaningfully.",
+      "Flat surfaces with a soft, deliberate elevation scale — lift signals interaction, not decoration.",
+      "System-native typography, small and exact, hierarchy through weight and grouping.",
+      "Tabular precision for anything numeric (hours, coverage, counts).",
+      "Calm and confident components: modest radii, solid fills, unambiguous states."
+    ],
+    "rules": [
+      { "name": "The One Green Rule", "body": "Forest Pine means action or confirmation, full stop. If green is on the screen for any other reason, remove it. Its scarcity is what makes it read as a signal.", "section": "colors" },
+      { "name": "The Rationed Status Rule", "body": "Amber, Red, Blue and Violet each carry exactly one meaning and appear only to carry it. A screen with no problems has no amber and no red. Calm is the default state.", "section": "colors" },
+      { "name": "The One Family Rule", "body": "Never introduce a second typeface. If a heading needs to feel different, change weight or size, not font.", "section": "typography" },
+      { "name": "The Tabular Numbers Rule", "body": "Any figure that will be scanned or compared — hours, coverage counts, costs — uses tabular numerals so columns align and digits don't jitter.", "section": "typography" },
+      { "name": "The Earned-Lift Rule", "body": "Elevation escalates with interaction and stacking only: Rest to Raised (hover) to Overlay (modal). A surface never jumps a level for looks. Flat is the resting state of everything.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do spend Forest Pine only on actions and confirmations (The One Green Rule). One primary action per context.",
+      "Do keep status colour rationed — amber, red, blue and violet each mean one thing; a problem-free screen has none of them.",
+      "Do render hours, coverage and cost figures in tabular numerals so columns align and values are trustworthy.",
+      "Do give every interactive element a visible :focus-visible ring — 2px Forest Pine with a 2px offset (or the 0 0 0 3px rgba(47,111,79,0.35) glow). The app currently ships no focus states; this is required for the WCAG 2.1 AA target.",
+      "Do verify Muted Gray (#6b7280) text clears 4.5:1 against its background; on tinted panels bump toward Graphite (#4b5563) or Slate Ink.",
+      "Do keep depth tonal first (slate rail, Panel Gray strips, white cards); reach for a shadow only when a surface is hovered, floating, or a modal.",
+      "Do provide a prefers-reduced-motion alternative (crossfade or instant) for every transition and the tour/overlay animations."
+    ],
+    "donts": [
+      "Don't build like a heavy enterprise ERP: no gray-on-gray field-forests, no dozen-input screens, no chrome without a job.",
+      "Don't let a screen decay into a bare spreadsheet or admin dump — raw edge-to-edge tables with no grouping, hierarchy or breathing room.",
+      "Don't use a border-left/border-right greater than 1px as a coloured status stripe on chips, cards, callouts or alerts. Migrate the .staffing-chip 4px left stripe to a tinted background with a leading status dot. (The 3px sidebar active-marker is the one sanctioned exception.)",
+      "Don't introduce a second typeface or a display/brand font. One system family, hierarchy by weight.",
+      "Don't add gradient text (background-clip: text), decorative glassmorphism, hero-metric templates, or identical icon-card grids.",
+      "Don't put a tracked-uppercase eyebrow above content sections. The only sanctioned tracked-uppercase is the 11px structural label inside utility strips.",
+      "Don't repurpose the calendar taxonomy hues (Blue/Amber/Violet) for anything outside the shift/course legend — it breaks a learned code."
+    ]
+  }
+}

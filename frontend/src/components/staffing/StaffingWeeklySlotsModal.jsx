@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import StaffingScheduleModal from './StaffingScheduleModal';
+import Modal from '../common/Modal';
 
 const WEEKDAYS = [
   { code: 'MON', label: 'Lun' },
@@ -80,7 +81,7 @@ export default function StaffingWeeklySlotsModal({ areaId, onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={handleClose}>
+    <Modal onClose={handleClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <h2>Fasce fisse settimanali</h2>
         <p className="hint">
@@ -121,6 +122,6 @@ export default function StaffingWeeklySlotsModal({ areaId, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

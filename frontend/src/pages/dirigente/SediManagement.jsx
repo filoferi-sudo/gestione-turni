@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import Modal from '../../components/common/Modal';
 
 // Elenco sedi della società (la "vista complessiva"): crea/modifica/disattiva/elimina, e
 // permette di scegliere rapidamente quale sede è "attiva" (quella di cui si vedono aree e
@@ -160,7 +161,7 @@ function SedeFormModal({ sede, onSave, onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>{sede ? 'Modifica sede' : 'Nuova sede'}</h2>
 
@@ -205,6 +206,6 @@ function SedeFormModal({ sede, onSave, onClose }) {
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

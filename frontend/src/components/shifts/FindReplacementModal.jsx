@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import Modal from '../common/Modal';
 
 // Etichette per lo stato di una proposta già inviata a un candidato (Fase 5).
 const PROPOSAL_STATUS_LABEL = {
@@ -78,7 +79,7 @@ export default function FindReplacementModal({ shift, onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <div className="modal-card modal-card-wide" data-tour="find-replacement-modal" onClick={(e) => e.stopPropagation()}>
         <h2>Trova sostituzione</h2>
         <p className="hint">
@@ -144,6 +145,6 @@ export default function FindReplacementModal({ shift, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

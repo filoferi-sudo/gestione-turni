@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import Modal from '../common/Modal';
 
 const WEEKDAYS = [
   { code: 'MON', label: 'Lun' },
@@ -102,7 +103,7 @@ export default function StaffingScheduleModal({ areaId, slot, onClose, onSaved }
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>{slot ? 'Modifica fascia fissa' : 'Nuova fascia fissa'}</h2>
         <p className="hint">
@@ -166,6 +167,6 @@ export default function StaffingScheduleModal({ areaId, slot, onClose, onSaved }
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

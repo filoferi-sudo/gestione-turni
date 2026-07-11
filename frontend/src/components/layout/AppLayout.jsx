@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import NotificationsBell from '../notifications/NotificationsBell';
 import DemoBanner from '../demo/DemoBanner';
 import EmailVerificationBanner from '../notifications/EmailVerificationBanner';
+import { Logo } from '../common/Logo';
 
 const ROLE_LABELS = { admin: 'Responsabile', dirigente: 'Dirigente', user: 'Dipendente', superadmin: 'Super Admin' };
 
@@ -22,15 +23,18 @@ export default function AppLayout({ navItems, sidebarExtra, showBell = true }) {
 
   return (
     <div className="app-shell">
+      <a href="#main-content" className="skip-link">
+        Salta al contenuto
+      </a>
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <strong>Gestione Turni</strong>
+          <Logo size={22} className="sidebar-logo" />
           <span className={`badge${user.role === 'user' ? '' : ' badge-admin'}`}>{ROLE_LABELS[user.role]}</span>
         </div>
 
         {sidebarExtra}
 
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" aria-label="Navigazione principale">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -63,7 +67,7 @@ export default function AppLayout({ navItems, sidebarExtra, showBell = true }) {
         <DemoBanner />
         <EmailVerificationBanner />
 
-        <main className="content content-wide">
+        <main id="main-content" tabIndex={-1} className="content content-wide">
           <Outlet />
         </main>
       </div>

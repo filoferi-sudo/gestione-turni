@@ -3,10 +3,83 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gestione Turni</title>
+    <meta name="theme-color" content="#2f6f4f" />
+    <meta
+      name="description"
+      content="Planivo — pianificazione di turni e coperture per strutture sportive. Chiude i turni scoperti al posto tuo, in modo trasparente."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%232f6f4f'/><path d='M9 16.5l4.8 4.8L23 11' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>"
+    />
+    <title>Planivo — Turni e coperture sotto controllo</title>
+    <style>
+      /* Splash di avvio (pre-React): niente flash bianco, si vede subito il marchio Planivo.
+         React sostituisce #root al mount e lo rimuove. Stili inline: la CSS dell'app arriva col JS. */
+      #app-boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        background: #f4f5f7;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      #app-boot .boot-mark {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: #2f6f4f;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        animation: boot-pulse 1.4s ease-in-out infinite;
+      }
+      #app-boot .boot-word {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        color: #5f6673;
+      }
+      @keyframes boot-pulse {
+        0%,
+        100% {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        50% {
+          opacity: 0.72;
+          transform: translateY(-2px);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #app-boot .boot-mark {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="app-boot">
+        <span class="boot-mark">
+          <svg width="28" height="28" viewBox="0 0 32 32" role="img" aria-label="Planivo">
+            <path
+              d="M9 16.5l4.8 4.8L23 11"
+              fill="none"
+              stroke="#fff"
+              stroke-width="3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+        <span class="boot-word">Planivo</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

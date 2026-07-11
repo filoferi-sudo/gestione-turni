@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import Modal from '../../components/common/Modal';
 
 // Sezione Società del Super Admin: anagrafica delle società della piattaforma (creazione,
 // modifica, attivazione/disattivazione, creazione del primo dirigente). Il Super Admin non entra
@@ -230,7 +231,7 @@ function SubscriptionModal({ company, token, onSaved, onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <form className="modal-card modal-card-wide" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>Piano di "{company.name}"</h2>
 
@@ -302,7 +303,7 @@ function SubscriptionModal({ company, token, onSaved, onClose }) {
           <button type="submit" disabled={submitting || loading}>{submitting ? 'Salvataggio...' : 'Salva'}</button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 
@@ -343,7 +344,7 @@ function CompanyFormModal({ company, onSave, onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>{company ? 'Modifica società' : 'Nuova società'}</h2>
 
@@ -370,7 +371,7 @@ function CompanyFormModal({ company, onSave, onClose }) {
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 
@@ -397,7 +398,7 @@ function DirigenteFormModal({ company, onSave, onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>Nuovo dirigente per "{company.name}"</h2>
 
@@ -432,6 +433,6 @@ function DirigenteFormModal({ company, onSave, onClose }) {
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

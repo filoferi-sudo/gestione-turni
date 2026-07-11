@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import Modal from '../common/Modal';
 
 const CALENDAR_MODE_LABELS = { shifts: 'Turni', courses: 'Corsi' };
 
@@ -193,7 +194,7 @@ function AreaFormModal({ area, onSave, onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>{area ? 'Modifica area operativa' : 'Nuova area operativa'}</h2>
 
@@ -245,6 +246,6 @@ function AreaFormModal({ area, onSave, onClose }) {
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

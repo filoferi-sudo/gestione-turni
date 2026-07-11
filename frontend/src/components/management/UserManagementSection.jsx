@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import ContractModal from './ContractModal';
 import AvailabilityModal from './AvailabilityModal';
+import Modal from '../common/Modal';
 
 const ROLE_LABELS = { admin: 'Responsabile', dirigente: 'Dirigente', user: 'Dipendente' };
 
@@ -207,7 +208,7 @@ function ResetPasswordModal({ targetUser, onClose, onDone }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>Reimposta password</h2>
         <p className="hint">
@@ -235,7 +236,7 @@ function ResetPasswordModal({ targetUser, onClose, onDone }) {
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 
@@ -282,7 +283,7 @@ function UserAreasModal({ targetUser, onClose, onDone }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>Aree operative di {targetUser.username}</h2>
 
@@ -322,6 +323,6 @@ function UserAreasModal({ targetUser, onClose, onDone }) {
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

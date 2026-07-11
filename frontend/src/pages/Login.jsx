@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import DemoPersonaPicker from '../components/demo/DemoPersonaPicker';
+import { Logo } from '../components/common/Logo';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -47,7 +48,7 @@ export default function Login() {
     <div className="page-center">
       <form className="card" onSubmit={handleSubmit}>
         <h1>Accedi</h1>
-        <p className="subtitle">Gestione Turni</p>
+        <Logo size={28} className="login-logo" />
 
         <label htmlFor="username">Username</label>
         <input

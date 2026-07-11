@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import PasswordRequirements from '../components/auth/PasswordRequirements';
@@ -28,9 +28,11 @@ export default function FirstAccessSetup() {
       .catch(() => {});
   }, []);
 
+  // Nessun token di primo accesso (es. pagina aperta direttamente): redirect DICHIARATIVO a /login.
+  // <Navigate> esegue la navigazione nel commit (non durante il render), evitando il warning React
+  // "Cannot update a component while rendering a different component". Comportamento utente identico.
   if (!firstAccessToken) {
-    navigate('/login', { replace: true });
-    return null;
+    return <Navigate to="/login" replace />;
   }
 
   async function handleSubmit(e) {
