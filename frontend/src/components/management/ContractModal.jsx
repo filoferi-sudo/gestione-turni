@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import Modal from '../common/Modal';
 
 // Tipologie suggerite (decisione: testo libero + preset). Non è un elenco chiuso: il campo resta
 // libero, questi valori compaiono solo come suggerimenti nel <datalist>, così aggiungere una
@@ -93,7 +94,7 @@ export default function ContractModal({ targetUser, onClose, onDone }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <form className="modal-card modal-card-wide" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>Contratto di {targetUser.username}</h2>
         <p className="hint">
@@ -157,6 +158,6 @@ export default function ContractModal({ targetUser, onClose, onDone }) {
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

@@ -3,6 +3,7 @@ import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { WEEKDAYS } from '../profile/AvailabilityEditor';
 import { formatOptOutPeriod } from '../profile/OptOutEditor';
+import Modal from '../common/Modal';
 
 // Vista di SOLA LETTURA delle disponibilità dichiarate di un dipendente + dei periodi di opt-out
 // "Non partecipare" (Fase 6), per il responsabile/dirigente. Il manager non le modifica (le dichiara
@@ -30,7 +31,7 @@ export default function AvailabilityModal({ targetUser, onClose }) {
   }, [targetUser.id, token]);
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <h2>Disponibilità di {targetUser.username}</h2>
         <p className="hint">
@@ -85,6 +86,6 @@ export default function AvailabilityModal({ targetUser, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import Modal from '../common/Modal';
 
 // Le 4 modalità richieste per modificare una singola occorrenza di un fabbisogno fisso, senza
 // alterare la regola generale se non esplicitamente richiesto (vedi
@@ -47,7 +48,7 @@ export default function StaffingOccurrenceModal({ requirement, occurrence, onClo
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>Modifica occorrenza del {occurrence.date}</h2>
         <p className="hint">
@@ -89,6 +90,6 @@ export default function StaffingOccurrenceModal({ requirement, occurrence, onClo
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

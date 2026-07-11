@@ -2149,3 +2149,32 @@ stesso pattern del progetto per integrazioni esterne rischiose (email S5, cifrat
   configurare i `external_price_ref` dei piani, registrare l'endpoint webhook su Stripe. Solo allora
   il billing effettua transazioni reali. **Migrazione produzione** di `external_price_ref` con le
   altre tabelle SaaS, su conferma.
+
+---
+
+# Iniziativa: UX/Accessibilità + Design System (audit Impeccable) ✅
+
+> Interventi solo frontend, zero cambi a logica/API/DB. Origine: audit `/impeccable` (11→17/20).
+> Dettaglio completo nel changelog di `PROJECT_CONTEXT.md` (voce 2026-07-11).
+
+## Fasi (tutte completate il 2026-07-11)
+
+- **P1 A11y/interazione ✅** — `common/Modal.jsx` accessibile su 18 modali; tastiera sui controlli
+  custom (`utils/a11y.js`); notifiche accessibili; skip-link; focus ring globale; reduced-motion.
+- **P1 Design token ✅** — 54 variabili `:root` in `styles.css`, ~205 hex → `var()`; base per
+  temi per-società. Aspetto invariato (verificato pixel-identico sul login).
+- **P2 Touch/responsive ✅** — target ≥44px su `pointer: coarse`; nav mobile scroll-snap.
+- **P2 Contrasto ✅** — `--color-text-muted` → #5f6673 (AA ovunque); placeholder espliciti.
+- **P3 Polish ✅** — chip fabbisogno tinta+pallino (via striscia 4px); emoji→SVG (`icons.jsx`);
+  z-index semantici; `tabular-nums`.
+- **Fix ✅** — `FirstAccessSetup`: `<Navigate>` dichiarativo (via warning setState-in-render).
+- **Rebrand Planivo ✅** — `Logo.jsx`, login (solo grafica, flow invariato), sidebar, title/favicon/
+  splash, loading brandizzato. Tagline rimossa su richiesta; "Prova la demo" intatto.
+
+## Verifica
+Build production OK a ogni fase; login end-to-end nel browser (dirigente → dashboard);
+focus/contrasti misurati nel browser; nessun nuovo warning console. Audit finale: **17/20**.
+
+## In sospeso (raccomandazioni future, non bloccanti)
+Dark mode/temi tenant sui token; `<button>`/`<dialog>` nativi dove possibile; refactor del selettore
+globale `button` verso classi; onboarding first-run (attivazione guidata Dirigente).

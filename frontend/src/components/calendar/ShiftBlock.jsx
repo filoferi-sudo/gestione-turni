@@ -1,4 +1,5 @@
 import { timeToMinutes, PX_PER_MIN, DEFAULT_TIME_WINDOW } from '../../utils/timeWindow';
+import { activateOnKey } from '../../utils/a11y';
 
 // lane/laneCount (calcolati da utils/courseLayout.layoutCourses, riusato invariato per i turni):
 // turni sovrapposti nello stesso orario si affiancano invece di nascondersi a vicenda, stessa
@@ -21,7 +22,9 @@ export default function ShiftBlock({ shift, showUsername, onClick, timeWindow = 
         width: `calc(${widthPct}% - 6px)`,
       }}
       onClick={onClick ? () => onClick(shift) : undefined}
+      onKeyDown={onClick ? activateOnKey(() => onClick(shift)) : undefined}
       role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
     >
       <div className="shift-block-time">
         {shift.startTime} - {shift.endTime}

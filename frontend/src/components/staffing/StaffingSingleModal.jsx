@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import Modal from '../common/Modal';
 
 // requirement: fabbisogno singolo esistente da modificare (null per la creazione)
 export default function StaffingSingleModal({ areaId, requirement, onClose, onSaved, onDeleted }) {
@@ -78,7 +79,7 @@ export default function StaffingSingleModal({ areaId, requirement, onClose, onSa
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>{requirement ? 'Modifica fabbisogno singolo' : 'Nuovo fabbisogno singolo'}</h2>
         <p className="hint">Esigenza straordinaria per una sola data: non modifica la programmazione settimanale.</p>
@@ -126,6 +127,6 @@ export default function StaffingSingleModal({ areaId, requirement, onClose, onSa
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

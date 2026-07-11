@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { usePolling } from '../../hooks/usePolling';
+import { BellIcon } from '../common/icons';
 
 // Tempo relativo compatto in italiano ("adesso", "5 min fa", "3 h fa", "2 g fa", poi data).
 // Esportata perché riusata dalla pagina Comunicazioni (elenco notifiche a pagina piena).
@@ -49,8 +50,15 @@ export default function NotificationsBell() {
     function onDocClick(e) {
       if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
     }
+    function onKeyDown(e) {
+      if (e.key === 'Escape') setOpen(false);
+    }
     document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [open]);
 
   async function handleOpenItem(notif) {
@@ -83,8 +91,10 @@ export default function NotificationsBell() {
         className="notif-bell"
         onClick={() => setOpen((o) => !o)}
         aria-label={`Notifiche${unreadCount > 0 ? ` (${unreadCount} non lette)` : ''}`}
+        aria-haspopup="true"
+        aria-expanded={open}
       >
-        <span className="notif-bell-icon" aria-hidden="true">🔔</span>
+        <BellIcon className="notif-bell-icon" aria-hidden="true" />
         {unreadCount > 0 && <span className="notif-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
       </button>
 
@@ -104,13 +114,15 @@ export default function NotificationsBell() {
           ) : (
             <ul className="notif-list">
               {notifications.map((n) => (
-                <li
-                  key={n.id}
-                  className={`notif-item${n.isRead ? '' : ' notif-item-unread'}`}
-                  onClick={() => handleOpenItem(n)}
-                >
-                  <span className="notif-message">{n.message}</span>
-                  <span className="notif-time">{relativeTime(n.createdAt)}</span>
+                <li key={n.id} className="notif-item">
+                  <button
+                    type="button"
+                    className={`notif-item-btn${n.isRead ? '' : ' notif-item-unread'}`}
+                    onClick={() => handleOpenItem(n)}
+                  >
+                    <span className="notif-message">{n.message}</span>
+                    <span className="notif-time">{relativeTime(n.createdAt)}</span>
+                  </button>
                 </li>
               ))}
             </ul>

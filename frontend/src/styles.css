@@ -1,3 +1,95 @@
+/* ============================================================================
+   Design tokens — "The Calm Control Room" (vedi DESIGN.md).
+   Fonte unica dei valori del sistema: colori, raggi, ombre, spaziatura, z-index.
+   I componenti usano var(--token): cambiare qui aggiorna tutta l'app e apre la strada
+   a temi per-società (multi-tenant) senza toccare i singoli file.
+   ============================================================================ */
+:root {
+  /* Brand — Forest Pine è l'unico colore d'azione/conferma */
+  --color-primary: #2f6f4f;
+  --color-primary-deep: #285f43;
+  --color-primary-bright: #4caf7d;
+
+  /* Struttura scura (sidebar, topbar, testo principale) */
+  --color-ink: #1f2430;
+  --color-ink-raised: #2a3040;
+  --color-ink-line: #3b4252;
+
+  /* Testo neutro (dal più forte al disabilitato) */
+  --color-text-strong: #374151;
+  --color-text-secondary: #4b5563;
+  /* #6b7280 falliva 4.5:1 sui pannelli tinti (panel/success-soft): scurito quel tanto che basta
+     per superare AA su ogni superficie chiara, restando chiaramente "muted" (vedi DESIGN.md). */
+  --color-text-muted: #5f6673;
+  --color-text-disabled: #9ca3af;
+
+  /* Superfici e bordi neutri */
+  --color-surface: #ffffff;
+  --color-surface-muted: #f9fafb;
+  --color-bg: #f4f5f7;
+  --color-panel: #eef0f3;
+  --color-neutral-100: #f3f4f6;
+  --color-border: #d1d5db;
+  --color-divider: #e5e7eb;
+
+  /* Stato — successo */
+  --color-success: #166534;
+  --color-success-tint: #dcfce7;
+  --color-success-soft: #eef6f1;
+
+  /* Stato — attenzione */
+  --color-warning: #d97706;
+  --color-warning-ink: #92400e;
+  --color-warning-tint: #fef3c7;
+  --color-warning-border: #fde68a;
+
+  /* Stato — errore/pericolo */
+  --color-danger: #b91c1c;
+  --color-danger-strong: #991b1b;
+  --color-danger-tint: #fee2e2;
+  --color-danger-bright: #dc2626;
+
+  /* Tassonomia calendario (legenda tipi turno/corso — set chiuso) */
+  --color-shift-fixed: #3b82f6;
+  --color-shift-single: #f59e0b;
+  --color-substitution: #8b5cf6;
+
+  /* Info (proposta in attesa) */
+  --color-info-tint: #e0e7ff;
+  --color-info-ink: #3730a3;
+
+  /* Raggi */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+
+  /* Spaziatura (scala per il nuovo codice; DESIGN.md xs/sm/md/lg/xl) */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+
+  /* Elevazione soft-layered: riposo → sollevato (hover/popover) → overlay (modale) */
+  --shadow-rest: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-raised: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.18);
+  --shadow-overlay: 0 12px 32px rgba(15, 23, 42, 0.28);
+
+  /* Anello di focus (WCAG 2.4.7) */
+  --focus-ring: 0 0 0 3px rgba(47, 111, 79, 0.35);
+
+  /* Scala z-index semantica (mai valori arbitrari tipo 999) */
+  --z-dropdown: 30;
+  --z-sticky: 40;
+  --z-modal-backdrop: 50;
+  --z-notification-panel: 60;
+  --z-tour: 70;
+  --z-tour-tooltip: 71;
+  --z-skip-link: 100;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -5,8 +97,8 @@
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #f4f5f7;
-  color: #1f2430;
+  background: var(--color-bg);
+  color: var(--color-ink);
 }
 
 .page-center {
@@ -25,26 +117,26 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #1f2430;
+  background: var(--color-ink);
   color: white;
   padding: 14px 24px;
 }
 
 .badge {
-  background: #3b4252;
+  background: var(--color-ink-line);
   padding: 2px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   font-size: 12px;
   margin-left: 8px;
 }
 
 .badge-admin {
-  background: #2f6f4f;
+  background: var(--color-primary);
 }
 
 .badge-warning {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-tint);
+  color: var(--color-warning-ink);
 }
 
 .link-button {
@@ -64,9 +156,9 @@ body {
 
 .card {
   background: white;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-rest);
   margin-bottom: 20px;
   display: flex;
   flex-direction: column;
@@ -75,11 +167,11 @@ body {
 }
 
 .card.placeholder {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .card.success {
-  border: 1px solid #2f6f4f;
+  border: 1px solid var(--color-primary);
 }
 
 h1 {
@@ -89,7 +181,7 @@ h1 {
 
 .subtitle {
   margin: 0 0 12px;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 label {
@@ -100,17 +192,25 @@ label {
 
 input {
   padding: 10px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   font-size: 14px;
+}
+
+/* Placeholder esplicito: il default del browser è troppo tenue (≈4.5:1 al limite) e Firefox lo
+   rende ancora più chiaro con opacity < 1. Fissiamo un grigio che supera AA su fondo bianco. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
 }
 
 button {
   margin-top: 16px;
   padding: 10px 16px;
   border: none;
-  border-radius: 6px;
-  background: #2f6f4f;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
   color: white;
   font-size: 15px;
   cursor: pointer;
@@ -122,14 +222,14 @@ button:disabled {
 }
 
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 13px;
   margin-top: 8px;
 }
 
 .hint {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   margin-top: 12px;
 }
 
@@ -140,10 +240,10 @@ button:disabled {
 }
 
 .button-link {
-  background: #2f6f4f;
+  background: var(--color-primary);
   color: white;
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   text-decoration: none;
   font-size: 14px;
 }
@@ -159,15 +259,15 @@ button:disabled {
 .table td {
   text-align: left;
   padding: 8px 10px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-divider);
 }
 
 .code {
   font-family: 'SF Mono', Consolas, monospace;
   font-size: 20px;
-  background: #f4f5f7;
+  background: var(--color-bg);
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   display: inline-block;
 }
 
@@ -194,8 +294,8 @@ button:disabled {
 
 .calendar-nav button {
   margin: 0;
-  background: #e5e7eb;
-  color: #1f2430;
+  background: var(--color-divider);
+  color: var(--color-ink);
   padding: 6px 12px;
   font-size: 13px;
 }
@@ -214,8 +314,8 @@ button:disabled {
 
 .calendar-admin-controls select {
   padding: 8px 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 .calendar-admin-controls button {
@@ -225,8 +325,8 @@ button:disabled {
 
 .segmented {
   display: flex;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   overflow: hidden;
   width: fit-content;
 }
@@ -234,11 +334,11 @@ button:disabled {
 .segmented button {
   margin: 0;
   background: white;
-  color: #1f2430;
+  color: var(--color-ink);
   border-radius: 0;
   padding: 6px 14px;
   font-size: 13px;
-  border-right: 1px solid #d1d5db;
+  border-right: 1px solid var(--color-border);
 }
 
 .segmented button:last-child {
@@ -246,7 +346,7 @@ button:disabled {
 }
 
 .segmented button.active {
-  background: #2f6f4f;
+  background: var(--color-primary);
   color: white;
 }
 
@@ -254,7 +354,7 @@ button:disabled {
   display: flex;
   gap: 18px;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   margin-bottom: 10px;
 }
 
@@ -267,16 +367,16 @@ button:disabled {
 }
 
 .legend-fixed {
-  background: #3b82f6;
+  background: var(--color-shift-fixed);
 }
 
 .legend-mobile {
-  background: #f59e0b;
+  background: var(--color-shift-single);
 }
 
 .calendar-loading {
   padding: 24px;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .calendar-grid {
@@ -295,7 +395,7 @@ button:disabled {
   font-size: 13px;
   text-align: center;
   padding: 8px 4px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-divider);
   position: sticky;
   top: 0;
   background: white;
@@ -310,12 +410,12 @@ button:disabled {
   right: 8px;
   transform: translateY(-50%);
   font-size: 11px;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .calendar-day-col {
   position: relative;
-  border-left: 1px solid #e5e7eb;
+  border-left: 1px solid var(--color-divider);
 }
 
 .calendar-hour-line {
@@ -327,7 +427,7 @@ button:disabled {
 
 .shift-block {
   position: absolute;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 4px 6px;
   font-size: 11px;
   color: white;
@@ -336,11 +436,11 @@ button:disabled {
 }
 
 .shift-fixed {
-  background: #3b82f6;
+  background: var(--color-shift-fixed);
 }
 
 .shift-mobile {
-  background: #f59e0b;
+  background: var(--color-shift-single);
 }
 
 .shift-block[role='button'] {
@@ -365,8 +465,8 @@ button:disabled {
 }
 
 .calendar-staffing-corner {
-  background: #eef0f3;
-  border-bottom: 2px solid #d1d5db;
+  background: var(--color-panel);
+  border-bottom: 2px solid var(--color-border);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -379,9 +479,9 @@ button:disabled {
 }
 
 .calendar-staffing-cell {
-  background: #eef0f3;
-  border-bottom: 2px solid #d1d5db;
-  border-left: 1px solid #e5e7eb;
+  background: var(--color-panel);
+  border-bottom: 2px solid var(--color-border);
+  border-left: 1px solid var(--color-divider);
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -390,21 +490,39 @@ button:disabled {
 
 .staffing-chip {
   background: white;
-  border: 1px solid #d1d5db;
-  border-left: 4px solid #9ca3af;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   padding: 5px 8px;
   font-size: 13px;
   line-height: 1.35;
-  color: #1f2430;
+  color: var(--color-ink);
 }
 
-.staffing-chip-covered {
-  border-left-color: #2f6f4f;
-}
-
+/* Stato scoperto: sfondo ambra tenue + bordo, richiama l'attenzione dove serve un intervento.
+   Lo stato "coperto" resta neutro (bianco): il pallino verde basta come segnale (Rationed Status
+   Rule). Sostituisce la vecchia striscia laterale da 4px (pattern vietato dal design system). */
 .staffing-chip-warning {
-  border-left-color: #d97706;
+  background: var(--color-warning-tint);
+  border-color: var(--color-warning-border);
+}
+
+.staffing-chip-time::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--color-text-disabled);
+}
+
+.staffing-chip-covered .staffing-chip-time::before {
+  background: var(--color-primary);
+}
+
+.staffing-chip-warning .staffing-chip-time::before {
+  background: var(--color-warning);
 }
 
 .staffing-chip-summary {
@@ -423,17 +541,18 @@ button:disabled {
 
 .staffing-chip-coverage {
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .staffing-chip-warning .staffing-chip-coverage {
-  color: #92400e;
+  color: var(--color-warning-ink);
 }
 
 .staffing-chip-generate {
   margin: 0;
   padding: 3px 8px;
   font-size: 12px;
-  background: #d97706;
+  background: var(--color-warning);
   border-radius: 3px;
   white-space: nowrap;
 }
@@ -441,10 +560,10 @@ button:disabled {
 .staffing-chip-expanded {
   margin-top: 5px;
   padding-top: 5px;
-  border-top: 1px dashed #d1d5db;
+  border-top: 1px dashed var(--color-border);
   font-size: 12px;
   line-height: 1.4;
-  color: #374151;
+  color: var(--color-text-strong);
 }
 
 .staffing-chip-expanded ul {
@@ -456,8 +575,8 @@ button:disabled {
   margin: 5px 0 0;
   padding: 3px 10px;
   font-size: 12px;
-  background: #e5e7eb;
-  color: #1f2430;
+  background: var(--color-divider);
+  color: var(--color-ink);
 }
 
 /* Modale */
@@ -469,13 +588,13 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 50;
+  z-index: var(--z-modal-backdrop);
   padding: 16px;
 }
 
 .modal-card {
   background: white;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 24px;
   width: 100%;
   max-width: 420px;
@@ -536,7 +655,7 @@ button:disabled {
 }
 
 .availability-sep {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 /* Vista di sola lettura (responsabile): giorno in grassetto + fasce sulla stessa riga. */
@@ -545,7 +664,7 @@ button:disabled {
   justify-content: space-between;
   gap: 16px;
   padding: 6px 0;
-  border-bottom: 1px solid #eef0f3;
+  border-bottom: 1px solid var(--color-panel);
 }
 
 /* --- Opt-out "Non partecipare" (Fase 6) --- */
@@ -562,7 +681,7 @@ button:disabled {
   flex-direction: column;
   gap: 4px;
   font-size: 13px;
-  color: #4b5563;
+  color: var(--color-text-secondary);
 }
 
 .optout-form .optout-note {
@@ -589,8 +708,8 @@ button:disabled {
   align-items: center;
   gap: 12px;
   padding: 8px 10px;
-  background: #f9fafb;
-  border-radius: 6px;
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-md);
   font-size: 13px;
 }
 
@@ -612,7 +731,7 @@ button:disabled {
   flex-direction: column;
   gap: 4px;
   font-size: 13px;
-  color: #4b5563;
+  color: var(--color-text-secondary);
 }
 
 .settings-row input {
@@ -641,11 +760,15 @@ button:disabled {
   font-size: 20px;
 }
 
+.notif-bell-icon {
+  display: block;
+}
+
 .notif-badge {
   position: absolute;
   top: -2px;
   right: -4px;
-  background: #dc2626;
+  background: var(--color-danger-bright);
   color: white;
   font-size: 11px;
   font-weight: 700;
@@ -667,10 +790,10 @@ button:disabled {
   max-height: 420px;
   overflow-y: auto;
   background: white;
-  color: #1f2430;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  z-index: 60;
+  color: var(--color-ink);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+  z-index: var(--z-notification-panel);
 }
 
 .notif-panel-header {
@@ -678,7 +801,7 @@ button:disabled {
   justify-content: space-between;
   align-items: center;
   padding: 12px 14px;
-  border-bottom: 1px solid #eef0f3;
+  border-bottom: 1px solid var(--color-panel);
   position: sticky;
   top: 0;
   background: white;
@@ -687,7 +810,7 @@ button:disabled {
 .notif-markall {
   background: none;
   border: none;
-  color: #2f6f4f;
+  color: var(--color-primary);
   cursor: pointer;
   font-size: 12px;
   text-decoration: underline;
@@ -697,7 +820,7 @@ button:disabled {
 
 .notif-empty {
   padding: 18px 14px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
@@ -708,20 +831,33 @@ button:disabled {
 }
 
 .notif-item {
+  border-bottom: 1px solid #f2f4f6;
+}
+
+/* La riga notifica è un vero <button> (attivabile da tastiera): resettiamo lo stile globale del
+   button (sfondo verde, margine, radius) e le diamo l'aspetto della riga cliccabile di prima. */
+.notif-item-btn {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  width: 100%;
+  margin: 0;
   padding: 10px 14px;
-  border-bottom: 1px solid #f2f4f6;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
-.notif-item:hover {
+.notif-item-btn:hover {
   background: #f8fafc;
 }
 
 .notif-item-unread {
-  background: #eef6f1;
+  background: var(--color-success-soft);
 }
 
 .notif-item-unread .notif-message {
@@ -735,7 +871,7 @@ button:disabled {
 
 .notif-time {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 /* --- Classifica candidati "Trova sostituzione" (Fase 4) --- */
@@ -755,7 +891,7 @@ button:disabled {
 }
 
 .candidate-item {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-divider);
   border-radius: 8px;
   padding: 10px 12px;
 }
@@ -771,7 +907,7 @@ button:disabled {
   height: 22px;
   flex: none;
   border-radius: 50%;
-  background: #1f2430;
+  background: var(--color-ink);
   color: white;
   font-size: 12px;
   font-weight: 700;
@@ -789,20 +925,20 @@ button:disabled {
   font-weight: 700;
   font-size: 15px;
   padding: 2px 8px;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
 }
 
 .candidate-score.score-high {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-success-tint);
+  color: var(--color-success);
 }
 .candidate-score.score-mid {
   background: #fef9c3;
   color: #854d0e;
 }
 .candidate-score.score-low {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-tint);
+  color: var(--color-danger-strong);
 }
 
 .candidate-reasons {
@@ -817,22 +953,22 @@ button:disabled {
 .reason {
   font-size: 12px;
   padding: 2px 8px;
-  border-radius: 6px;
-  background: #f3f4f6;
-  color: #374151;
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  color: var(--color-text-strong);
 }
 
 .reason-positive {
   background: #ecfdf3;
-  color: #166534;
+  color: var(--color-success);
 }
 .reason-negative {
   background: #fef2f2;
-  color: #991b1b;
+  color: var(--color-danger-strong);
 }
 .reason-neutral {
-  background: #f3f4f6;
-  color: #4b5563;
+  background: var(--color-neutral-100);
+  color: var(--color-text-secondary);
 }
 
 /* Proposte mirate (Fase 5) */
@@ -848,25 +984,25 @@ button:disabled {
   font-size: 11px;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 10px;
-  background: #f3f4f6;
-  color: #4b5563;
+  border-radius: var(--radius-lg);
+  background: var(--color-neutral-100);
+  color: var(--color-text-secondary);
 }
 .proposal-badge-pending {
-  background: #e0e7ff;
-  color: #3730a3;
+  background: var(--color-info-tint);
+  color: var(--color-info-ink);
 }
 .proposal-badge-accepted {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-success-tint);
+  color: var(--color-success);
 }
 .proposal-badge-declined {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-tint);
+  color: var(--color-danger-strong);
 }
 .proposal-badge-expired {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--color-neutral-100);
+  color: var(--color-text-muted);
 }
 
 .proposal-item {
@@ -875,8 +1011,8 @@ button:disabled {
   align-items: flex-start;
   gap: 12px;
   padding: 8px 10px;
-  background: #f9fafb;
-  border-radius: 6px;
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-md);
   font-size: 13px;
 }
 
@@ -888,12 +1024,12 @@ button:disabled {
 }
 
 .button-secondary {
-  background: #e5e7eb;
-  color: #1f2430;
+  background: var(--color-divider);
+  color: var(--color-ink);
 }
 
 .button-danger {
-  background: #b91c1c;
+  background: var(--color-danger);
   margin-right: auto;
 }
 
@@ -912,14 +1048,14 @@ button:disabled {
 
 .weekday-picker button {
   margin: 0;
-  background: #e5e7eb;
-  color: #1f2430;
+  background: var(--color-divider);
+  color: var(--color-ink);
   padding: 6px 10px;
   font-size: 12px;
 }
 
 .weekday-picker button.active {
-  background: #2f6f4f;
+  background: var(--color-primary);
   color: white;
 }
 
@@ -975,8 +1111,8 @@ button:disabled {
 
 textarea {
   padding: 10px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   font-size: 14px;
   font-family: inherit;
   resize: vertical;
@@ -985,11 +1121,11 @@ textarea {
 /* Turni volanti */
 
 .shift-volante {
-  background: #8b5cf6;
+  background: var(--color-substitution);
 }
 
 .legend-volante {
-  background: #8b5cf6;
+  background: var(--color-substitution);
 }
 
 /* Tabelle di gestione: azioni, notifiche */
@@ -1002,22 +1138,22 @@ textarea {
 
 .table-action {
   margin: 0;
-  background: #e5e7eb;
-  color: #1f2430;
+  background: var(--color-divider);
+  color: var(--color-ink);
   padding: 6px 10px;
   font-size: 12px;
 }
 
 .table-action-danger {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--color-danger-tint);
+  color: var(--color-danger);
 }
 
 .notice {
-  background: #eef6f1;
-  color: #2f6f4f;
+  background: var(--color-success-soft);
+  color: var(--color-primary);
   border: 1px solid #cfe6d8;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 8px 12px;
   font-size: 13px;
   margin: 8px 0;
@@ -1040,8 +1176,8 @@ textarea {
   align-items: center;
   gap: 12px;
   padding: 8px 10px;
-  background: #f9fafb;
-  border-radius: 6px;
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-md);
   font-size: 13px;
 }
 
@@ -1059,12 +1195,12 @@ textarea {
   font-weight: 600;
   font-size: 12px;
   padding: 2px 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
 }
 
 .request-status-pending {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-tint);
+  color: var(--color-warning-ink);
 }
 
 .request-status-approved {
@@ -1073,8 +1209,8 @@ textarea {
 }
 
 .request-status-rejected {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-tint);
+  color: var(--color-danger-strong);
 }
 
 .calendar-view-switcher {
@@ -1087,7 +1223,7 @@ textarea {
 
 .course-block {
   position: absolute;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 4px 6px;
   font-size: 11px;
   color: white;
@@ -1099,15 +1235,15 @@ textarea {
 /* Stessi colori di .shift-fixed/.shift-mobile/.shift-volante: stesso significato, stesso codice
    colore, per coerenza tra calendario turni e calendario corsi. */
 .course-fixed {
-  background: #3b82f6;
+  background: var(--color-shift-fixed);
 }
 
 .course-mobile {
-  background: #f59e0b;
+  background: var(--color-shift-single);
 }
 
 .course-volante {
-  background: #8b5cf6;
+  background: var(--color-substitution);
 }
 
 .course-block[role='button'] {
@@ -1138,13 +1274,13 @@ textarea {
   justify-content: space-between;
   gap: 12px;
   padding: 8px 10px;
-  background: #f9fafb;
-  border-radius: 6px;
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-md);
   font-size: 13px;
 }
 
 .profile-row dt {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .profile-row dd {
@@ -1179,11 +1315,11 @@ textarea {
 }
 
 .password-requirements .req-unmet {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 /* Layout applicazione: sidebar di navigazione sempre visibile + area contenuto.
-   Stessa palette già in uso (#1f2430 scuro, #2f6f4f verde): nessun restyling, solo struttura. */
+   Stessa palette già in uso (var(--color-ink) scuro, var(--color-primary) verde): nessun restyling, solo struttura. */
 
 .app-shell {
   display: flex;
@@ -1193,7 +1329,7 @@ textarea {
 .sidebar {
   width: 230px;
   flex-shrink: 0;
-  background: #1f2430;
+  background: var(--color-ink);
   color: white;
   display: flex;
   flex-direction: column;
@@ -1231,15 +1367,15 @@ textarea {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #9ca3af;
+  color: var(--color-text-disabled);
 }
 
 .sidebar-sede select {
   width: 100%;
   padding: 8px;
-  border-radius: 6px;
-  border: 1px solid #3b4252;
-  background: #2a3040;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-ink-line);
+  background: var(--color-ink-raised);
   color: white;
   font-size: 14px;
 }
@@ -1255,10 +1391,10 @@ textarea {
 }
 
 .sidebar-link {
-  color: #d1d5db;
+  color: var(--color-border);
   text-decoration: none;
   padding: 9px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   border-left: 3px solid transparent;
 }
@@ -1271,7 +1407,7 @@ textarea {
 .sidebar-link.active {
   background: rgba(255, 255, 255, 0.1);
   color: white;
-  border-left-color: #4caf7d;
+  border-left-color: var(--color-primary-bright);
 }
 
 .app-main {
@@ -1319,7 +1455,7 @@ textarea {
 
   .sidebar-link.active {
     border-left-color: transparent;
-    border-bottom-color: #4caf7d;
+    border-bottom-color: var(--color-primary-bright);
   }
 }
 
@@ -1334,9 +1470,9 @@ textarea {
 
 .stat-card {
   background: white;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 16px 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-rest);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1346,6 +1482,7 @@ textarea {
   font-size: 28px;
   font-weight: 700;
   line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-value.stat-alert {
@@ -1354,12 +1491,12 @@ textarea {
 
 .stat-label {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .stat-link {
   font-size: 13px;
-  color: #2f6f4f;
+  color: var(--color-primary);
   text-decoration: none;
   margin-top: 4px;
 }
@@ -1370,7 +1507,7 @@ textarea {
 
 .dash-section-note {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -1386,28 +1523,28 @@ textarea {
 
 /* ============================================================================
    Demo Framework (Fasi D3–D4): ingresso demo nel login, persona picker, banner.
-   Stessa palette del resto dell'app (#2f6f4f verde, #1f2430 testo). Nessun colore nuovo di rilievo.
+   Stessa palette del resto dell'app (var(--color-primary) verde, var(--color-ink) testo). Nessun colore nuovo di rilievo.
    ============================================================================ */
 
 /* Ingresso demo nella pagina di login (sotto il form) */
 .demo-entry {
   margin-top: 18px;
   padding-top: 16px;
-  border-top: 1px dashed #d1d5db;
+  border-top: 1px dashed var(--color-border);
 }
 .demo-cta {
   width: 100%;
   background: #eef2ff;
-  color: #1f2430;
+  color: var(--color-ink);
   border: 1px solid #c7d2fe;
   font-weight: 600;
 }
-.demo-cta:hover { background: #e0e7ff; }
+.demo-cta:hover { background: var(--color-info-tint); }
 .demo-picker-title {
   margin: 0 0 10px;
   font-size: 13px;
   font-weight: 600;
-  color: #4b5563;
+  color: var(--color-text-secondary);
 }
 .demo-persona-list {
   display: flex;
@@ -1421,13 +1558,13 @@ textarea {
   gap: 2px;
   text-align: left;
   background: #ffffff;
-  color: #1f2430;
-  border: 1px solid #d1d5db;
+  color: var(--color-ink);
+  border: 1px solid var(--color-border);
   padding: 10px 12px;
 }
-.demo-persona:hover:not(:disabled) { border-color: #2f6f4f; background: #f6faf7; }
+.demo-persona:hover:not(:disabled) { border-color: var(--color-primary); background: #f6faf7; }
 .demo-persona-label { font-weight: 600; }
-.demo-persona-desc { font-size: 12px; color: #6b7280; }
+.demo-persona-desc { font-size: 12px; color: var(--color-text-muted); }
 
 /* Banner "modalità demo" mostrato in cima ad ogni pagina della sessione demo */
 .demo-banner {
@@ -1446,7 +1583,7 @@ textarea {
   color: #9a3412;
   background: #ffedd5;
   border: 1px solid #fed7aa;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 2px 8px;
 }
 .demo-banner-text {
@@ -1468,43 +1605,43 @@ textarea {
    Tour Guidato (Fase D4): overlay di evidenziazione + tooltip. z-index 70 per stare sopra
    .notif-panel (60) e .modal-overlay (50).
    ============================================================================ */
-.tour-root { position: fixed; inset: 0; z-index: 70; pointer-events: none; }
+.tour-root { position: fixed; inset: 0; z-index: var(--z-tour); pointer-events: none; }
 .tour-dim-full { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55); }
 /* Anello attorno al target evidenziato (puramente visivo, non intercetta i click) */
 .tour-ring {
   position: fixed;
-  border: 2px solid #2f6f4f;
-  border-radius: 6px;
-  box-shadow: 0 0 0 3px rgba(47, 111, 79, 0.35);
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--focus-ring);
   pointer-events: none;
 }
 .tour-tooltip {
   position: fixed;
-  z-index: 71;
+  z-index: var(--z-tour-tooltip);
   pointer-events: auto;
   background: #ffffff;
-  color: #1f2430;
-  border: 1px solid #d1d5db;
-  border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.28);
+  color: var(--color-ink);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
   padding: 16px 18px;
 }
-.tour-progress { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: #6b7280; }
+.tour-progress { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: var(--color-text-muted); }
 .tour-title { margin: 4px 0 6px; font-size: 16px; }
-.tour-body { margin: 0; font-size: 14px; line-height: 1.5; color: #374151; }
-.tour-hint { margin: 8px 0 0; font-size: 12px; color: #2f6f4f; font-style: italic; }
+.tour-body { margin: 0; font-size: 14px; line-height: 1.5; color: var(--color-text-strong); }
+.tour-hint { margin: 8px 0 0; font-size: 12px; color: var(--color-primary); font-style: italic; }
 .tour-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; }
-.tour-skip { background: transparent; color: #6b7280; border: none; padding: 6px 8px; font-size: 13px; }
-.tour-skip:hover { color: #1f2430; background: transparent; }
-.tour-next { background: #2f6f4f; color: #ffffff; border: none; padding: 7px 16px; font-weight: 600; }
-.tour-next:hover { background: #285f43; }
-.tour-action { background: #2f6f4f; color: #fff; border: none; padding: 7px 14px; font-weight: 600; }
-.demo-banner-btn-primary { background: #2f6f4f; color: #fff; border-color: #2f6f4f; }
-.demo-banner-btn-primary:hover:not(:disabled) { background: #285f43; }
+.tour-skip { background: transparent; color: var(--color-text-muted); border: none; padding: 6px 8px; font-size: 13px; }
+.tour-skip:hover { color: var(--color-ink); background: transparent; }
+.tour-next { background: var(--color-primary); color: #ffffff; border: none; padding: 7px 16px; font-weight: 600; }
+.tour-next:hover { background: var(--color-primary-deep); }
+.tour-action { background: var(--color-primary); color: #fff; border: none; padding: 7px 14px; font-weight: 600; }
+.demo-banner-btn-primary { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+.demo-banner-btn-primary:hover:not(:disabled) { background: var(--color-primary-deep); }
 
 /* Tour: azione simulata (Fase D5) */
 .tour-actions-right { display: flex; align-items: center; gap: 8px; }
-.tour-error { margin: 8px 0 0; font-size: 12px; color: #b91c1c; }
+.tour-error { margin: 8px 0 0; font-size: 12px; color: var(--color-danger); }
 
 /* Badge "Demo" nell'elenco Società (Super Admin) */
 .demo-tag {
@@ -1516,20 +1653,20 @@ textarea {
   color: #9a3412;
   background: #ffedd5;
   border: 1px solid #fed7aa;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 1px 6px;
   vertical-align: middle;
 }
 
 /* --- Verifica / cambio email (Fase E2) --- */
 .badge-success {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-success-tint);
+  color: var(--color-success);
 }
 
 .success {
-  color: #166534;
-  background: #dcfce7;
+  color: var(--color-success);
+  background: var(--color-success-tint);
   padding: 8px 12px;
   border-radius: 8px;
   font-size: 14px;
@@ -1542,18 +1679,18 @@ textarea {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-tint);
+  color: var(--color-warning-ink);
   padding: 10px 24px;
   font-size: 14px;
-  border-bottom: 1px solid #fde68a;
+  border-bottom: 1px solid var(--color-warning-border);
 }
 
 .email-verify-action {
-  background: #92400e;
+  background: var(--color-warning-ink);
   color: #fff;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 6px 12px;
   font-size: 13px;
   cursor: pointer;
@@ -1569,7 +1706,7 @@ textarea {
 }
 
 .email-verify-error {
-  color: #b91c1c;
+  color: var(--color-danger);
 }
 
 /* Scheda "Email" nel profilo dipendente. */
@@ -1579,9 +1716,9 @@ textarea {
 }
 
 .email-pending-note {
-  color: #92400e;
+  color: var(--color-warning-ink);
   background: #fffbeb;
-  border: 1px solid #fde68a;
+  border: 1px solid var(--color-warning-border);
   padding: 8px 12px;
   border-radius: 8px;
   font-size: 14px;
@@ -1605,7 +1742,7 @@ textarea {
 
 /* .link-button è pensato per la topbar scura (testo bianco): sulle card bianche va ricolorato. */
 .email-inline-link {
-  color: #2f6f4f;
+  color: var(--color-primary);
 }
 
 /* --- Preferenze notifiche (Fase E6) --- */
@@ -1624,7 +1761,7 @@ textarea {
 }
 
 .pref-cats {
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--color-divider);
   padding-top: 12px;
   margin-bottom: 12px;
 }
@@ -1632,7 +1769,7 @@ textarea {
 .pref-cats-title {
   margin: 0 0 8px;
   font-size: 14px;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .pref-cat {
@@ -1645,8 +1782,8 @@ textarea {
 
 /* --- Storico email / Comunicazioni (Fase E7) --- */
 .badge-danger {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--color-danger-tint);
+  color: var(--color-danger);
 }
 
 .table-scroll {
@@ -1659,19 +1796,19 @@ textarea {
 
 .email-log-subject {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   margin-top: 2px;
 }
 
 .email-log-reason {
   font-size: 12px;
-  color: #92400e;
+  color: var(--color-warning-ink);
   margin-top: 4px;
 }
 
 /* ---------------------------------------------------------------------------
    Sezione Report (analisi operativa del personale)
-   Riusa la palette esistente (#2f6f4f verde, #1f2430 scuro, #6b7280 grigio).
+   Riusa la palette esistente (var(--color-primary) verde, var(--color-ink) scuro, var(--color-text-muted) grigio).
    --------------------------------------------------------------------------- */
 
 /* Filtri */
@@ -1694,15 +1831,15 @@ textarea {
 
 .report-filter > label {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-weight: 600;
 }
 
 .report-filter select,
 .report-filter input[type='date'] {
   padding: 8px 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   font-size: 14px;
   background: white;
   min-width: 180px;
@@ -1710,7 +1847,7 @@ textarea {
 
 .report-period-label {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -1729,9 +1866,9 @@ textarea {
   background: white;
   color: inherit;
   text-align: left;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-rest);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1740,8 +1877,8 @@ textarea {
 }
 
 .report-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  border-color: #2f6f4f;
+  box-shadow: var(--shadow-raised);
+  border-color: var(--color-primary);
 }
 
 .report-card:active {
@@ -1758,19 +1895,19 @@ textarea {
 .report-card-name {
   margin: 0;
   font-size: 17px;
-  color: #1f2430;
+  color: var(--color-ink);
 }
 
 .report-card-role {
   margin: 2px 0 0;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .report-card-contract {
   margin: 0;
   font-size: 13px;
-  color: #374151;
+  color: var(--color-text-strong);
 }
 
 .report-card-grid {
@@ -1790,23 +1927,23 @@ textarea {
 .report-metric-value {
   font-size: 18px;
   font-weight: 700;
-  color: #1f2430;
+  color: var(--color-ink);
   line-height: 1.2;
 }
 
 .report-metric-label {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
 
 .report-diff-pos {
-  color: #2f6f4f;
+  color: var(--color-primary);
 }
 
 .report-diff-neg {
-  color: #b91c1c;
+  color: var(--color-danger);
 }
 
 .report-card-alerts,
@@ -1827,10 +1964,10 @@ textarea {
 .report-card-alerts li,
 .report-alerts li {
   font-size: 12.5px;
-  color: #92400e;
+  color: var(--color-warning-ink);
   background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: 6px;
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
   padding: 6px 8px;
 }
 
@@ -1843,36 +1980,36 @@ textarea {
   font-size: 12px;
   font-weight: 600;
   padding: 3px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   white-space: nowrap;
 }
 
 .report-status-ok {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-success-tint);
+  color: var(--color-success);
 }
 
 .report-status-over {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-tint);
+  color: var(--color-warning-ink);
 }
 
 .report-status-under {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-tint);
+  color: var(--color-danger-strong);
 }
 
 .report-status-neutral {
-  background: #eef0f3;
-  color: #4b5563;
+  background: var(--color-panel);
+  color: var(--color-text-secondary);
 }
 
 /* Scheda dettaglio */
 .report-back {
   margin: 0 0 12px;
   padding: 6px 12px;
-  background: #eef0f3;
-  color: #1f2430;
+  background: var(--color-panel);
+  color: var(--color-ink);
   font-size: 13px;
 }
 
@@ -1906,7 +2043,7 @@ textarea {
 
 .report-info dt {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
@@ -1914,7 +2051,7 @@ textarea {
 .report-info dd {
   margin: 0;
   font-size: 15px;
-  color: #1f2430;
+  color: var(--color-ink);
   font-weight: 600;
 }
 
@@ -1931,7 +2068,7 @@ textarea {
 .report-request-block h4 {
   margin: 0 0 8px;
   font-size: 14px;
-  color: #1f2430;
+  color: var(--color-ink);
 }
 
 .report-breakdown {
@@ -1948,16 +2085,16 @@ textarea {
   justify-content: space-between;
   font-size: 14px;
   padding: 6px 10px;
-  background: #f9fafb;
-  border-radius: 6px;
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-md);
 }
 
 .report-breakdown li span {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .report-breakdown li strong {
-  color: #1f2430;
+  color: var(--color-ink);
 }
 
 .report-compare td:not(:first-child),
@@ -1975,7 +2112,7 @@ textarea {
 .modal-subhead {
   margin: 18px 0 8px;
   font-size: 0.95rem;
-  color: #374151;
+  color: var(--color-text-strong);
 }
 
 .org-features {
@@ -1987,10 +2124,199 @@ textarea {
   gap: 4px;
 }
 
-.org-feature-on {
-  color: #2f6f4f;
+.org-features li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
+.org-feature-on {
+  color: var(--color-primary);
+}
+
+/* "Non incluso": grigio muted (supera AA), leggibile ma chiaramente secondario rispetto al verde. */
 .org-feature-off {
-  color: #9ca3af;
+  color: var(--color-text-muted);
+}
+
+/* ============================================================================
+   Accessibilità (WCAG 2.1 AA): focus visibile coerente, skip link, motion ridotto.
+   Aggiunto in fase di hardening — nessun controllo aveva uno stato di focus prima.
+   ============================================================================ */
+
+/* Focus visibile unico per elementi non-form (bottoni, link, controlli custom con role=button).
+   :focus-visible: l'anello compare per tastiera/AT, non al click del mouse. */
+a:focus-visible,
+button:focus-visible,
+[role='button']:focus-visible,
+[tabindex]:focus-visible,
+.segmented button:focus-visible,
+.sidebar-link:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Campi di forma: bordo Forest Pine + alone morbido (più leggibile del solo outline sul bordo). */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+}
+
+/* Sulla sidebar scura l'anello verde standard sparirebbe: usiamo il verde chiaro del marker attivo. */
+.sidebar-link:focus-visible,
+.sidebar-sede select:focus-visible {
+  outline-color: var(--color-primary-bright);
+}
+
+/* Skip link: nascosto finché non riceve focus da tastiera, poi scende in alto a sinistra. */
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: var(--z-skip-link);
+  transform: translateY(-160%);
+  background: var(--color-primary);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  text-decoration: none;
+  transition: transform 0.15s ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* Rispetto di prefers-reduced-motion: annulla transizioni/animazioni per chi lo richiede. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================================
+   Touch target (WCAG 2.5.8 / comfort ~44px). Solo su puntatori "grossolani" (dita):
+   i controlli compatti crescono all'area comoda. Su desktop (mouse) nulla cambia,
+   il look SaaS desktop-first resta identico.
+   ============================================================================ */
+@media (pointer: coarse) {
+  button,
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+  }
+
+  .calendar-nav button,
+  .weekday-picker button,
+  .segmented button,
+  .calendar-admin-controls button,
+  .table-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .sidebar-link {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  /* Campanella: icona sola, garantiamo un bersaglio 44×44 anche se il glifo è piccolo. */
+  .notif-bell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Navigazione mobile: la sidebar diventa una barra orizzontale scorrevole; scorrimento fluido
+   con inerzia e senza barra di scroll visibile che rubi spazio verticale. */
+@media (max-width: 900px) {
+  .sidebar-nav {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+
+  .sidebar-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sidebar-link {
+    scroll-snap-align: start;
+  }
+}
+
+/* ============================================================================
+   Brand Planivo — marchio, login, schermata di caricamento. Solo presentazione.
+   ============================================================================ */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.brand-mark {
+  display: block;
+  flex-shrink: 0;
+}
+
+.brand-wordmark {
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: currentColor;
+}
+
+/* Login: il logo Planivo prende esattamente il posto del vecchio sottotitolo testuale
+   ("Gestione Turni"), sotto il titolo "Accedi". Struttura e flusso della card invariati. */
+.login-logo {
+  margin: 2px 0 10px;
+}
+
+/* Sidebar scura: il wordmark eredita il bianco del testo sidebar (currentColor). */
+.sidebar-logo .brand-wordmark {
+  font-size: 18px;
+}
+
+/* Schermata di caricamento (ProtectedRoute), coerente con lo splash di avvio in index.html. */
+.app-loading {
+  flex-direction: column;
+  gap: 14px;
+}
+
+.app-loading .brand-mark {
+  animation: brand-pulse 1.4s ease-in-out infinite;
+}
+
+.app-loading-label {
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+@keyframes brand-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.72;
+    transform: translateY(-2px);
+  }
 }

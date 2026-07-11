@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { activateOnKey } from '../../utils/a11y';
 
 // Indicatore di copertura del fabbisogno per una singola occorrenza (fascia oraria indipendente,
 // mai accorpata ad altre occorrenze dello stesso giorno). Stile intenzionalmente diverso da
@@ -14,7 +15,14 @@ export default function StaffingChip({ occurrence, onGenerateGap, onEditOccurren
 
   return (
     <div className={`staffing-chip ${hasGap ? 'staffing-chip-warning' : 'staffing-chip-covered'}`}>
-      <div className="staffing-chip-summary" onClick={() => setExpanded((v) => !v)} role="button">
+      <div
+        className="staffing-chip-summary"
+        onClick={() => setExpanded((v) => !v)}
+        onKeyDown={activateOnKey(() => setExpanded((v) => !v))}
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+      >
         <span className="staffing-chip-time">
           {occurrence.startTime}-{occurrence.endTime}
         </span>

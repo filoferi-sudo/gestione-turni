@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Modal from '../common/Modal';
 
 const WEEK_DAY_OPTIONS = [
   { code: 'MON', label: 'Lun' },
@@ -114,7 +115,7 @@ export default function ShiftFormModal({ shift, users, defaultUserId, defaultDat
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>{shift ? 'Modifica turno' : 'Nuovo turno'}</h2>
 
@@ -235,6 +236,6 @@ export default function ShiftFormModal({ shift, users, defaultUserId, defaultDat
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

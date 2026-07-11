@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Modal from '../common/Modal';
 
 const WEEK_DAY_OPTIONS = [
   { code: 'MON', label: 'Lun' },
@@ -124,7 +125,7 @@ export default function CourseFormModal({ course, instructors, defaultDate, onSa
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <Modal onClose={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>{course ? 'Modifica corso' : 'Nuovo corso'}</h2>
 
@@ -259,6 +260,6 @@ export default function CourseFormModal({ course, instructors, defaultDate, onSa
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
