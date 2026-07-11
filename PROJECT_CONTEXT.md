@@ -1654,6 +1654,23 @@ nessuna decisione HR (disclaimer esplicito in UI: "la valutazione finale spetta 
 
 Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cosa ricordare.
 
+- **2026-07-11** — **Tour guidato pertinente al ruolo (fix demo Dipendente; nessun cambio ai
+  permessi)**. Problema: il banner demo proponeva a OGNI persona il tour 'commerciale' (narrazione
+  da manager: approvare richieste, "Trova sostituzione", proposte) — per il Cameriere descriveva
+  azioni che il ruolo `user` non può compiere (target [data-tour] assenti nelle sue pagine, azione
+  simulata in errore, step a poll senza "Avanti" ⇒ vicolo cieco). I permessi applicativi sono
+  risultati CORRETTI (verifica dal vivo con token demo dipendente: 17/17 endpoint
+  manager/dirigente/superadmin ⇒ 403; endpoint propri ⇒ 200). Correzione, solo layer demo/tour:
+  ogni tour dichiara `roles[]` (commerciale/benvenuto ⇒ dirigente+admin); nuovo
+  `constants/tours/tourDipendente.js` (`giornata-dipendente`, 7 step: home, calendario, richieste
+  di cancellazione, sostituzioni da accettare, proposte/campanella — solo azioni reali del ruolo,
+  nessuna azione simulata né poll); `defaultTourForRole(role)` in `constants/tours/index.js`;
+  `DemoBanner` avvia il tour del ruolo (bottone nascosto se nessun tour pertinente); guardia di
+  pertinenza in `TourProvider.start` (un tour con `roles` non parte per un ruolo estraneo);
+  `scenarios/ristorante/metadata.js` dichiara entrambi i tour (nessun version bump: il dataset non
+  cambia). Verificato nel browser come Cameriere: parte il tour 1–7 corretto, navigazione
+  automatica e spotlight sul pannello "Sostituzioni disponibili" col bottone Accetta.
+  **Ricordare**: i tour nuovi devono dichiarare `roles` e usare solo ganci/azioni del ruolo.
 - **2026-07-11** — **UX/Accessibilità (WCAG 2.1 AA) + design token + rebrand Planivo (solo
   frontend, zero cambi di logica)**. Cinque interventi dall'audit del design system Impeccable:
   **(1) A11y/interazione**: nuovo `components/common/Modal.jsx` (wrapper accessibile che clona la

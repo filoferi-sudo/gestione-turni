@@ -48,8 +48,11 @@ export function TourProvider({ children }) {
   const start = useCallback((tourId) => {
     const t = getTour(tourId);
     if (!t) return;
+    // Guardia di pertinenza: un tour che dichiara `roles` non parte per un ruolo estraneo (es. il
+    // tour commerciale, che racconta azioni da manager, non deve mai partire per un dipendente).
+    if (t.roles && user && !t.roles.includes(user.role)) return;
     setState({ tourId: t.id, stepIndex: 0 });
-  }, []);
+  }, [user]);
 
   const next = useCallback(() => {
     setState((prev) => {

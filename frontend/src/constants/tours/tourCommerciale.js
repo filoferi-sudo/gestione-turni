@@ -8,6 +8,10 @@
 export default {
   id: 'commerciale',
   name: 'Una giornata con Planivo',
+  // Narrazione da manager (approva richieste, Trova sostituzione, proposte): pertinente solo a
+  // Dirigente/Responsabile. Un dipendente non può compiere queste azioni (403 lato server), quindi
+  // il tour non gli viene proposto (vedi defaultTourForRole / guardia in TourProvider.start).
+  roles: ['dirigente', 'admin'],
   steps: [
     {
       id: 'benvenuto',
