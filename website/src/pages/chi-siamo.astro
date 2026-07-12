@@ -1,0 +1,85 @@
+---
+import Base from '../layouts/Base.astro';
+import CtaSection from '../components/CtaSection.astro';
+import Icon from '../components/Icon.astro';
+import { site } from '../data/site.js';
+
+const values = [
+  { icon: 'spark', title: 'Semplicità prima di tutto', text: 'Se serve un corso per usarlo, abbiamo sbagliato noi. Planivo si impara in cinque minuti.' },
+  { icon: 'users', title: 'A contatto con chi lo usa', text: 'Sviluppiamo dentro le strutture reali, ascoltando i responsabili e chi i turni li fa ogni giorno.' },
+  { icon: 'check-shield', title: 'Sviluppato in Italia', text: 'Software italiano, supporto in italiano, dati su server europei. Ci trovi quando ti servono risposte.' },
+];
+---
+
+<Base
+  title="Chi siamo"
+  description="Planivo nasce dal problema visto da dentro le strutture: turni gestiti con Excel e WhatsApp. La nostra storia e i nostri valori."
+>
+  <section class="section page-hero">
+    <div class="container chisiamo__hero">
+      <div>
+        <p class="eyebrow">Chi siamo</p>
+        <h1>Nato dal problema, non da una slide.</h1>
+        <p class="lead">
+          Planivo non è l’ennesimo gestionale pensato a tavolino. È nato osservando da vicino come si
+          gestiscono davvero i turni in ristoranti, bar, piscine e palestre: fogli Excel che nessuno
+          aggiorna, chat che si perdono, e responsabili che ci passano le serate.
+        </p>
+        {/* TODO: storia del founder — perché nasce Planivo, il problema visto da dentro. */}
+        <p>
+          Abbiamo pensato che ci volesse qualcosa di più semplice e più onesto: uno strumento che
+          fa una cosa e la fa bene — coprire i turni scoperti con le persone giuste, senza far
+          impazzire nessuno.
+        </p>
+      </div>
+      <div class="chisiamo__photo" aria-hidden="true">
+        {/* TODO_FOTO_FOUNDER: sostituire con la foto reale del founder. */}
+        <div class="chisiamo__photo-ph"><Icon name="users" size={40} /><span>Foto del team</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--paper">
+    <div class="container">
+      <div class="section__head">
+        <p class="eyebrow">In cosa crediamo</p>
+        <h2>Tre valori, zero fronzoli.</h2>
+      </div>
+      <div class="grid grid--3">
+        {
+          values.map((v) => (
+            <article class="card">
+              <span class="chisiamo__vic" aria-hidden="true"><Icon name={v.icon} size={22} /></span>
+              <h3>{v.title}</h3>
+              <p>{v.text}</p>
+            </article>
+          ))
+        }
+      </div>
+      <p class="chisiamo__where trust-flag">🇮🇹 Software italiano, sviluppato in {site.region}.</p>
+    </div>
+  </section>
+
+  <CtaSection title="Parliamone." text="Raccontaci la tua struttura: in 15 minuti ti mostriamo se Planivo fa al caso tuo." cta="Prenota una demo" />
+</Base>
+
+<style>
+  .chisiamo__hero { display: grid; gap: clamp(1.75rem, 4vw, 3rem); align-items: center; }
+  @media (min-width: 880px) { .chisiamo__hero { grid-template-columns: 1.3fr 0.7fr; } }
+  .chisiamo__hero h1 { margin: 0.75rem 0 1rem; }
+  .chisiamo__hero p + p { margin-top: 1rem; }
+  .chisiamo__photo-ph {
+    aspect-ratio: 4 / 5;
+    border-radius: var(--radius-lg);
+    background: var(--c-surface);
+    border: 1px dashed var(--c-border);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;
+    color: var(--c-muted);
+  }
+  .chisiamo__vic {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--c-primary-tint); color: var(--c-primary-dark); margin-bottom: 0.5rem;
+  }
+  .chisiamo__where { margin-top: 2rem; color: var(--c-body); }
+</style>

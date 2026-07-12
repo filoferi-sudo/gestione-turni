@@ -1,0 +1,20 @@
+---
+// Riga di fiducia (§4.1). Fallback previsto dal piano finché non ci sono numeri/loghi pilota:
+// "Sviluppato insieme a strutture reali in Lombardia". Nessuna prova sociale inventata.
+import { site } from '../data/site.js';
+const { pilot = false } = Astro.props;
+---
+<div class="trustbar">
+  <p class="trust-flag">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 2.5v5.5c0 4.5-3 7.8-7 9.5-4-1.7-7-5-7-9.5V5.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+    Sviluppato insieme a strutture reali in {site.region}
+  </p>
+  {pilot && <p class="trustbar__pilot">Pilota gratuito per le prime strutture di ogni settore.</p>}
+</div>
+
+<style>
+  .trustbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.5rem; }
+  .trustbar .trust-flag { color: var(--c-body); font-weight: 500; }
+  .trustbar .trust-flag svg { color: var(--c-primary); flex: none; }
+  .trustbar__pilot { color: var(--c-muted); font-size: 0.95rem; }
+</style>

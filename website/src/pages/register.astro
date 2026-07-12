@@ -1,0 +1,49 @@
+---
+// Roadmap: quando arriverà il signup self-service (roadmap abbonamenti/piani), questa URL è
+// riservata a quel flusso. Oggi Planivo non ha auto-registrazione (le società le crea il Super
+// Admin) e il funnel è sales-led: qui l'attivazione è guidata, con lo stesso LeadForm.
+import Base from '../layouts/Base.astro';
+import LeadForm from '../components/LeadForm.astro';
+import Icon from '../components/Icon.astro';
+---
+
+<Base
+  title="Attiva Planivo per la tua struttura"
+  description="Attiva Planivo con una configurazione guidata: impostiamo insieme sedi, aree e staff. Parti operativo, non da un modulo vuoto."
+>
+  <section class="section register">
+    <div class="container register__grid">
+      <div class="register__copy">
+        <p class="eyebrow">Attivazione</p>
+        <h1>Attiva Planivo per la tua struttura.</h1>
+        <p class="lead">
+          Niente registrazione fai-da-te da compilare al buio. L’attivazione è <strong>guidata</strong>:
+          configuriamo insieme sedi, aree e staff, così parti operativo dal primo giorno — non da un
+          calendario vuoto.
+        </p>
+        <ul class="register__steps">
+          <li><Icon name="check-circle" size={20} /> <span>Ci dici che struttura hai e come lavori</span></li>
+          <li><Icon name="check-circle" size={20} /> <span>Impostiamo insieme sedi, aree operative e personale</span></li>
+          <li><Icon name="check-circle" size={20} /> <span>Parti con il pilota gratuito, già configurato</span></li>
+        </ul>
+      </div>
+
+      <div class="card register__form">
+        <h2>Richiedi l’attivazione</h2>
+        <p class="register__form-sub">Ti ricontattiamo entro 24 ore per partire insieme.</p>
+        <LeadForm source="register" submitLabel="Richiedi l’attivazione" />
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .register__grid { display: grid; gap: clamp(1.75rem, 4vw, 3rem); align-items: start; }
+  @media (min-width: 900px) { .register__grid { grid-template-columns: 1fr 1fr; } }
+  .register h1 { margin: 0.75rem 0 1rem; }
+  .register__steps { list-style: none; margin: 1.75rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+  .register__steps li { display: flex; align-items: flex-start; gap: 0.6rem; color: var(--c-body); }
+  .register__steps svg { color: var(--c-primary); flex: none; margin-top: 2px; }
+  .register__form h2 { font-size: 1.35rem; }
+  .register__form-sub { color: var(--c-muted); margin-bottom: 1.25rem; }
+</style>

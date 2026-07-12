@@ -1,0 +1,78 @@
+---
+// BOZZA GENERATA — DA FAR REVISIONARE prima della pubblicazione (consulente/legale).
+import Legal from '../layouts/Legal.astro';
+import { site, mailHref } from '../data/site.js';
+---
+<Legal
+  title="Privacy Policy"
+  description="Informativa sul trattamento dei dati personali di Planivo ai sensi del Regolamento (UE) 2016/679 (GDPR)."
+  updated="TODO_DATA"
+>
+  <p>
+    La presente informativa descrive come vengono trattati i dati personali raccolti tramite il sito
+    <strong>{site.domain}</strong>, ai sensi del Regolamento (UE) 2016/679 (“GDPR”). È una bozza da
+    sottoporre a revisione legale prima della pubblicazione.
+  </p>
+
+  <h2>1. Titolare del trattamento</h2>
+  <p>
+    Il titolare del trattamento è <span class="legal__todo">TODO: ragione sociale, indirizzo e P.IVA
+    del titolare</span>. Per qualsiasi richiesta relativa ai tuoi dati puoi scrivere a
+    <a href={mailHref}>{site.email}</a>.
+  </p>
+
+  <h2>2. Quali dati raccogliamo</h2>
+  <p>Raccogliamo esclusivamente i dati che ci fornisci compilando i moduli di richiesta demo/contatto:</p>
+  <ul>
+    <li>nome e cognome;</li>
+    <li>numero di telefono;</li>
+    <li>indirizzo email;</li>
+    <li>tipo di struttura e numero indicativo di dipendenti;</li>
+    <li>eventuale messaggio libero;</li>
+    <li>dati tecnici di navigazione (indirizzo IP, user agent) e parametri di provenienza della
+      campagna (UTM), raccolti per motivi di sicurezza e statistici.</li>
+  </ul>
+
+  <h2>3. Finalità e base giuridica</h2>
+  <p>
+    I dati sono trattati per <strong>dare riscontro alla tua richiesta</strong> di demo o contatto e
+    per le attività preliminari eventualmente richieste (art. 6.1.b GDPR). L’invio del modulo avviene
+    previo tuo <strong>consenso esplicito</strong> (art. 6.1.a GDPR), prestato spuntando l’apposita
+    casella.
+  </p>
+
+  <h2>4. Conservazione</h2>
+  <p>
+    I dati sono conservati per il tempo necessario a gestire la tua richiesta e i successivi rapporti,
+    e comunque non oltre <span class="legal__todo">TODO: periodo di conservazione</span>, salvo obblighi
+    di legge.
+  </p>
+
+  <h2>5. Strumenti e destinatari</h2>
+  <p>
+    I dati inviati con il modulo sono trattati dai nostri sistemi e possono essere gestiti tramite
+    fornitori che agiscono come responsabili del trattamento, tra cui il provider di invio email
+    transazionale (Brevo) e i servizi di hosting (Vercel, database in area UE). Se attivi, il sito
+    utilizza inoltre strumenti di misurazione e marketing (Google Tag Manager, Google Analytics 4,
+    Meta Pixel) e, sulla pagina di conferma, un servizio di prenotazione appuntamenti (Calendly). Il
+    dettaglio è nella <a href="/cookie-policy">Cookie Policy</a>.
+  </p>
+
+  <h2>6. Trasferimenti extra-UE</h2>
+  <p>
+    Alcuni fornitori possono trattare dati al di fuori dell’Unione Europea: in tal caso il trasferimento
+    avviene sulla base di garanzie adeguate (es. clausole contrattuali standard).
+    <span class="legal__todo">TODO: confermare i fornitori e le garanzie applicabili</span>.
+  </p>
+
+  <h2>7. I tuoi diritti</h2>
+  <p>
+    Puoi in ogni momento esercitare i diritti di accesso, rettifica, cancellazione, limitazione,
+    opposizione e portabilità, oltre a revocare il consenso, scrivendo a
+    <a href={mailHref}>{site.email}</a>. Hai inoltre il diritto di proporre reclamo all’Autorità
+    Garante per la protezione dei dati personali (<a href="https://www.garanteprivacy.it" target="_blank" rel="noopener">garanteprivacy.it</a>).
+  </p>
+
+  <h2>8. Modifiche</h2>
+  <p>Ci riserviamo di aggiornare questa informativa: la versione vigente è sempre pubblicata su questa pagina.</p>
+</Legal>

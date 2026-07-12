@@ -1,0 +1,27 @@
+---
+import Base from '../layouts/Base.astro';
+import ShiftGrid from '../components/ShiftGrid.astro';
+---
+<Base title="Pagina non trovata" noindex={true} showStickyCta={false}>
+  <section class="section notfound">
+    <div class="container notfound__inner">
+      <p class="eyebrow">Errore 404</p>
+      <h1>Questa pagina non esiste.</h1>
+      <p class="lead">(I buchi li copriamo solo nei turni.)</p>
+      <div class="cluster notfound__cta">
+        <a href="/" class="btn btn-primary" data-track="cta-demo">Torna alla home</a>
+        <a href="/funzionalita" class="btn btn-ghost">Funzionalità</a>
+        <a href="/demo" class="btn btn-ghost">Prenota una demo</a>
+      </div>
+      <div class="notfound__visual"><ShiftGrid animated={false} caption={false} compact={true} /></div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .notfound { text-align: center; }
+  .notfound__inner { max-width: 52ch; margin-inline: auto; }
+  .notfound h1 { margin: 0.75rem 0 0.5rem; }
+  .notfound__cta { justify-content: center; margin-top: 1.75rem; }
+  .notfound__visual { display: flex; justify-content: center; margin-top: 2.5rem; }
+</style>

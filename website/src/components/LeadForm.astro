@@ -1,0 +1,219 @@
+---
+// LeadForm — IL punto di conversione. Attrito minimo: telefono subito dopo il nome (il funnel è
+// un richiamo), tipo struttura e fasce dipendenti come bottoni-segmento (non tendine). Validazione
+// inline, label sempre visibili, inputmode/autocomplete corretti, un solo <button> grande.
+// Honeypot `website` nascosto. Il wiring fetch → /api/public/leads e la cattura UTM/preselect
+// arrivano in Fase 6/7 (script su [data-lead-form]); qui c'è la UI e la progressive enhancement.
+import { site, telHref, whatsappHref } from '../data/site.js';
+
+const {
+  source = 'demo', // demo | register | contatti
+  submitLabel = 'Prenota la demo gratuita',
+  compact = false,
+} = Astro.props;
+
+const businessTypes = [
+  { value: 'ristorante', label: 'Ristorante' },
+  { value: 'bar', label: 'Bar' },
+  { value: 'piscina', label: 'Piscina' },
+  { value: 'palestra', label: 'Palestra' },
+  { value: 'altro', label: 'Altro' },
+];
+const employeeRanges = ['1-5', '6-15', '16-30', '30+'];
+---
+
+<form
+  class:list={['lead-form', { 'lead-form--compact': compact }]}
+  data-lead-form
+  data-source={source}
+  novalidate
+>
+  <!-- Honeypot anti-bot: invisibile all'utente, i bot lo compilano -->
+  <div class="hp-field" aria-hidden="true">
+    <label>Non compilare questo campo
+      <input type="text" name="website" tabindex="-1" autocomplete="off" />
+    </label>
+  </div>
+
+  <!-- Campi nascosti popolati via JS (form_source, landing_path, utm_*, referrer) -->
+  <input type="hidden" name="form_source" value={source} />
+  <input type="hidden" name="landing_path" value="" data-landing />
+  <input type="hidden" name="utm_source" value="" />
+  <input type="hidden" name="utm_medium" value="" />
+  <input type="hidden" name="utm_campaign" value="" />
+  <input type="hidden" name="utm_content" value="" />
+  <input type="hidden" name="utm_term" value="" />
+  <input type="hidden" name="referrer" value="" />
+
+  <div class="field">
+    <label for="lf-name">Nome e cognome</label>
+    <input id="lf-name" name="name" type="text" autocomplete="name" required
+      minlength="2" maxlength="100" placeholder="Es. Marco Rossi" />
+    <p class="field__error" data-error-for="name" hidden></p>
+  </div>
+
+  <div class="field">
+    <label for="lf-phone">Telefono</label>
+    <input id="lf-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" required
+      maxlength="20" placeholder="Es. 333 1234567" />
+    <p class="field__hint">Ti richiamiamo noi: nessuna chiamata a pagamento.</p>
+    <p class="field__error" data-error-for="phone" hidden></p>
+  </div>
+
+  <div class="field">
+    <label for="lf-email">Email</label>
+    <input id="lf-email" name="email" type="email" inputmode="email" autocomplete="email" required
+      maxlength="150" placeholder="Es. marco@tuolocale.it" />
+    <p class="field__error" data-error-for="email" hidden></p>
+  </div>
+
+  <fieldset class="field seg-field">
+    <legend>Tipo di struttura</legend>
+    <div class="segmented" role="radiogroup">
+      {
+        businessTypes.map((b, i) => (
+          <label class="seg">
+            <input type="radio" name="business_type" value={b.value} required checked={i === 0} />
+            <span>{b.label}</span>
+          </label>
+        ))
+      }
+    </div>
+    <p class="field__error" data-error-for="business_type" hidden></p>
+  </fieldset>
+
+  <fieldset class="field seg-field">
+    <legend>Numero di dipendenti <span class="opt">(facoltativo)</span></legend>
+    <div class="segmented">
+      {
+        employeeRanges.map((r) => (
+          <label class="seg">
+            <input type="radio" name="employees_range" value={r} />
+            <span>{r}</span>
+          </label>
+        ))
+      }
+    </div>
+  </fieldset>
+
+  {
+    !compact && (
+      <div class="field">
+        <label for="lf-msg">Messaggio <span class="opt">(facoltativo)</span></label>
+        <textarea id="lf-msg" name="message" rows="3" maxlength="1000"
+          placeholder="Raccontaci in due righe la tua struttura (facoltativo)" />
+      </div>
+    )
+  }
+
+  <div class="field field--consent">
+    <label class="consent">
+      <input type="checkbox" name="privacy_consent" value="true" required />
+      <span>Ho letto la <a href="/privacy" target="_blank" rel="noopener">privacy policy</a> e acconsento al trattamento dei dati per essere ricontattato.</span>
+    </label>
+    <p class="field__error" data-error-for="privacy_consent" hidden></p>
+  </div>
+
+  <button type="submit" class="btn btn-primary btn--lg btn--block" data-lead-submit>
+    <span data-submit-label>{submitLabel}</span>
+  </button>
+  <p class="lead-form__reassure">{site.reassurance}</p>
+
+  <p class="lead-form__status" role="status" aria-live="polite" data-lead-status hidden></p>
+
+  <!-- Progressive enhancement: se JS è disabilitato, contatti diretti -->
+  <noscript>
+    <p class="lead-form__noscript">
+      Il modulo richiede JavaScript. Puoi scriverci direttamente:
+      <a href={telHref}>{site.phoneDisplay}</a> · <a href={whatsappHref}>WhatsApp</a>
+    </p>
+  </noscript>
+</form>
+
+<style>
+  .lead-form { display: flex; flex-direction: column; gap: 1.1rem; }
+  .field { display: flex; flex-direction: column; gap: 0.35rem; border: 0; padding: 0; margin: 0; }
+  .field > label,
+  .seg-field > legend {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--c-ink);
+    padding: 0;
+  }
+  .opt { color: var(--c-muted); font-weight: 400; }
+  .field input[type='text'],
+  .field input[type='tel'],
+  .field input[type='email'],
+  .field textarea {
+    width: 100%;
+    padding: 0.8rem 0.9rem;
+    border: 1.5px solid var(--c-border);
+    border-radius: var(--radius);
+    background: var(--c-bg);
+    font-size: 1rem;
+    transition: border-color var(--t), box-shadow var(--t);
+  }
+  .field input:focus,
+  .field textarea:focus {
+    outline: none;
+    border-color: var(--c-primary);
+    box-shadow: 0 0 0 3px var(--c-primary-tint);
+  }
+  .field textarea { resize: vertical; min-height: 84px; }
+  .field__hint { font-size: 0.82rem; color: var(--c-muted); }
+  .field__error { font-size: 0.85rem; color: var(--c-alert); font-weight: 500; }
+  .field--invalid input,
+  .field--invalid .segmented { border-color: var(--c-alert); }
+
+  /* Segmented (bottoni-radio) */
+  .segmented { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .seg { position: relative; }
+  .seg input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .seg span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0.5rem 1rem;
+    border: 1.5px solid var(--c-border);
+    border-radius: var(--radius);
+    background: var(--c-bg);
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--c-body);
+    cursor: pointer;
+    transition: background var(--t), border-color var(--t), color var(--t);
+  }
+  .seg input:checked + span {
+    background: var(--c-primary-tint);
+    border-color: var(--c-primary);
+    color: var(--c-primary-dark);
+  }
+  .seg input:focus-visible + span {
+    outline: 2px solid var(--c-primary);
+    outline-offset: 2px;
+  }
+  .seg span:hover { border-color: var(--c-primary); }
+
+  /* Consenso */
+  .consent {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    font-size: 0.92rem;
+    color: var(--c-body);
+    cursor: pointer;
+  }
+  .consent input { margin-top: 0.2rem; width: 18px; height: 18px; flex: none; accent-color: var(--c-primary); }
+
+  .lead-form__reassure { text-align: center; font-size: 0.88rem; color: var(--c-muted); }
+  .lead-form__status { padding: 0.8rem 1rem; border-radius: var(--radius); font-size: 0.95rem; }
+  .lead-form__status.is-error { background: #fbeae8; color: var(--c-alert); }
+  .lead-form__status.is-ok { background: var(--c-primary-tint); color: var(--c-primary-dark); }
+  .lead-form__noscript { font-size: 0.9rem; color: var(--c-muted); }
+</style>

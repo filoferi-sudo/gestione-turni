@@ -1,0 +1,33 @@
+---
+import Base from '../layouts/Base.astro';
+import FaqList from '../components/FaqList.astro';
+import CtaSection from '../components/CtaSection.astro';
+import { faq } from '../data/faq.js';
+
+// Lo schema FAQPage JSON-LD viene aggiunto in Fase 5 (via prop jsonLd del layout).
+---
+
+<Base
+  title="Domande frequenti su Planivo"
+  description="Formazione, tempi di attivazione, dati, personale stagionale, multi-sede, migrazione da Excel, prezzo: le risposte alle domande più comuni su Planivo."
+>
+  <section class="section page-hero">
+    <div class="container faq-page">
+      <p class="eyebrow">Domande frequenti</p>
+      <h1>Tutto quello che vuoi sapere prima di iniziare.</h1>
+      <p class="lead">E se non trovi la risposta, ti bastano due minuti al telefono con noi.</p>
+      <div class="faq-page__list"><FaqList items={faq} /></div>
+    </div>
+  </section>
+
+  <CtaSection
+    title="Restano dei dubbi?"
+    text="Prenota una demo: rispondiamo a tutto sui tuoi turni reali, senza impegno."
+  />
+</Base>
+
+<style>
+  .page-hero h1 { margin: 0.75rem 0 1rem; max-width: 24ch; }
+  .faq-page { max-width: 820px; }
+  .faq-page__list { margin-top: 2rem; }
+</style>

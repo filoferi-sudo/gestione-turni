@@ -1,0 +1,94 @@
+---
+import Base from '../layouts/Base.astro';
+import Screenshot from '../components/Screenshot.astro';
+import CtaSection from '../components/CtaSection.astro';
+import Icon from '../components/Icon.astro';
+import { features } from '../data/features.js';
+
+const mockFor = {
+  calendario: 'calendario',
+  sostituzioni: 'sostituzione',
+  fabbisogno: 'copertura',
+  disponibilita: 'calendario',
+  richieste: 'sostituzione',
+  'multi-sede': 'calendario',
+};
+---
+
+<Base
+  title="Funzionalità di Planivo: turni, sostituzioni, copertura del personale"
+  description="Calendario turni, sostituzioni senza caos, fabbisogno e copertura, disponibilità dello staff, approvazioni tracciate e multi-sede. Tutte le funzionalità di Planivo."
+>
+  <section class="section page-hero">
+    <div class="container">
+      <p class="eyebrow">Funzionalità</p>
+      <h1>Tutto quello che serve per non scoprire più un turno.</h1>
+      <p class="lead">
+        Planivo copre l’intero ciclo dei turni: dalla pianificazione alla copertura delle assenze,
+        con il personale giusto e sempre in controllo. Niente di più, niente di superfluo.
+      </p>
+      <div class="cluster page-hero__cta">
+        <a href="/demo" class="btn btn-primary" data-track="cta-demo">Prenota una demo</a>
+        <a href="/prezzi" class="btn btn-ghost">Vedi i prezzi</a>
+      </div>
+    </div>
+  </section>
+
+  {
+    features.map((f, i) => (
+      <section class:list={['section feature-block', { 'section--paper': i % 2 === 1 }]} id={f.id}>
+        <div class="container feature-block__grid" data-reverse={i % 2 === 1}>
+          <div class="feature-block__copy">
+            <span class="feature-block__icon" aria-hidden="true"><Icon name={f.icon} size={24} /></span>
+            <h2>{f.title}</h2>
+            <p class="lead">{f.long}</p>
+            <ul class="feature-block__caps">
+              {f.capabilities.map((c) => (
+                <li><Icon name="check" size={18} /> <span>{c}</span></li>
+              ))}
+            </ul>
+          </div>
+          <div class="feature-block__visual">
+            <Screenshot src={`/screenshots/${f.screenshot}`} mock={mockFor[f.id]} alt={f.screenshotAlt} tag="Anteprima" />
+          </div>
+        </div>
+      </section>
+    ))
+  }
+
+  <CtaSection
+    title="Vuoi vederlo sui tuoi turni?"
+    text="In 15 minuti ti mostriamo Planivo con la tua struttura. Nessun impegno."
+  />
+</Base>
+
+<style>
+  .page-hero h1 { margin: 0.75rem 0 1rem; max-width: 20ch; }
+  .page-hero__cta { margin-top: 1.75rem; }
+
+  .feature-block { padding-block: clamp(2.5rem, 6vw, 4.5rem); }
+  .feature-block__grid {
+    display: grid;
+    gap: clamp(1.75rem, 5vw, 3.5rem);
+    align-items: center;
+  }
+  @media (min-width: 900px) {
+    .feature-block__grid { grid-template-columns: 1fr 1fr; }
+    .feature-block__grid[data-reverse='true'] .feature-block__copy { order: 2; }
+  }
+  .feature-block__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: var(--c-primary-tint);
+    color: var(--c-primary-dark);
+    margin-bottom: 0.75rem;
+  }
+  .feature-block__copy h2 { margin-bottom: 0.75rem; }
+  .feature-block__caps { list-style: none; margin: 1.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.65rem; }
+  .feature-block__caps li { display: flex; align-items: flex-start; gap: 0.6rem; color: var(--c-body); }
+  .feature-block__caps svg { color: var(--c-primary); flex: none; margin-top: 3px; }
+</style>

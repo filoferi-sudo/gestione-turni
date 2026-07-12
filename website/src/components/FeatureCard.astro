@@ -1,0 +1,34 @@
+---
+import Icon from './Icon.astro';
+const { feature, href } = Astro.props;
+---
+<article class="card card--lift feature-card">
+  <span class="feature-card__icon" aria-hidden="true"><Icon name={feature.icon} size={22} /></span>
+  <h3>{feature.title}</h3>
+  <p>{feature.short}</p>
+  {
+    href && (
+      <a href={href} class="arrow-link feature-card__link">
+        Scopri di più
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M8 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+    )
+  }
+</article>
+
+<style>
+  .feature-card { display: flex; flex-direction: column; gap: 0.5rem; height: 100%; }
+  .feature-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--c-primary-tint);
+    color: var(--c-primary-dark);
+    margin-bottom: 0.4rem;
+  }
+  .feature-card p { flex: 1; }
+  .feature-card__link { margin-top: 0.75rem; font-size: 0.95rem; }
+</style>
