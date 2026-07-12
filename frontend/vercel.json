@@ -1,3 +1,8 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "outputDirectory": "dist",
+  "rewrites": [{ "source": "/app/:path*", "destination": "/app/index.html" }],
+  "redirects": [
+    { "source": "/", "destination": "/app", "permanent": false },
+    { "source": "/login", "destination": "/app/login", "permanent": false }
+  ]
 }
