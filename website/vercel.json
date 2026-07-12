@@ -1,5 +1,4 @@
 {
-  "$comment": "Proxy verso il gestionale sotto /app (host di produzione del progetto frontend) + redirect legacy dei vecchi path. I redirect preservano la query string (necessario per i link email verifica-email/azione-email).",
   "rewrites": [
     { "source": "/app", "destination": "https://gestione-turni-syra.vercel.app/app" },
     { "source": "/app/:path*", "destination": "https://gestione-turni-syra.vercel.app/app/:path*" }
