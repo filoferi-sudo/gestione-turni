@@ -3,13 +3,13 @@ import Base from '../layouts/Base.astro';
 import FaqList from '../components/FaqList.astro';
 import CtaSection from '../components/CtaSection.astro';
 import { faq } from '../data/faq.js';
-
-// Lo schema FAQPage JSON-LD viene aggiunto in Fase 5 (via prop jsonLd del layout).
+import { faqPage } from '../lib/jsonld.js';
 ---
 
 <Base
   title="Domande frequenti su Planivo"
   description="Formazione, tempi di attivazione, dati, personale stagionale, multi-sede, migrazione da Excel, prezzo: le risposte alle domande più comuni su Planivo."
+  jsonLd={faqPage(faq)}
 >
   <section class="section page-hero">
     <div class="container faq-page">

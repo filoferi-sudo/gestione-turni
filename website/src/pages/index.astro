@@ -12,6 +12,7 @@ import { site } from '../data/site.js';
 import { features, steps } from '../data/features.js';
 import { faq } from '../data/faq.js';
 import { pricing } from '../data/pricing.js';
+import { softwareApplication, faqPage } from '../lib/jsonld.js';
 
 const sectors = (await getCollection('settori')).sort((a, b) => a.data.order - b.data.order);
 const topFaq = faq.slice(0, 4);
@@ -32,7 +33,7 @@ const problems = [
 ];
 ---
 
-<Base title={`${site.name} — ${site.tagline}`}>
+<Base title={`${site.name} — ${site.tagline}`} jsonLd={[softwareApplication(), faqPage(topFaq)]}>
   <!-- 1. HERO -->
   <section class="hero">
     <div class="container hero__grid">

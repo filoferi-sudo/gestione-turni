@@ -7,6 +7,7 @@ import Seo from '../components/Seo.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import StickyCta from '../components/StickyCta.astro';
+import { organization } from '../lib/jsonld.js';
 
 const {
   title,
@@ -20,6 +21,10 @@ const {
 } = Astro.props;
 
 const GTM_ID = import.meta.env.PUBLIC_GTM_ID;
+
+// Organization è sitewide; le pagine aggiungono le proprie schede via la prop `jsonLd`.
+const pageJsonLd = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
+const allJsonLd = [organization(), ...pageJsonLd];
 ---
 
 <!doctype html>
@@ -41,7 +46,7 @@ const GTM_ID = import.meta.env.PUBLIC_GTM_ID;
       ogImage={ogImage}
       ogType={ogType}
       noindex={noindex}
-      jsonLd={jsonLd}
+      jsonLd={allJsonLd}
     />
 
     {/* === Tracking & consenso (Fase 7): caricati SOLO se PUBLIC_GTM_ID è impostata === */}

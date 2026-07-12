@@ -2,6 +2,7 @@
 import { getCollection, render } from 'astro:content';
 import Base from '../../layouts/Base.astro';
 import Icon from '../../components/Icon.astro';
+import { blogPosting, breadcrumb } from '../../lib/jsonld.js';
 
 export async function getStaticPaths() {
   const posts = await getCollection('blog', (p) => !p.data.draft);
@@ -22,9 +23,24 @@ const CATEGORY_LABELS = {
 const toc = headings.filter((h) => h.depth === 2);
 const showToc = toc.length > 4;
 const fmtDate = (d) => d.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
+
+const path = `/blog/${entry.id}`;
+const jsonLd = [
+  blogPosting({
+    title: data.title,
+    description: data.description,
+    path,
+    datePublished: data.pubDate.toISOString(),
+    dateModified: data.updatedDate ? data.updatedDate.toISOString() : undefined,
+  }),
+  breadcrumb([
+    { name: 'Blog', path: '/blog' },
+    { name: data.title, path },
+  ]),
+];
 ---
 
-<Base title={`${data.title} | Blog Planivo`} description={data.description} ogType="article">
+<Base title={`${data.title} | Blog Planivo`} description={data.description} ogType="article" jsonLd={jsonLd}>
   <article class="section article">
     <div class="container article__head">
       <p class="article__meta">

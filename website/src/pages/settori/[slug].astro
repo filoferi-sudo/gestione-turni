@@ -5,6 +5,7 @@ import Screenshot from '../../components/Screenshot.astro';
 import FaqList from '../../components/FaqList.astro';
 import CtaSection from '../../components/CtaSection.astro';
 import Icon from '../../components/Icon.astro';
+import { breadcrumb, faqPage } from '../../lib/jsonld.js';
 
 export async function getStaticPaths() {
   const sectors = await getCollection('settori');
@@ -23,9 +24,17 @@ const demoLabels = {
 };
 const demoLabel = demoLabels[entry.id] || 'la tua struttura';
 const demoHref = `/demo?settore=${entry.id}`;
+
+const jsonLd = [
+  breadcrumb([
+    { name: 'Settori', path: '/settori' },
+    { name: data.title, path: `/settori/${entry.id}` },
+  ]),
+  ...(data.faq.length ? [faqPage(data.faq)] : []),
+];
 ---
 
-<Base title={data.seoTitle} description={data.seoDescription}>
+<Base title={data.seoTitle} description={data.seoDescription} jsonLd={jsonLd}>
   <!-- Breadcrumb -->
   <nav class="container breadcrumb" aria-label="Percorso">
     <a href="/settori">Settori</a>
