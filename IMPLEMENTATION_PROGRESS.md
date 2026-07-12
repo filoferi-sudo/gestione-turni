@@ -2184,3 +2184,58 @@ focus/contrasti misurati nel browser; nessun nuovo warning console. Audit finale
 ## In sospeso (raccomandazioni future, non bloccanti)
 Dark mode/temi tenant sui token; `<button>`/`<dialog>` nativi dove possibile; refactor del selettore
 globale `button` verso classi; onboarding first-run (attivazione guidata Dirigente).
+
+---
+
+# Iniziativa: Sito marketing pubblico Planivo (`website/`, planivo.it) ✅
+
+> Terzo progetto del monorepo: sito marketing statico su `planivo.it`, **additivo**, senza toccare la
+> logica del gestionale (servito sotto `/app` via proxy). Completata il **2026-07-12**, tutto
+> verificato in locale nel browser. Dettaglio e "cosa ricordare" nel changelog di `PROJECT_CONTEXT.md`
+> (voce 2026-07-12). Guida contenuti: `website/README.md`. Go-live: `website/RUNBOOK-PRODUZIONE.md`.
+
+## Fasi (tutte completate)
+
+- **Fase 0 — Audit ✅** — Rotte top-level reali (incluse le pubbliche extra `/verifica-email`,
+  `/azione-email`); **nessun path assoluto da correggere** sotto basename `/app`; `CORS_ORIGIN` =
+  **stringa singola** (un solo origin); `website/` non esisteva.
+- **Fase 1 — Scaffold ✅** — Astro 5 statico, design system a mano (`styles/global.css`, token §3.2),
+  Base/Header/Footer/Seo/Logo/StickyCta, menu mobile (unico micro-script), font display self-hosted con
+  fallback system-ui (TODO_FONT).
+- **Fase 2 — Pagine + screenshot ✅** — Home (signature ShiftGrid animata), funzionalita, prezzi, faq,
+  contatti, chi-siamo, demo (+`?settore=`), grazie, register, privacy/cookie-policy (bozze), 404.
+  Componenti riusabili (LeadForm 4 campi, Chip, CtaSection, FeatureCard, SectorCard, FaqList, Screenshot,
+  Icon in casa). **Screenshot REALI** dall'ambiente demo (puppeteer-core headless, dati fittizi, banner
+  demo nascosto); script `scripts/capture-screenshots.mjs`.
+- **Fase 3 — Settori ✅** — Content collection (4 .md) + `settori/index` + template `[slug]`. Aggiungere
+  un settore = 1 file .md (testato).
+- **Fase 4 — Blog ✅** — Collection blog, listing con filtro categoria, template articolo con TOC
+  automatico, 3 articoli seed (~900 parole, link interni, `TODO revisione founder`).
+- **Fase 5 — SEO ✅** — `Seo.astro`, sitemap (esclude /grazie+404), `robots.txt` (Disallow /app/),
+  JSON-LD (Organization/SoftwareApplication/FAQPage/BreadcrumbList/BlogPosting), **OG image 1200×630
+  generata** (headless Chrome). Nessun prezzo nello schema (cifra non definitiva).
+- **Fase 6 — Backend lead ✅** — `leads` idempotente in `schema.sql` (**senza company_id**),
+  `/api/public/leads` (POST pubblica): honeypot, validazioni IT, throttle DB (5/10min per IP), consent,
+  notifica best-effort (Brevo o Resend). Wiring LeadForm → fetch → `/grazie`. Nessuna modifica al codice
+  esistente.
+- **Fase 7 — Tracking ✅** — Tutto gated su `PUBLIC_GTM_ID`: Consent Mode v2 (default denied) + GTM +
+  banner `vanilla-cookieconsent` (IT). Sempre attivi (funzionali): cattura UTM in sessionStorage +
+  eventi dataLayer. Senza env: **zero script terzi** (libreria banner tree-shaken).
+- **Fase 8 — Dominio /app ✅** — Frontend chirurgico (§2.4): `base '/app/'` + `outDir dist/app`,
+  `basename="/app"`, `noindex`, `vercel.json` SPA. `website/vercel.json` proxy `/app` + redirect legacy
+  (placeholder `TODO_HOST_GESTIONALE`).
+- **Fase 9 — Documentazione ✅** — Changelog `PROJECT_CONTEXT.md`, `website/README.md`,
+  `website/RUNBOOK-PRODUZIONE.md`, questa sezione.
+
+## Verifica (locale, browser + curl — cultura del progetto)
+Build sito pulita (21 pagine); home desktop/mobile + menu + barra sticky; form end-to-end
+(/demo → POST → riga `leads` → /grazie); curl §8.2 tutti verdi (201/400/429, honeypot, smoke rotte
+esistenti intatte); tracking con GTM finto (banner + Consent denied + eventi dataLayer) e zero terzi
+senza env; gestionale base `/app` (build+preview): login demo → `/app/admin`, deep link
+`/app/admin/calendario` hard-load senza 404, asset da `/app/assets/`, logout → `/app/login`, zero errori
+console.
+
+## In sospeso (task umani prima/al go-live — non bloccanti per lo sviluppo)
+`CORS_ORIGIN=https://planivo.it` sul backend (**bloccante al go-live**, stringa singola, solo host);
+`TODO_HOST_GESTIONALE`; env Vercel website; **migrazione `leads` in produzione su conferma esplicita**;
+`TODO_PREZZO`, P.IVA/ragione sociale, font woff2, video/foto founder, testimonianze, revisione legale.

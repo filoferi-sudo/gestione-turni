@@ -1654,6 +1654,62 @@ nessuna decisione HR (disclaimer esplicito in UI: "la valutazione finale spetta 
 
 Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cosa ricordare.
 
+- **2026-07-12** — **Sito marketing pubblico Planivo (`website/`, planivo.it) + endpoint lead —
+  additivo, gestionale servito sotto `/app`**. Nuovo **terzo progetto** del monorepo: sito
+  marketing statico su `planivo.it`, separato dal gestionale ma sullo stesso dominio, **senza
+  toccare la logica dell'app**. Costruito in **9 fasi** (audit → scaffold → pagine → settori → blog
+  → SEO → backend lead → tracking → dominio), tutto verificato in locale nel browser.
+  - **`website/` (nuovo, Astro 5 statico, JS puro)**: design system a mano (`styles/global.css`,
+    token §3.2, verde=coperto/ambra=scoperto), signature **ShiftGrid** animata buco→coperto (rispetta
+    `prefers-reduced-motion`), verde-CTA riservato alla sola azione demo/lead, barra CTA sticky
+    mobile. Pagine: home, funzionalita, prezzi, faq, contatti, chi-siamo, demo (+`?settore=`
+    preselect), grazie (noindex), register, privacy/cookie-policy (bozze da revisionare), 404.
+    Content collection **settori** (ristoranti/bar/piscine/palestre = 1 .md ciascuno) e **blog**
+    (3 articoli seed). SEO: `Seo.astro`, sitemap (esclude /grazie+404), `robots.txt` (Disallow
+    /app/), JSON-LD (Organization/SoftwareApplication/FAQPage/BreadcrumbList/BlogPosting), OG image
+    1200×630 generata. **Font display** Bricolage Grotesque **self-hosted ma non ancora presente**
+    → fallback system-ui attivo (TODO_FONT). **Screenshot REALI** del gestionale generati
+    dall'ambiente **demo** (scenario ristorante, solo dati fittizi, banner demo nascosto via CSS)
+    con puppeteer-core headless — script rigenerabile in `website/scripts/capture-screenshots.mjs`.
+  - **Backend (solo additivo)**: tabella **`leads`** idempotente in coda a `schema.sql` (**senza
+    `company_id`**: dato di piattaforma pre-vendita, nessuna FK), `controllers/leadController.js` +
+    `routes/leads.js` montata in `app.js` su **`/api/public/leads`** (POST, **pubblica, senza auth**):
+    honeypot, validazioni IT, throttle su DB (5/10min per IP), consent. Notifica email al founder
+    **best-effort** (Brevo se `BREVO_API_KEY`, altrimenti **Resend** — provider già del progetto — se
+    `RESEND_API_KEY`; skip silenzioso). **Nessuna** modifica ad auth/controller/middleware esistenti.
+    Nuove env in `.env.example`: `LEAD_NOTIFY_EMAIL`/`BREVO_API_KEY`/`LEAD_NOTIFY_FROM`.
+  - **Frontend (chirurgico e reversibile, §2.4 — nessun componente/stile/logica toccati)**:
+    `vite.config.js` `base:'/app/'` + `build.outDir:'dist/app'`; `main.jsx`
+    `<BrowserRouter basename="/app">`; `index.html` `meta robots noindex`; `vercel.json` nuovo
+    (SPA `/app/:path*`→`/app/index.html`, redirect `/`→`/app`, `/login`→`/app/login`). **Fix path
+    assoluti: nessuno** (audit: `window.location`/`<a href>` tutti sicuri; i `<Link>` react-router
+    ereditano il basename). `website/vercel.json` fa da **proxy** verso `/app` + redirect legacy
+    (`/login`,`/first-access`,`/verifica-email`,`/azione-email` 302; `/dirigente|/admin|/dashboard|
+    /superadmin` 301) con placeholder **`TODO_HOST_GESTIONALE`**.
+  - **Decisioni prese**: `leads` **senza company_id**; **`/register` = attivazione guidata** (il
+    prodotto NON ha self-signup, invariante confermata — URL riservata al futuro flusso abbonamenti);
+    il **dominio `planivo.it` va sul progetto website**, il gestionale resta raggiungibile via proxy
+    `/app`; tracking (GTM+banner cookie vanilla-cookieconsent) **interamente gated su
+    `PUBLIC_GTM_ID`** (senza env: zero script terzi, libreria banner tree-shaken); l'attribuzione
+    UTM in sessionStorage e gli eventi dataLayer restano attivi (funzionali).
+  - **VERIFICATO in locale**: build sito pulita (21 pagine); form end-to-end (/demo→POST→riga in
+    `leads`→/grazie); curl §8.2 tutti passati (201/400/429, honeypot, smoke login/demo intatti);
+    tracking con GTM finto (banner + Consent Mode denied + eventi dataLayer), senza env zero terzi;
+    gestionale con base `/app` (build+preview): login demo→/app/admin, deep link
+    `/app/admin/calendario` in hard-load senza 404, asset da `/app/assets/`, logout→/app/login,
+    zero errori console.
+  - **DA FARE prima/al go-live (TODO ben visibili nel codice)**: **⚠️ `CORS_ORIGIN`** sul backend va
+    impostato a `https://planivo.it` (**stringa singola**: il codice `app.js` accetta un solo origin;
+    `www`→apex a livello Vercel; **solo schema+host, mai un path** — fu la causa dell'incidente login);
+    `TODO_HOST_GESTIONALE` in `website/vercel.json`; `PUBLIC_API_URL`/`PUBLIC_GTM_ID`/`PUBLIC_CALENDLY_URL`
+    su Vercel website; **migrazione `leads` in produzione** SOLO su conferma esplicita (`npm run
+    migrate`); `TODO_PREZZO`, `vat`/`legalName` (omessi finché null), foto founder, video hero,
+    revisione legale privacy/cookie. Runbook completo in **`website/RUNBOOK-PRODUZIONE.md`**; guida
+    contenuti in **`website/README.md`**.
+  - **Ricordare**: il sito è **statico e senza stato** (non legge il JWT/localStorage del gestionale,
+    niente service worker); **non definire MAI rotte sotto `/app` dal sito**; le modifiche al
+    gestionale sono **solo routing** → rollback = riassegnare il dominio al frontend + revert del
+    commit "frontend: base /app". Aggiungere un settore/articolo = **un file .md** (nessun codice).
 - **2026-07-11** — **Tour guidato pertinente al ruolo (fix demo Dipendente; nessun cambio ai
   permessi)**. Problema: il banner demo proponeva a OGNI persona il tour 'commerciale' (narrazione
   da manager: approvare richieste, "Trova sostituzione", proposte) — per il Cameriere descriveva
