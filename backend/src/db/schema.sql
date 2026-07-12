@@ -971,3 +971,32 @@ CREATE TABLE IF NOT EXISTS user_permission_overrides (
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_permission_overrides_user ON user_permission_overrides(user_id);
+
+-- ============================================================================
+-- Lead pubblici (sito marketing planivo.it — raccolta richieste demo/contatto)
+-- ============================================================================
+-- Dato di PIATTAFORMA pre-vendita: un lead NON è ancora un cliente e non appartiene ad alcuna
+-- società, quindi NIENTE company_id e nessuna FK (coerente con la scelta fatta per le tabelle dove
+-- company_id non ha senso). Popolata da POST /api/public/leads, rotta PUBBLICA senza autenticazione.
+-- Idempotente come il resto del file (CREATE TABLE/INDEX IF NOT EXISTS).
+CREATE TABLE IF NOT EXISTS leads (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  business_type TEXT NOT NULL,          -- ristorante|bar|piscina|palestra|altro
+  employees_range TEXT,                 -- 1-5|6-15|16-30|30+
+  message TEXT,
+  form_source TEXT,                     -- demo|register|contatti
+  landing_path TEXT,
+  utm_source TEXT, utm_medium TEXT, utm_campaign TEXT, utm_content TEXT, utm_term TEXT,
+  referrer TEXT,
+  ip TEXT,
+  user_agent TEXT,
+  privacy_consent BOOLEAN NOT NULL DEFAULT false,
+  consent_at TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'new',   -- new|contacted|won|lost (uso futuro, gestione commerciale)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at);
+CREATE INDEX IF NOT EXISTS idx_leads_ip_created ON leads(ip, created_at);

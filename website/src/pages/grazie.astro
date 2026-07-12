@@ -1,0 +1,61 @@
+---
+import Base from '../layouts/Base.astro';
+import Icon from '../components/Icon.astro';
+import { site, telHref, whatsappHref } from '../data/site.js';
+
+// Pagina di ringraziamento: noindex, esclusa dalla sitemap. È l'URL di conversione delle campagne
+// (evento generate_lead spinto in Fase 7). Se PUBLIC_CALENDLY_URL è impostata, mostra l'embed.
+const calendly = import.meta.env.PUBLIC_CALENDLY_URL;
+---
+
+<Base
+  title="Richiesta ricevuta"
+  description="Grazie: abbiamo ricevuto la tua richiesta."
+  noindex={true}
+  showStickyCta={false}
+>
+  <section class="section thanks">
+    <div class="container thanks__inner">
+      <span class="thanks__badge" aria-hidden="true"><Icon name="check" size={30} /></span>
+      <h1>Richiesta ricevuta!</h1>
+      <p class="lead">Ti chiamiamo <strong>entro 24 ore</strong> (lun–sab). Nel frattempo, se vuoi, puoi scriverci direttamente.</p>
+
+      <div class="cluster thanks__contacts">
+        <a href={telHref} class="btn btn-outline" data-track="click-tel"><Icon name="phone" size={18} /> {site.phoneDisplay}</a>
+        <a href={whatsappHref} class="btn btn-ghost" target="_blank" rel="noopener" data-track="click-whatsapp"><Icon name="whatsapp" size={18} /> WhatsApp</a>
+      </div>
+
+      {
+        calendly && (
+          <div class="thanks__calendly">
+            <h2>Oppure scegli tu subito lo slot</h2>
+            <div class="thanks__embed">
+              <iframe src={calendly} title="Prenota un orario" loading="lazy"></iframe>
+            </div>
+          </div>
+        )
+      }
+
+      <p class="thanks__back"><a href="/" class="arrow-link">Torna alla home
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M8 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a></p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .thanks { text-align: center; }
+  .thanks__inner { max-width: 56ch; margin-inline: auto; }
+  .thanks__badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 64px; height: 64px; border-radius: 50%;
+    background: var(--c-primary); color: #fff; margin-bottom: 1.25rem;
+  }
+  .thanks h1 { margin-bottom: 0.75rem; }
+  .thanks__contacts { justify-content: center; margin-top: 1.75rem; }
+  .thanks__calendly { margin-top: 2.5rem; }
+  .thanks__calendly h2 { font-size: 1.25rem; margin-bottom: 1rem; }
+  .thanks__embed { position: relative; width: 100%; min-height: 640px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--c-border); }
+  .thanks__embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .thanks__back { margin-top: 2rem; }
+</style>

@@ -1,0 +1,5 @@
+---
+// Chip di copertura riusabile (la signature in miniatura). state: 'coperto' | 'scoperto'.
+const { state = 'coperto', label } = Astro.props;
+---
+<span class:list={['chip', `chip--${state}`]}>{label}</span>

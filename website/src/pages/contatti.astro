@@ -1,0 +1,81 @@
+---
+import Base from '../layouts/Base.astro';
+import LeadForm from '../components/LeadForm.astro';
+import Icon from '../components/Icon.astro';
+import { site, telHref, mailHref, whatsappHref } from '../data/site.js';
+---
+
+<Base
+  title="Contatti"
+  description="Parla con noi di Planivo: telefono, WhatsApp o email. Ti rispondiamo direttamente, in italiano, entro 24 ore nei giorni lavorativi."
+>
+  <section class="section contatti">
+    <div class="container contatti__grid">
+      <div class="contatti__info">
+        <p class="eyebrow">Contatti</p>
+        <h1>Parliamone.</h1>
+        <p class="lead">Chiamaci, scrivici su WhatsApp o mandaci una mail: rispondiamo noi, direttamente. Niente call center.</p>
+
+        <ul class="contatti__channels">
+          <li>
+            <a href={telHref} data-track="click-tel"><span class="contatti__ic"><Icon name="phone" size={20} /></span>
+              <span><strong>{site.phoneDisplay}</strong><em>Telefono — chiamaci pure</em></span>
+            </a>
+          </li>
+          <li>
+            <a href={whatsappHref} target="_blank" rel="noopener" data-track="click-whatsapp"><span class="contatti__ic"><Icon name="whatsapp" size={20} /></span>
+              <span><strong>WhatsApp</strong><em>Scrivici, spesso è il modo più veloce</em></span>
+            </a>
+          </li>
+          <li>
+            <a href={mailHref} data-track="click-email"><span class="contatti__ic"><Icon name="mail" size={20} /></span>
+              <span><strong>{site.email}</strong><em>Email</em></span>
+            </a>
+          </li>
+        </ul>
+
+        <p class="contatti__hours">
+          <Icon name="clock" size={18} /> Rispondiamo entro 24 ore nei giorni lavorativi (lun–sab).
+        </p>
+      </div>
+
+      <div class="card contatti__form">
+        <h2>Lasciaci un messaggio</h2>
+        <p class="contatti__form-sub">Ti ricontattiamo noi, quando preferisci.</p>
+        <LeadForm source="contatti" submitLabel="Invia la richiesta" compact={true} />
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .contatti__grid { display: grid; gap: clamp(1.75rem, 4vw, 3rem); align-items: start; }
+  @media (min-width: 880px) { .contatti__grid { grid-template-columns: 1fr 1fr; } }
+  .contatti h1 { margin: 0.75rem 0 0.75rem; }
+
+  .contatti__channels { list-style: none; margin: 2rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+  .contatti__channels a {
+    display: flex; align-items: center; gap: 0.9rem;
+    padding: 1rem;
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius);
+    background: var(--c-bg);
+    text-decoration: none;
+    transition: border-color var(--t), background var(--t);
+  }
+  .contatti__channels a:hover { border-color: var(--c-primary); background: var(--c-surface); }
+  .contatti__ic {
+    flex: none; width: 44px; height: 44px; border-radius: 12px;
+    background: var(--c-primary-tint); color: var(--c-primary-dark);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .contatti__channels span span, .contatti__channels > li a > span { display: flex; flex-direction: column; }
+  .contatti__channels strong { color: var(--c-ink); }
+  .contatti__channels em { font-style: normal; color: var(--c-muted); font-size: 0.88rem; }
+
+  .contatti__hours { display: flex; align-items: center; gap: 0.5rem; margin-top: 1.5rem; color: var(--c-muted); font-size: 0.95rem; }
+  .contatti__hours svg { color: var(--c-primary); flex: none; }
+
+  .contatti__form h2 { font-size: 1.35rem; }
+  .contatti__form-sub { color: var(--c-muted); margin-bottom: 1.25rem; }
+</style>

@@ -1,0 +1,113 @@
+---
+import Base from '../layouts/Base.astro';
+import LeadForm from '../components/LeadForm.astro';
+import Icon from '../components/Icon.astro';
+import { site, telHref, whatsappHref } from '../data/site.js';
+
+const steps = [
+  { n: 1, t: 'Ti richiamiamo entro 24 ore', d: 'Un contatto diretto (lun–sab), non un call center.' },
+  { n: 2, t: 'Demo di 15–20 minuti', d: 'Anche in video-call: ti mostriamo Planivo sui tuoi turni reali.' },
+  { n: 3, t: 'Se ti convince, pilota gratuito', d: 'Un mese per provarlo davvero. Decidi solo alla fine.' },
+];
+const microFaq = [
+  { q: 'Quanto dura la demo?', a: '15–20 minuti, il tempo di mostrarti l’essenziale sui tuoi turni.' },
+  { q: 'Devo preparare qualcosa?', a: 'No. Basta un’idea di come sono organizzati oggi i tuoi turni.' },
+  { q: 'E se poi non fa per me?', a: 'Nessun problema e nessun costo: il pilota è gratuito e senza vincoli.' },
+];
+---
+
+<Base
+  title="Prenota una demo gratuita di Planivo"
+  description="Prenota una demo gratuita di 15 minuti: ti mostriamo Planivo sui tuoi turni reali. Ti richiamiamo entro 24 ore. Nessun impegno, pilota gratuito."
+  noindex={false}
+  showStickyCta={false}
+>
+  <section class="section demo">
+    <div class="container demo__grid">
+      <!-- Colonna form (form-first su mobile) -->
+      <div class="demo__form-col">
+        <p class="eyebrow">Demo gratuita</p>
+        <h1>Prenota una demo gratuita di 15 minuti<span data-demo-suffix></span>.</h1>
+        <p class="lead">Nessun impegno. Ti mostriamo Planivo direttamente sui tuoi turni reali.</p>
+        <div class="card demo__form-card">
+          <LeadForm source="demo" submitLabel="Prenota la demo gratuita" />
+        </div>
+      </div>
+
+      <!-- Colonna "cosa succede dopo" -->
+      <aside class="demo__aside">
+        <div class="card demo__next">
+          <h2>Cosa succede dopo</h2>
+          <ol class="demo__steps">
+            {steps.map((s) => (
+              <li>
+                <span class="demo__step-n num">{s.n}</span>
+                <div><strong>{s.t}</strong><span>{s.d}</span></div>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div class="demo__faq">
+          <h2>Domande veloci</h2>
+          {microFaq.map((f) => (
+            <details class="faq-item" name="demo-faq">
+              <summary><span>{f.q}</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+              </summary>
+              <div class="faq-item__body"><p>{f.a}</p></div>
+            </details>
+          ))}
+        </div>
+
+        <div class="demo__contact">
+          <p>Preferisci scriverci subito?</p>
+          <div class="cluster">
+            <a href={telHref} class="btn btn-ghost" data-track="click-tel"><Icon name="phone" size={18} /> {site.phoneDisplay}</a>
+            <a href={whatsappHref} class="btn btn-ghost" target="_blank" rel="noopener" data-track="click-whatsapp"><Icon name="whatsapp" size={18} /> WhatsApp</a>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .demo__grid {
+    display: grid;
+    gap: clamp(1.5rem, 4vw, 3rem);
+    align-items: start;
+  }
+  @media (min-width: 900px) { .demo__grid { grid-template-columns: 1.05fr 0.95fr; } }
+  .demo h1 { margin: 0.75rem 0 0.75rem; }
+  .demo__form-card { margin-top: 1.5rem; }
+
+  .demo__next h2, .demo__faq h2 { font-size: 1.25rem; margin-bottom: 1rem; }
+  .demo__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1rem; }
+  .demo__steps li { display: flex; gap: 0.85rem; align-items: flex-start; }
+  .demo__step-n {
+    flex: none; width: 34px; height: 34px; border-radius: 10px;
+    background: var(--c-primary-tint); color: var(--c-primary-dark);
+    display: flex; align-items: center; justify-content: center; font-weight: 700;
+  }
+  .demo__steps div { display: flex; flex-direction: column; }
+  .demo__steps strong { color: var(--c-ink); }
+  .demo__steps span { color: var(--c-muted); font-size: 0.92rem; }
+
+  .demo__faq { margin-top: 2rem; }
+  .demo__contact { margin-top: 2rem; }
+  .demo__contact > p { color: var(--c-muted); margin-bottom: 0.6rem; }
+</style>
+
+<script>
+  // Adatta H1 e preseleziona il tipo struttura in base a ?settore= (landing per campagna).
+  const map = { ristoranti: ['ristorante', 'il tuo ristorante'], bar: ['bar', 'il tuo bar'], piscine: ['piscina', 'la tua piscina'], palestre: ['palestra', 'la tua palestra'] };
+  const settore = new URLSearchParams(location.search).get('settore');
+  if (settore && map[settore]) {
+    const [value, label] = map[settore];
+    const suffix = document.querySelector('[data-demo-suffix]');
+    if (suffix) suffix.textContent = ` per ${label}`;
+    const radio = document.querySelector(`input[name="business_type"][value="${value}"]`);
+    if (radio) radio.checked = true;
+  }
+</script>

@@ -1,0 +1,274 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import ShiftGrid from '../components/ShiftGrid.astro';
+import FeatureCard from '../components/FeatureCard.astro';
+import SectorCard from '../components/SectorCard.astro';
+import CtaSection from '../components/CtaSection.astro';
+import FaqList from '../components/FaqList.astro';
+import TrustBar from '../components/TrustBar.astro';
+import Icon from '../components/Icon.astro';
+import { site } from '../data/site.js';
+import { features, steps } from '../data/features.js';
+import { faq } from '../data/faq.js';
+import { pricing } from '../data/pricing.js';
+import { softwareApplication, faqPage } from '../lib/jsonld.js';
+
+const sectors = (await getCollection('settori')).sort((a, b) => a.data.order - b.data.order);
+const topFaq = faq.slice(0, 4);
+
+const problems = [
+  {
+    title: 'Ore perse ogni settimana',
+    text: 'Il responsabile passa ore, ogni settimana, a incastrare turni, rispondere a messaggi e rifare il foglio a ogni cambio.',
+  },
+  {
+    title: 'Buchi di copertura reali',
+    text: 'Nel weekend pieno un’assenza non gestita è un turno scoperto — cioè servizio in difficoltà e incasso perso.',
+  },
+  {
+    title: 'Tre fonti, tre verità',
+    text: 'Il dipendente guarda il foglio, la chat e la bacheca e trova tre versioni diverse. Nessuno sa qual è quella giusta.',
+  },
+];
+---
+
+<Base title={`${site.name} — ${site.tagline}`} jsonLd={[softwareApplication(), faqPage(topFaq)]}>
+  <!-- 1. HERO -->
+  <section class="hero">
+    <div class="container hero__grid">
+      <div class="hero__copy">
+        <p class="eyebrow">Per ristoranti, bar, piscine, palestre</p>
+        <h1>Basta Excel e WhatsApp per i turni.</h1>
+        <p class="lead">
+          Planivo organizza turni e sostituzioni del tuo personale — ristoranti, bar, piscine,
+          palestre e ogni attività che lavora su turni. Si impara in 5 minuti, si vede il risultato
+          dalla prima settimana.
+        </p>
+        <div class="cluster hero__cta">
+          <a href="/demo" class="btn btn-primary btn--lg" data-track="cta-demo">Prenota una demo gratuita</a>
+          <a href="/funzionalita" class="arrow-link">
+            Guarda come funziona
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M8 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+        </div>
+        <div class="hero__trust"><TrustBar /></div>
+      </div>
+      <div class="hero__visual">
+        <ShiftGrid animated={true} />
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. IL PROBLEMA -->
+  <section class="section section--paper">
+    <div class="container">
+      <div class="section__head">
+        <p class="eyebrow">Il problema</p>
+        <h2>Excel + WhatsApp + foglio in bacheca non è un sistema.</h2>
+        <p>È una speranza. E ogni settimana ti costa tempo e turni scoperti.</p>
+      </div>
+      <div class="grid grid--3">
+        {
+          problems.map((p) => (
+            <article class="card problem-card">
+              <span class="problem-card__icon" aria-hidden="true"><Icon name="alert" size={20} /></span>
+              <h3>{p.title}</h3>
+              <p>{p.text}</p>
+            </article>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. COME FUNZIONA -->
+  <section class="section">
+    <div class="container">
+      <div class="section__head">
+        <p class="eyebrow">Come funziona</p>
+        <h2>Operativo in tre passi.</h2>
+      </div>
+      <ol class="steps">
+        {
+          steps.map((s) => (
+            <li class="step">
+              <span class="step__n num">{s.n}</span>
+              <div>
+                <h3>{s.title}</h3>
+                <p>{s.text}</p>
+              </div>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </section>
+
+  <!-- 4. FUNZIONALITÀ -->
+  <section class="section section--paper">
+    <div class="container">
+      <div class="section__head">
+        <p class="eyebrow">Funzionalità</p>
+        <h2>Tutto quello che serve per non scoprire più un turno.</h2>
+      </div>
+      <div class="grid grid--3">
+        {features.map((f) => <FeatureCard feature={f} href={`/funzionalita#${f.id}`} />)}
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. PER CHI È -->
+  <section class="section">
+    <div class="container">
+      <div class="section__head">
+        <p class="eyebrow">Per chi è</p>
+        <h2>Pensato per chi lavora su turni.</h2>
+      </div>
+      <div class="grid grid--4">
+        {
+          sectors.map((s) => (
+            <SectorCard title={s.data.title} hook={s.data.hook} href={`/settori/${s.id}`} icon={s.data.icon} />
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. PROVA SOCIALE (predisposta, senza claim inventati) -->
+  <section class="section section--surface">
+    <div class="container social-proof">
+      <p class="eyebrow">Perché fidarsi</p>
+      <h2 class="social-proof__title">Costruito con chi i turni li fa davvero.</h2>
+      <p class="social-proof__text">
+        Planivo nasce dentro strutture reali in {site.region}, non a tavolino. Le prime strutture di
+        ogni settore partono con un <strong>pilota gratuito</strong>: nessun rischio, si valuta sul campo.
+      </p>
+      {/* TODO testimonianze pilota: struttura pronta (citazione, nome, ruolo, struttura). */}
+      <div class="social-proof__pilot"><TrustBar pilot={true} /></div>
+    </div>
+  </section>
+
+  <!-- 7. PREZZI IN SINTESI -->
+  <section class="section">
+    <div class="container price-teaser">
+      <div class="price-teaser__copy">
+        <p class="eyebrow">Prezzi</p>
+        <h2>Un prezzo per sede, non per dipendente.</h2>
+        <p class="lead">Con lo staff stagionale non hai sorprese: gli account sono illimitati e il canone resta lo stesso.</p>
+        <a href="/prezzi" class="btn btn-outline">Vedi i prezzi</a>
+      </div>
+      <div class="price-teaser__card card">
+        <p class="price-teaser__from">da <span class="num price-teaser__amount">{pricing.priceFrom}</span></p>
+        <p class="price-teaser__unit">{pricing.unit}</p>
+        <ul class="price-teaser__list">
+          {pricing.included.slice(0, 4).map((i) => (
+            <li><Icon name="check" size={17} /> {i}</li>
+          ))}
+        </ul>
+        <a href="/demo" class="btn btn-primary btn--block" data-track="cta-demo">Inizia il pilota gratuito</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. FAQ TOP 4 -->
+  <section class="section section--paper">
+    <div class="container faq-home">
+      <div class="section__head">
+        <p class="eyebrow">Domande frequenti</p>
+        <h2>Le risposte che cerchi.</h2>
+      </div>
+      <FaqList items={topFaq} />
+      <p class="faq-home__more"><a href="/faq" class="arrow-link">Tutte le domande frequenti
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M8 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a></p>
+    </div>
+  </section>
+
+  <!-- 9. CTA FINALE -->
+  <CtaSection
+    title="15 minuti, nessun impegno."
+    text="Ti mostriamo Planivo sui tuoi turni reali. Poi decidi tu."
+  />
+</Base>
+
+<style>
+  /* HERO — asimmetrico su desktop (testo a sinistra, griglia a destra) */
+  .hero { padding-block: clamp(2.5rem, 6vw, 5rem); overflow: hidden; }
+  .hero__grid {
+    display: grid;
+    gap: clamp(2rem, 5vw, 3.5rem);
+    align-items: center;
+  }
+  .hero__copy h1 { margin: 0.75rem 0 1.1rem; }
+  .hero__cta { margin-top: 2rem; }
+  .hero__trust { margin-top: 1.75rem; }
+  .hero__visual { display: flex; justify-content: center; }
+  @media (min-width: 940px) {
+    .hero__grid { grid-template-columns: 1.15fr 0.85fr; }
+    .hero__visual { justify-content: flex-end; }
+  }
+
+  /* Problema — accento ambra */
+  .problem-card { border-left: 3px solid var(--c-gap); }
+  .problem-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--c-gap-tint);
+    color: var(--c-gap-ink);
+    margin-bottom: 0.5rem;
+  }
+
+  /* Steps */
+  .steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 1.25rem;
+    counter-reset: step;
+  }
+  @media (min-width: 800px) { .steps { grid-template-columns: repeat(3, 1fr); } }
+  .step { display: flex; gap: 1rem; align-items: flex-start; }
+  .step__n {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--c-primary);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.2rem;
+  }
+  .step h3 { margin-bottom: 0.35rem; }
+  .step p { color: var(--c-body); }
+
+  /* Prova sociale */
+  .social-proof { max-width: 62ch; }
+  .social-proof__title { margin: 0.5rem 0 0.75rem; }
+  .social-proof__text { color: var(--c-body); font-size: 1.075rem; }
+  .social-proof__pilot { margin-top: 1.5rem; }
+
+  /* Prezzi teaser */
+  .price-teaser {
+    display: grid;
+    gap: clamp(1.5rem, 4vw, 3rem);
+    align-items: center;
+  }
+  @media (min-width: 860px) { .price-teaser { grid-template-columns: 1fr 0.8fr; } }
+  .price-teaser__from { font-size: 1rem; color: var(--c-muted); }
+  .price-teaser__amount { font-size: 2.6rem; font-weight: 700; color: var(--c-ink); font-family: var(--font-display); }
+  .price-teaser__unit { color: var(--c-muted); margin-bottom: 1.25rem; }
+  .price-teaser__list { list-style: none; margin: 0 0 1.5rem; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+  .price-teaser__list li { display: flex; align-items: center; gap: 0.5rem; color: var(--c-body); }
+  .price-teaser__list svg { color: var(--c-primary); flex: none; }
+
+  .faq-home__more { margin-top: 1.5rem; }
+</style>

@@ -1,0 +1,17 @@
+# Astro build output e cache
+dist/
+.astro/
+
+# Dipendenze
+node_modules/
+
+# Ambiente (mai committare valori reali)
+.env
+.env.local
+.env.production
+
+# Vercel
+.vercel
+
+# Sistema
+.DS_Store

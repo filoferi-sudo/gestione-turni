@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: /app/
+Disallow: /grazie
+Sitemap: https://planivo.it/sitemap-index.xml

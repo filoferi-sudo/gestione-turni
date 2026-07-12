@@ -1,0 +1,270 @@
+---
+// Header sticky (~64px). Logo wordmark "Planivo" (verde) → /. Nav: Funzionalità, Settori (dropdown),
+// Prezzi, Blog, Contatti. A destra: "Accedi" (→ /login, redirect a /app/login lato dominio) + CTA
+// verde "Demo gratuita" (→ /demo). Il verde-CTA è riservato alla conversione: qui è corretto.
+import Logo from './Logo.astro';
+
+const settori = [
+  { label: 'Ristoranti', href: '/settori/ristoranti' },
+  { label: 'Bar', href: '/settori/bar' },
+  { label: 'Piscine', href: '/settori/piscine' },
+  { label: 'Palestre', href: '/settori/palestre' },
+];
+const nav = [
+  { label: 'Funzionalità', href: '/funzionalita' },
+  { label: 'Prezzi', href: '/prezzi' },
+  { label: 'Blog', href: '/blog' },
+  { label: 'Contatti', href: '/contatti' },
+];
+const path = Astro.url.pathname;
+const isActive = (href) => path === href || (href !== '/' && path.startsWith(href));
+---
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a href="/" class="brand" aria-label="Planivo — home">
+      <Logo />
+    </a>
+
+    <nav class="site-nav" aria-label="Navigazione principale" data-nav>
+      <ul class="nav-list">
+        <li><a href="/funzionalita" class:list={['nav-link', { 'is-active': isActive('/funzionalita') }]}>Funzionalità</a></li>
+        <li class="has-dropdown">
+          <a href="/settori" class:list={['nav-link', { 'is-active': isActive('/settori') }]} aria-haspopup="true">
+            Settori
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5L6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <div class="dropdown">
+            <ul>
+              {settori.map((s) => <li><a href={s.href}>{s.label}</a></li>)}
+              <li><a href="/settori" class="dropdown-all">Tutti i settori →</a></li>
+            </ul>
+          </div>
+        </li>
+        <li><a href="/prezzi" class:list={['nav-link', { 'is-active': isActive('/prezzi') }]}>Prezzi</a></li>
+        <li><a href="/blog" class:list={['nav-link', { 'is-active': isActive('/blog') }]}>Blog</a></li>
+        <li><a href="/contatti" class:list={['nav-link', { 'is-active': isActive('/contatti') }]}>Contatti</a></li>
+      </ul>
+      <div class="nav-actions">
+        <a href="/login" class="nav-link nav-login">Accedi</a>
+        <a href="/demo" class="btn btn-primary nav-cta" data-track="cta-demo">Demo gratuita</a>
+      </div>
+    </nav>
+
+    <button
+      type="button"
+      class="nav-toggle"
+      aria-label="Apri il menu"
+      aria-expanded="false"
+      aria-controls="site-nav"
+      data-nav-toggle
+    >
+      <span class="nav-toggle__bar"></span>
+      <span class="nav-toggle__bar"></span>
+      <span class="nav-toggle__bar"></span>
+    </button>
+  </div>
+</header>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: color-mix(in srgb, var(--c-bg) 88%, transparent);
+    backdrop-filter: saturate(140%) blur(8px);
+    border-bottom: 1px solid var(--c-border);
+  }
+  .header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 64px;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    flex: none;
+  }
+
+  .site-nav {
+    display: flex;
+    align-items: center;
+    gap: clamp(1rem, 2.5vw, 2rem);
+  }
+  .nav-list {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.75rem, 2vw, 1.5rem);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.975rem;
+    color: var(--c-ink);
+    text-decoration: none;
+    padding: 0.4rem 0;
+    border-bottom: 2px solid transparent;
+  }
+  .nav-link:hover { color: var(--c-primary-dark); }
+  .nav-link.is-active { color: var(--c-primary-dark); border-bottom-color: var(--c-primary); }
+
+  .nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .nav-login { white-space: nowrap; }
+
+  /* Dropdown Settori — CSS-only (hover + focus-within), accessibile via tastiera */
+  .has-dropdown { position: relative; }
+  .dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%) translateY(6px);
+    min-width: 200px;
+    background: var(--c-bg);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lift);
+    padding: 0.5rem;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--t), transform var(--t), visibility var(--t);
+  }
+  .has-dropdown:hover .dropdown,
+  .has-dropdown:focus-within .dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+  }
+  .dropdown ul { list-style: none; margin: 0; padding: 0; }
+  .dropdown a {
+    display: block;
+    padding: 0.55rem 0.75rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--c-ink);
+    text-decoration: none;
+  }
+  .dropdown a:hover { background: var(--c-surface); color: var(--c-primary-dark); }
+  .dropdown-all { color: var(--c-primary-dark) !important; }
+
+  /* Hamburger */
+  .nav-toggle {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 44px;
+    height: 44px;
+    background: transparent;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .nav-toggle__bar {
+    width: 20px;
+    height: 2px;
+    background: var(--c-ink);
+    margin-inline: auto;
+    transition: transform var(--t), opacity var(--t);
+  }
+
+  /* ----- Mobile ----- */
+  @media (max-width: 900px) {
+    .nav-toggle { display: flex; }
+    .site-nav {
+      position: fixed;
+      inset: 64px 0 auto 0;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0;
+      background: var(--c-bg);
+      border-bottom: 1px solid var(--c-border);
+      box-shadow: var(--shadow-lift);
+      padding: 1rem var(--gutter) 1.5rem;
+      max-height: calc(100dvh - 64px);
+      overflow-y: auto;
+      transform: translateY(-8px);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity var(--t), transform var(--t), visibility var(--t);
+    }
+    .site-nav.is-open {
+      transform: translateY(0);
+      opacity: 1;
+      visibility: visible;
+    }
+    .nav-list {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0;
+    }
+    .nav-list > li { border-bottom: 1px solid var(--c-border); }
+    .nav-link { padding: 0.9rem 0; font-size: 1.075rem; }
+    .nav-link.is-active { border-bottom-color: transparent; }
+    /* Sul mobile il dropdown è sempre espanso (niente hover) */
+    .dropdown {
+      position: static;
+      transform: none;
+      opacity: 1;
+      visibility: visible;
+      box-shadow: none;
+      border: none;
+      padding: 0 0 0.5rem 0.75rem;
+      min-width: 0;
+    }
+    .dropdown a { padding: 0.6rem 0; }
+    .nav-actions {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.75rem;
+      margin-top: 1.25rem;
+    }
+    .nav-login {
+      justify-content: center;
+      padding: 0.75rem;
+      border: 1.5px solid var(--c-border);
+      border-radius: var(--radius);
+    }
+    .nav-cta { width: 100%; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .site-nav, .dropdown { transition: none; }
+  }
+</style>
+
+<script>
+  // Unico micro-script del sito (menu mobile). Toggle + chiusura su Esc / resize a desktop.
+  const toggle = document.querySelector('[data-nav-toggle]');
+  const nav = document.querySelector('[data-nav]');
+  if (toggle && nav) {
+    const setOpen = (open) => {
+      nav.classList.toggle('is-open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.setAttribute('aria-label', open ? 'Chiudi il menu' : 'Apri il menu');
+      document.body.style.overflow = open && window.innerWidth <= 900 ? 'hidden' : '';
+    };
+    toggle.addEventListener('click', () => setOpen(nav.classList.contains('is-open') ? false : true));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    });
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 900) setOpen(false);
+    });
+    // Chiudi il menu quando si naviga verso un'ancora della stessa pagina
+    nav.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => setOpen(false)));
+  }
+</script>

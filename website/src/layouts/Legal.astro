@@ -1,0 +1,35 @@
+---
+// Layout per le pagine legali: Base + tipografia "prosa" leggibile. Indicizzabili (Meta verifica
+// la raggiungibilità della privacy policy per approvare le campagne).
+import Base from './Base.astro';
+const { title, description, updated } = Astro.props;
+---
+<Base title={title} description={description} showStickyCta={false}>
+  <section class="section legal">
+    <div class="container legal__inner">
+      <h1>{title}</h1>
+      {updated && <p class="legal__updated">Ultimo aggiornamento: {updated}</p>}
+      <div class="legal__prose">
+        <slot />
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style is:global>
+  .legal__inner { max-width: 760px; }
+  .legal__updated { color: var(--c-muted); font-size: 0.9rem; margin-bottom: 2rem; }
+  .legal__prose h2 { font-size: 1.35rem; margin: 2rem 0 0.75rem; }
+  .legal__prose h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
+  .legal__prose p, .legal__prose li { color: var(--c-body); }
+  .legal__prose p { margin-bottom: 1rem; }
+  .legal__prose ul { margin: 0 0 1rem; display: flex; flex-direction: column; gap: 0.4rem; }
+  .legal__prose a { color: var(--c-primary-dark); }
+  .legal__todo {
+    background: var(--c-gap-tint);
+    color: var(--c-gap-ink);
+    border-radius: 6px;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.9em;
+  }
+</style>

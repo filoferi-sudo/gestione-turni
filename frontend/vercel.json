@@ -1,3 +1,15 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "outputDirectory": "dist",
+  "rewrites": [{ "source": "/app/:path*", "destination": "/app/index.html" }],
+  "redirects": [
+    { "source": "/", "destination": "/app", "permanent": false },
+    { "source": "/login", "destination": "/app/login", "permanent": false },
+    { "source": "/first-access", "destination": "/app/first-access", "permanent": false },
+    { "source": "/verifica-email", "destination": "/app/verifica-email", "permanent": false },
+    { "source": "/azione-email", "destination": "/app/azione-email", "permanent": false },
+    { "source": "/dirigente/:path*", "destination": "/app/dirigente/:path*", "permanent": false },
+    { "source": "/admin/:path*", "destination": "/app/admin/:path*", "permanent": false },
+    { "source": "/dashboard/:path*", "destination": "/app/dashboard/:path*", "permanent": false },
+    { "source": "/superadmin/:path*", "destination": "/app/superadmin/:path*", "permanent": false }
+  ]
 }

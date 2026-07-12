@@ -1,0 +1,17 @@
+{
+  "name": "planivo-website",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sito marketing pubblico di Planivo (planivo.it) — Astro statico, JavaScript puro.",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "^3.2.1",
+    "astro": "^5.6.1",
+    "vanilla-cookieconsent": "^3.1.0"
+  }
+}

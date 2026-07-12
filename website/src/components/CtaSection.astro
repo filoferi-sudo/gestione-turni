@@ -1,0 +1,50 @@
+---
+// Sezione CTA riutilizzabile: chiude ogni pagina "importante" verso /demo (§3.4). Il verde-CTA
+// è riservato a questa azione. Sotto il pulsante, micro-copy che abbassa il rischio percepito.
+import { site } from '../data/site.js';
+const {
+  title = '15 minuti, nessun impegno.',
+  text = 'Ti mostriamo Planivo direttamente sui tuoi turni reali.',
+  cta = 'Prenota una demo gratuita',
+  href = '/demo',
+} = Astro.props;
+---
+<section class="section cta-band">
+  <div class="container cta-band__inner">
+    <div class="cta-band__grid" aria-hidden="true"></div>
+    <div class="cta-band__content">
+      <h2>{title}</h2>
+      <p class="lead">{text}</p>
+      <a href={href} class="btn btn-primary btn--lg" data-track="cta-demo">{cta}</a>
+      <p class="cta-band__reassure">{site.reassurance}</p>
+    </div>
+  </div>
+</section>
+
+<style>
+  .cta-band { background: var(--c-primary); color: #fff; }
+  .cta-band__inner { position: relative; overflow: hidden; border-radius: var(--radius-lg); }
+  .cta-band__content { position: relative; text-align: center; max-width: 48ch; margin-inline: auto; }
+  .cta-band h2 { color: #fff; }
+  .cta-band .lead { color: rgba(255, 255, 255, 0.9); margin: 0.75rem auto 1.75rem; }
+  .cta-band .btn-primary {
+    background: #fff;
+    color: var(--c-primary-dark);
+    border-color: #fff;
+  }
+  .cta-band .btn-primary:hover { background: var(--c-primary-tint); border-color: var(--c-primary-tint); }
+  .cta-band__reassure {
+    margin-top: 1rem;
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.85);
+  }
+  /* motivo-griglia tenue sullo sfondo verde (signature come texture discreta) */
+  .cta-band__grid {
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+    background-size: 46px 46px;
+    mask-image: radial-gradient(circle at 50% 40%, #000, transparent 78%);
+  }
+</style>

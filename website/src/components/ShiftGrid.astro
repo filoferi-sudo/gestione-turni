@@ -1,0 +1,243 @@
+---
+// SIGNATURE del sito: la "griglia della settimana". Mini-board 7 giorni con celle-turno.
+// verde = coperto, ambra = scoperto (semantica reale del prodotto). Nella variante hero una
+// singola cella passa da "scoperto" a "coperto" con una micro-animazione ~1,2s al load, e il
+// callout racconta la sostituzione (Marco assente → Giulia ✓). Rispetta prefers-reduced-motion
+// (stato finale "coperto" statico). È l'unico momento "audace": tutto il resto resta quieto.
+//
+// Props:
+//   animated (bool)  → attiva l'animazione buco→coperto (default true)
+//   caption (bool)   → mostra il callout narrativo sotto la griglia (default true)
+//   compact (bool)   → variante ridotta per separatori/decorazione (niente callout)
+const { animated = true, caption = true, compact = false } = Astro.props;
+
+const days = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+
+// Righe = fasce di servizio. Ogni cella: 'coperto' | 'scoperto' | 'gap' (animata) | 'empty'.
+// La cella 'gap' è Venerdì sera: parte scoperta e diventa coperta in sync col callout.
+const rows = [
+  { label: 'Mattina', cells: ['coperto', 'coperto', 'empty', 'coperto', 'coperto', 'coperto', 'empty'] },
+  { label: 'Pomeriggio', cells: ['coperto', 'empty', 'coperto', 'coperto', 'coperto', 'coperto', 'coperto'] },
+  { label: 'Sera', cells: ['coperto', 'coperto', 'coperto', 'empty', 'gap', 'coperto', 'coperto'] },
+];
+const gapClass = animated ? 'is-animated' : 'is-covered';
+---
+
+<div
+  class:list={['shiftgrid', { 'shiftgrid--compact': compact }]}
+  role="img"
+  aria-label="Griglia settimanale dei turni: venerdì sera il turno scoperto di Marco viene coperto da Giulia."
+>
+  {
+    !compact && (
+      <div class="shiftgrid__top" aria-hidden="true">
+        <span class="shiftgrid__title">La tua settimana</span>
+        <span class="shiftgrid__legend">
+          <span class="chip chip--coperto">coperto</span>
+          <span class="chip chip--scoperto">scoperto</span>
+        </span>
+      </div>
+    )
+  }
+
+  <div class="shiftgrid__board" aria-hidden="true">
+    <div class="shiftgrid__corner"></div>
+    {days.map((d) => <div class="shiftgrid__day">{d}</div>)}
+
+    {
+      rows.map((row) => (
+        <>
+          <div class="shiftgrid__rowlabel">{row.label}</div>
+          {row.cells.map((c) => (
+            <div class:list={['cell', `cell--${c}`, c === 'gap' ? gapClass : '']}>
+              {c === 'gap' && <span class="cell__dot cell__dot--gap" />}
+              {c === 'gap' && <span class="cell__dot cell__dot--covered" />}
+              {(c === 'coperto' || c === 'scoperto') && <span class="cell__dot" />}
+            </div>
+          ))}
+        </>
+      ))
+    }
+  </div>
+
+  {
+    caption && !compact && (
+      <div class:list={['shiftgrid__callout', gapClass]} aria-hidden="true">
+        <span class="callout__label">Ven · Sera</span>
+        <span class="callout__chips">
+          <span class="chip chip--scoperto callout__from">Marco · assente</span>
+          <svg class="callout__arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+          <span class="chip chip--coperto callout__to">Giulia ✓</span>
+        </span>
+      </div>
+    )
+  }
+</div>
+
+<style>
+  .shiftgrid {
+    background: var(--c-bg);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lift);
+    padding: clamp(1rem, 3vw, 1.5rem);
+    width: 100%;
+    max-width: 460px;
+  }
+  .shiftgrid--compact {
+    box-shadow: none;
+    border-radius: var(--radius);
+    max-width: 360px;
+    padding: 0.75rem;
+  }
+
+  .shiftgrid__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+  .shiftgrid__title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    color: var(--c-ink);
+    font-size: 1.05rem;
+  }
+  .shiftgrid__legend { display: inline-flex; gap: 0.4rem; }
+  .shiftgrid__legend .chip { font-size: 0.7rem; padding: 0.2rem 0.5rem; }
+
+  /* Board: colonna etichette + 7 giorni */
+  .shiftgrid__board {
+    display: grid;
+    grid-template-columns: auto repeat(7, 1fr);
+    gap: 6px;
+    align-items: center;
+  }
+  .shiftgrid__corner { min-width: 2.5rem; }
+  .shiftgrid__day {
+    text-align: center;
+    font-family: var(--font-num);
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--c-muted);
+    padding-bottom: 2px;
+  }
+  .shiftgrid__rowlabel {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--c-muted);
+    padding-right: 0.4rem;
+    white-space: nowrap;
+  }
+
+  .cell {
+    aspect-ratio: 1;
+    border-radius: 7px;
+    border: 1px solid var(--c-border);
+    background: var(--c-paper);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    min-height: 24px;
+  }
+  .cell--empty { background: transparent; border-style: dashed; opacity: 0.5; }
+  .cell--coperto { background: var(--c-primary-tint); border-color: transparent; }
+  .cell--scoperto { background: var(--c-gap-tint); border-color: transparent; }
+
+  .cell__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--c-primary);
+  }
+  .cell--scoperto .cell__dot { background: var(--c-gap); }
+
+  /* Cella 'gap' animata: due pallini sovrapposti (scoperto → coperto) */
+  .cell--gap { background: var(--c-gap-tint); }
+  .cell__dot--gap,
+  .cell__dot--covered {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+  }
+  .cell__dot--gap { background: var(--c-gap); }
+  .cell__dot--covered { background: var(--c-primary); opacity: 0; }
+
+  /* Stato statico (animated=false o reduced motion): mostra "coperto" */
+  .cell--gap.is-covered { background: var(--c-primary-tint); }
+  .cell--gap.is-covered .cell__dot--gap { opacity: 0; }
+  .cell--gap.is-covered .cell__dot--covered { opacity: 1; }
+
+  /* ---- Callout narrativo ---- */
+  .shiftgrid__callout {
+    margin-top: 1rem;
+    padding-top: 0.9rem;
+    border-top: 1px dashed var(--c-border);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .callout__label {
+    font-family: var(--font-num);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--c-muted);
+  }
+  .callout__chips {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .callout__arrow { color: var(--c-muted); flex: none; }
+
+  /* Stato statico del callout: mostra solo il "coperto" */
+  .shiftgrid__callout.is-covered .callout__from,
+  .shiftgrid__callout.is-covered .callout__arrow { display: none; }
+
+  /* ======= Animazione buco → coperto (~1,2s, parte al load) ======= */
+  .cell--gap.is-animated .cell__dot--gap { animation: gap-out 1.2s ease 0.7s forwards; }
+  .cell--gap.is-animated .cell__dot--covered { animation: gap-in 1.2s ease 0.7s forwards; }
+  .cell--gap.is-animated { animation: cell-bg 1.2s ease 0.7s forwards; }
+
+  .shiftgrid__callout.is-animated .callout__from { animation: chip-out 1.2s ease 0.7s forwards; }
+  .shiftgrid__callout.is-animated .callout__to {
+    opacity: 0;
+    transform: scale(0.9);
+    animation: chip-in 1.2s ease 0.7s forwards;
+  }
+  .shiftgrid__callout.is-animated .callout__arrow { animation: arrow-nudge 1.2s ease 0.7s forwards; }
+
+  @keyframes gap-out { 0%, 40% { opacity: 1; } 70%, 100% { opacity: 0; } }
+  @keyframes gap-in { 0%, 55% { opacity: 0; } 85%, 100% { opacity: 1; } }
+  @keyframes cell-bg {
+    0%, 45% { background: var(--c-gap-tint); }
+    75%, 100% { background: var(--c-primary-tint); }
+  }
+  @keyframes chip-out {
+    0%, 35% { opacity: 1; transform: translateY(0); }
+    65%, 100% { opacity: 0; transform: translateY(-4px); max-width: 0; }
+  }
+  @keyframes chip-in {
+    0%, 55% { opacity: 0; transform: scale(0.9); }
+    80%, 100% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes arrow-nudge {
+    0%, 45% { opacity: 1; }
+    100% { opacity: 0.35; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /* Nessuna animazione: parte già "coperto" (stato finale). */
+    .cell--gap.is-animated { background: var(--c-primary-tint); animation: none; }
+    .cell--gap.is-animated .cell__dot--gap { opacity: 0; animation: none; }
+    .cell--gap.is-animated .cell__dot--covered { opacity: 1; animation: none; }
+    .shiftgrid__callout.is-animated .callout__from,
+    .shiftgrid__callout.is-animated .callout__arrow { display: none; }
+    .shiftgrid__callout.is-animated .callout__to { opacity: 1; transform: none; animation: none; }
+  }
+</style>

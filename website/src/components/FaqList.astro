@@ -1,0 +1,49 @@
+---
+// Accordion FAQ con <details>/<summary> nativi (zero JS). Lo schema FAQPage JSON-LD lo emette la
+// pagina (via Seo), non questo componente. Props: items = [{ q, a }].
+const { items = [] } = Astro.props;
+---
+<div class="faq-list">
+  {
+    items.map((item, i) => (
+      <details class="faq-item" name="faq" open={i === 0}>
+        <summary>
+          <span>{item.q}</span>
+          <svg class="faq-item__chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </summary>
+        <div class="faq-item__body"><p>{item.a}</p></div>
+      </details>
+    ))
+  }
+</div>
+
+<style>
+  .faq-list { display: flex; flex-direction: column; gap: 0.75rem; }
+  .faq-item {
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius);
+    background: var(--c-bg);
+    overflow: hidden;
+  }
+  .faq-item summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.1rem 1.25rem;
+    cursor: pointer;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--c-ink);
+    list-style: none;
+  }
+  .faq-item summary::-webkit-details-marker { display: none; }
+  .faq-item__chevron { flex: none; color: var(--c-muted); transition: transform var(--t); }
+  .faq-item[open] .faq-item__chevron { transform: rotate(180deg); }
+  .faq-item__body { padding: 0 1.25rem 1.2rem; }
+  .faq-item__body p { color: var(--c-body); max-width: 68ch; }
+  @media (prefers-reduced-motion: reduce) {
+    .faq-item__chevron { transition: none; }
+  }
+</style>

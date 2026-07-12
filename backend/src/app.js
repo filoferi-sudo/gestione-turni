@@ -40,6 +40,7 @@ const emailActionRoutes = require('./routes/emailActions');
 const emailLogRoutes = require('./routes/emailLog');
 const demoRoutes = require('./routes/demo');
 const billingRoutes = require('./routes/billing');
+const leadRoutes = require('./routes/leads');
 
 const app = express();
 
@@ -88,6 +89,8 @@ app.use('/api/email-actions', emailActionRoutes);
 app.use('/api/email-log', emailLogRoutes);
 app.use('/api/demo', demoRoutes);
 app.use('/api/billing', billingRoutes);
+// Rotta pubblica (senza auth): raccolta lead dal sito marketing planivo.it.
+app.use('/api/public/leads', leadRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

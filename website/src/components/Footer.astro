@@ -1,0 +1,149 @@
+---
+import Logo from './Logo.astro';
+import { site, telHref, mailHref, whatsappHref } from '../data/site.js';
+
+const year = new Date().getFullYear();
+
+const columns = [
+  {
+    title: 'Prodotto',
+    links: [
+      { label: 'Funzionalità', href: '/funzionalita' },
+      { label: 'Prezzi', href: '/prezzi' },
+      { label: 'FAQ', href: '/faq' },
+      { label: 'Demo gratuita', href: '/demo' },
+    ],
+  },
+  {
+    title: 'Settori',
+    links: [
+      { label: 'Ristoranti', href: '/settori/ristoranti' },
+      { label: 'Bar', href: '/settori/bar' },
+      { label: 'Piscine', href: '/settori/piscine' },
+      { label: 'Palestre', href: '/settori/palestre' },
+    ],
+  },
+  {
+    title: 'Risorse',
+    links: [
+      { label: 'Blog', href: '/blog' },
+      { label: 'Contatti', href: '/contatti' },
+      { label: 'Chi siamo', href: '/chi-siamo' },
+    ],
+  },
+  {
+    title: 'Legale',
+    links: [
+      { label: 'Privacy', href: '/privacy' },
+      { label: 'Cookie policy', href: '/cookie-policy' },
+    ],
+  },
+];
+---
+
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <a href="/" class="footer-logo" aria-label="Planivo — home"><Logo variant="footer" /></a>
+      <p class="footer-tagline">Turni e sostituzioni del personale, senza Excel e senza WhatsApp.</p>
+      <p class="trust-flag footer-flag">🇮🇹 Software italiano, sviluppato in {site.region}</p>
+    </div>
+
+    {
+      columns.map((col) => (
+        <nav class="footer-col" aria-label={col.title}>
+          <h2 class="footer-col__title">{col.title}</h2>
+          <ul>
+            {col.links.map((l) => (
+              <li><a href={l.href}>{l.label}</a></li>
+            ))}
+          </ul>
+        </nav>
+      ))
+    }
+  </div>
+
+  <div class="container footer-contacts">
+    <a href={telHref} data-track="click-tel">{site.phoneDisplay}</a>
+    <span aria-hidden="true">·</span>
+    <a href={mailHref} data-track="click-email">{site.email}</a>
+    <span aria-hidden="true">·</span>
+    <a href={whatsappHref} target="_blank" rel="noopener" data-track="click-whatsapp">WhatsApp</a>
+  </div>
+
+  <div class="container footer-legal">
+    <p>© {year} {site.name}. Tutti i diritti riservati.</p>
+    {/* TODO_PIVA: P.IVA e ragione sociale non ancora disponibili → si omettono finché null. */}
+    {site.vat && <p>P.IVA {site.vat}{site.legalName ? ` · ${site.legalName}` : ''}</p>}
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    background: var(--c-ink);
+    color: #cfd4dc;
+    padding-block: clamp(2.5rem, 6vw, 4rem) 2rem;
+    margin-top: auto;
+  }
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  @media (min-width: 640px) {
+    .footer-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (min-width: 960px) {
+    .footer-grid { grid-template-columns: 1.6fr repeat(4, 1fr); }
+  }
+  .footer-brand { max-width: 34ch; }
+  .footer-logo { display: inline-flex; text-decoration: none; }
+  .footer-tagline {
+    margin-top: 0.75rem;
+    color: #9aa2af;
+    font-size: 0.95rem;
+  }
+  .footer-flag { margin-top: 1rem; color: #cfd4dc; }
+
+  .footer-col__title {
+    font-family: var(--font-display);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #fff;
+    margin-bottom: 0.75rem;
+  }
+  .footer-col ul { list-style: none; margin: 0; padding: 0; }
+  .footer-col li + li { margin-top: 0.5rem; }
+  .footer-col a,
+  .footer-contacts a {
+    color: #cfd4dc;
+    text-decoration: none;
+    font-size: 0.95rem;
+  }
+  .footer-col a:hover,
+  .footer-contacts a:hover { color: #fff; text-decoration: underline; }
+
+  .footer-contacts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  .footer-contacts span { color: #6b7280; }
+
+  .footer-legal {
+    margin-top: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.5rem;
+    color: #9aa2af;
+    font-size: 0.85rem;
+  }
+  .footer-legal p { margin: 0; }
+  :global(.site-footer :focus-visible) { outline-color: #fff; }
+</style>

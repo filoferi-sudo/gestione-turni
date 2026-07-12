@@ -1,0 +1,62 @@
+---
+// BOZZA GENERATA — DA FAR REVISIONARE prima della pubblicazione (consulente/legale).
+import Legal from '../layouts/Legal.astro';
+import { site, mailHref } from '../data/site.js';
+---
+<Legal
+  title="Cookie Policy"
+  description="Informativa sull'uso di cookie e strumenti di tracciamento sul sito Planivo, ai sensi delle linee guida del Garante Privacy."
+  updated="TODO_DATA"
+>
+  <p>
+    Questa pagina spiega come <strong>{site.domain}</strong> utilizza cookie e tecnologie simili. È una
+    bozza da sottoporre a revisione prima della pubblicazione.
+  </p>
+
+  <h2>1. Cosa sono i cookie</h2>
+  <p>
+    I cookie sono piccoli file di testo che i siti salvano sul dispositivo dell’utente. Alcuni sono
+    necessari al funzionamento del sito, altri servono a misurare l’utilizzo o a fini di marketing e
+    vengono attivati <strong>solo con il tuo consenso</strong>.
+  </p>
+
+  <h2>2. Categorie di cookie usate</h2>
+  <h3>Cookie necessari</h3>
+  <p>
+    Indispensabili per la navigazione e la sicurezza. Non richiedono consenso. Includono, ad esempio,
+    la memorizzazione delle tue preferenze sul consenso ai cookie.
+  </p>
+  <h3>Cookie analitici</h3>
+  <p>
+    Utilizzati (se acconsenti) per misurare in forma aggregata come viene usato il sito, tramite Google
+    Analytics 4 gestito attraverso Google Tag Manager.
+  </p>
+  <h3>Cookie di marketing</h3>
+  <p>
+    Utilizzati (se acconsenti) per misurare l’efficacia delle campagne pubblicitarie e mostrare annunci
+    pertinenti, tramite Meta Pixel e i tag di Google Ads.
+  </p>
+
+  <h2>3. Gestione del consenso</h2>
+  <p>
+    Al primo accesso puoi accettare, rifiutare o personalizzare le categorie non necessarie. Fino a
+    quando non presti il consenso, gli strumenti di analisi e marketing restano disattivati (Google
+    Consent Mode impostato su “denied” per impostazione predefinita). Puoi modificare la tua scelta in
+    qualsiasi momento riaprendo le preferenze cookie.
+  </p>
+
+  <h2>4. Strumenti di terze parti</h2>
+  <ul>
+    <li><strong>Google Tag Manager / Google Analytics 4</strong> — misurazione statistica del sito.</li>
+    <li><strong>Meta Pixel</strong> — misurazione delle campagne su Facebook/Instagram.</li>
+    <li><strong>Google Ads</strong> — misurazione delle conversioni pubblicitarie.</li>
+    <li><strong>Calendly</strong> — sulla pagina di conferma, per la prenotazione di un appuntamento.</li>
+  </ul>
+  <p>
+    <span class="legal__todo">TODO: confermare gli strumenti effettivamente attivati e inserire le
+    durate dei rispettivi cookie</span>.
+  </p>
+
+  <h2>5. Contatti</h2>
+  <p>Per qualsiasi domanda sui cookie scrivi a <a href={mailHref}>{site.email}</a>. Vedi anche la <a href="/privacy">Privacy Policy</a>.</p>
+</Legal>

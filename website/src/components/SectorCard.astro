@@ -1,0 +1,32 @@
+---
+import Icon from './Icon.astro';
+// Card settore (home "Per chi è" e /settori). Props: title, hook, href, icon.
+const { title, hook, href, icon } = Astro.props;
+---
+<a class="card card--lift sector-card" href={href}>
+  <span class="sector-card__icon" aria-hidden="true"><Icon name={icon} size={24} /></span>
+  <h3>{title}</h3>
+  <p>{hook}</p>
+  <span class="arrow-link sector-card__go">
+    Vedi come funziona
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M8 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </span>
+</a>
+
+<style>
+  .sector-card { display: flex; flex-direction: column; gap: 0.4rem; text-decoration: none; height: 100%; }
+  .sector-card h3 { color: var(--c-ink); }
+  .sector-card p { color: var(--c-body); flex: 1; }
+  .sector-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    background: var(--c-surface);
+    color: var(--c-primary-dark);
+    margin-bottom: 0.4rem;
+  }
+  .sector-card__go { margin-top: 0.75rem; font-size: 0.95rem; }
+</style>
