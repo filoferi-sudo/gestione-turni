@@ -1,0 +1,116 @@
+---
+import { getCollection, render } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import Icon from '../../components/Icon.astro';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('blog', (p) => !p.data.draft);
+  return posts.map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const data = entry.data;
+const { Content, headings } = await render(entry);
+
+const CATEGORY_LABELS = {
+  generale: 'Generale',
+  ristoranti: 'Ristoranti',
+  bar: 'Bar',
+  piscine: 'Piscine',
+  palestre: 'Palestre',
+};
+const toc = headings.filter((h) => h.depth === 2);
+const showToc = toc.length > 4;
+const fmtDate = (d) => d.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
+---
+
+<Base title={`${data.title} | Blog Planivo`} description={data.description} ogType="article">
+  <article class="section article">
+    <div class="container article__head">
+      <p class="article__meta">
+        <a href="/blog" class="article__back">Blog</a>
+        <span aria-hidden="true">·</span>
+        <span class="article__cat">{CATEGORY_LABELS[data.category]}</span>
+        <span aria-hidden="true">·</span>
+        <time datetime={data.pubDate.toISOString()}>{fmtDate(data.pubDate)}</time>
+      </p>
+      <h1>{data.title}</h1>
+      <p class="article__lead">{data.description}</p>
+      <p class="article__author">Il team di Planivo</p>
+    </div>
+
+    <div class="container article__layout">
+      {
+        showToc && (
+          <aside class="article__toc" aria-label="Indice">
+            <p class="article__toc-title">In questa pagina</p>
+            <ul>
+              {toc.map((h) => <li><a href={`#${h.slug}`}>{h.text}</a></li>)}
+            </ul>
+          </aside>
+        )
+      }
+      <div class="article__body">
+        <Content />
+
+        <div class="article__cta">
+          <div>
+            <h2>Vuoi vederlo sui tuoi turni?</h2>
+            <p>15 minuti, nessun impegno: ti mostriamo Planivo con la tua struttura.</p>
+          </div>
+          <a href="/demo" class="btn btn-primary" data-track="cta-demo">Prenota una demo</a>
+        </div>
+
+        <p class="article__more"><a href="/blog" class="arrow-link">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8H4M8 4L4 8l4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Torna al blog
+        </a></p>
+      </div>
+    </div>
+  </article>
+</Base>
+
+<style>
+  .article__head { max-width: 760px; }
+  .article__meta { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; font-size: 0.9rem; color: var(--c-muted); margin-bottom: 1rem; }
+  .article__back { color: var(--c-primary-dark); text-decoration: none; font-weight: 600; }
+  .article__cat { color: var(--c-primary-dark); font-weight: 600; }
+  .article__head h1 { margin-bottom: 0.75rem; }
+  .article__lead { font-size: 1.2rem; color: var(--c-body); }
+  .article__author { margin-top: 1rem; font-size: 0.9rem; color: var(--c-muted); font-weight: 600; }
+
+  .article__layout { display: grid; gap: 2.5rem; margin-top: 2.5rem; }
+  @media (min-width: 1000px) {
+    .article__layout { grid-template-columns: 220px 1fr; align-items: start; }
+    .article__toc { position: sticky; top: 84px; }
+  }
+  .article__toc-title { font-family: var(--font-display); font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--c-muted); margin-bottom: 0.75rem; }
+  .article__toc ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; border-left: 2px solid var(--c-border); }
+  .article__toc a { display: block; padding-left: 1rem; color: var(--c-body); text-decoration: none; font-size: 0.92rem; }
+  .article__toc a:hover { color: var(--c-primary-dark); }
+
+  .article__body { max-width: 720px; }
+  .article__body :global(h2) { font-size: clamp(1.4rem, 3vw, 1.8rem); margin: 2.25rem 0 0.75rem; scroll-margin-top: 84px; }
+  .article__body :global(h3) { font-size: 1.15rem; margin: 1.75rem 0 0.5rem; }
+  .article__body :global(p) { margin-bottom: 1.15rem; color: var(--c-body); }
+  .article__body :global(ul), .article__body :global(ol) { margin: 0 0 1.15rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .article__body :global(li) { color: var(--c-body); }
+  .article__body :global(a) { color: var(--c-primary-dark); text-underline-offset: 2px; }
+  .article__body :global(strong) { color: var(--c-ink); }
+
+  .article__cta {
+    margin-top: 3rem;
+    padding: clamp(1.5rem, 4vw, 2rem);
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .article__cta h2 { font-size: 1.3rem; margin-bottom: 0.25rem; }
+  .article__cta p { color: var(--c-body); }
+  .article__more { margin-top: 2rem; }
+</style>

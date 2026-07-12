@@ -1,0 +1,137 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import CtaSection from '../../components/CtaSection.astro';
+
+const CATEGORY_LABELS = {
+  generale: 'Generale',
+  ristoranti: 'Ristoranti',
+  bar: 'Bar',
+  piscine: 'Piscine',
+  palestre: 'Palestre',
+};
+
+const posts = (await getCollection('blog', (p) => !p.data.draft)).sort(
+  (a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime()
+);
+// Solo le categorie effettivamente presenti (nessun filtro vuoto)
+const usedCategories = [...new Set(posts.map((p) => p.data.category))];
+
+const fmtDate = (d) =>
+  d.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
+---
+
+<Base
+  title="Blog: consigli su turni e organizzazione del personale"
+  description="Idee pratiche su gestione turni, sostituzioni e organizzazione del personale per ristoranti, bar, piscine e palestre. Dal team di Planivo."
+>
+  <section class="section page-hero">
+    <div class="container blog-head">
+      <p class="eyebrow">Blog</p>
+      <h1>Turni, senza mal di testa.</h1>
+      <p class="lead">Consigli concreti su come organizzare il personale e coprire le assenze, scritti per chi i turni li fa davvero.</p>
+    </div>
+  </section>
+
+  <section class="section-top">
+    <div class="container">
+      {
+        usedCategories.length > 1 && (
+          <div class="blog-filter" role="group" aria-label="Filtra per categoria" data-blog-filter>
+            <button type="button" class="blog-chip is-active" data-cat="all">Tutti</button>
+            {usedCategories.map((c) => (
+              <button type="button" class="blog-chip" data-cat={c}>{CATEGORY_LABELS[c]}</button>
+            ))}
+          </div>
+        )
+      }
+
+      <div class="blog-grid">
+        {
+          posts.map((p) => (
+            <article class="card card--lift blog-card" data-category={p.data.category}>
+              <a href={`/blog/${p.id}`} class="blog-card__link">
+                <div class="blog-card__meta">
+                  <span class="blog-card__cat">{CATEGORY_LABELS[p.data.category]}</span>
+                  <time datetime={p.data.pubDate.toISOString()}>{fmtDate(p.data.pubDate)}</time>
+                </div>
+                <h2 class="blog-card__title">{p.data.title}</h2>
+                <p class="blog-card__desc">{p.data.description}</p>
+                <span class="arrow-link blog-card__more">Leggi
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M8 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+              </a>
+            </article>
+          ))
+        }
+      </div>
+      <p class="blog-empty" data-blog-empty hidden>Nessun articolo in questa categoria.</p>
+    </div>
+  </section>
+
+  <CtaSection title="Stai ancora facendo i turni su Excel?" text="Ti mostriamo in 15 minuti come cambierebbe la tua settimana." />
+</Base>
+
+<style>
+  .page-hero h1 { margin: 0.75rem 0 1rem; }
+  .blog-head { max-width: 60ch; }
+  .section-top { padding-bottom: var(--space-section); }
+
+  .blog-filter { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 2rem; }
+  .blog-chip {
+    min-height: 40px;
+    padding: 0.4rem 1rem;
+    border-radius: var(--radius-pill);
+    border: 1.5px solid var(--c-border);
+    background: var(--c-bg);
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--c-body);
+    cursor: pointer;
+    transition: background var(--t), border-color var(--t), color var(--t);
+  }
+  .blog-chip:hover { border-color: var(--c-primary); }
+  .blog-chip.is-active { background: var(--c-primary); border-color: var(--c-primary); color: #fff; }
+
+  .blog-grid { display: grid; gap: clamp(1rem, 2.5vw, 1.5rem); }
+  @media (min-width: 640px) { .blog-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 980px) { .blog-grid { grid-template-columns: repeat(3, 1fr); } }
+  .blog-card { padding: 0; overflow: hidden; }
+  .blog-card__link { display: flex; flex-direction: column; height: 100%; padding: clamp(1.25rem, 3vw, 1.6rem); text-decoration: none; }
+  .blog-card__meta { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; font-size: 0.8rem; }
+  .blog-card__cat {
+    font-weight: 600;
+    color: var(--c-primary-dark);
+    background: var(--c-primary-tint);
+    padding: 0.15rem 0.6rem;
+    border-radius: var(--radius-pill);
+  }
+  .blog-card__meta time { color: var(--c-muted); }
+  .blog-card__title { font-size: 1.2rem; line-height: 1.25; margin-bottom: 0.5rem; color: var(--c-ink); }
+  .blog-card__desc { color: var(--c-body); font-size: 0.95rem; flex: 1; }
+  .blog-card__more { margin-top: 1rem; font-size: 0.92rem; }
+  .blog-empty { color: var(--c-muted); margin-top: 1.5rem; }
+</style>
+
+<script>
+  // Filtro categoria lato client (nessun reload)
+  const wrap = document.querySelector('[data-blog-filter]');
+  if (wrap) {
+    const cards = [...document.querySelectorAll('.blog-card')];
+    const empty = document.querySelector('[data-blog-empty]');
+    wrap.addEventListener('click', (e) => {
+      const btn = e.target.closest('.blog-chip');
+      if (!btn) return;
+      wrap.querySelectorAll('.blog-chip').forEach((b) => b.classList.toggle('is-active', b === btn));
+      const cat = btn.dataset.cat;
+      let visible = 0;
+      cards.forEach((c) => {
+        const show = cat === 'all' || c.dataset.category === cat;
+        c.hidden = !show;
+        if (show) visible++;
+      });
+      if (empty) empty.hidden = visible > 0;
+    });
+  }
+</script>
