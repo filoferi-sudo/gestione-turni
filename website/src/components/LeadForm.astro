@@ -217,3 +217,101 @@ const employeeRanges = ['1-5', '6-15', '16-30', '30+'];
   .lead-form__status.is-ok { background: var(--c-primary-tint); color: var(--c-primary-dark); }
   .lead-form__noscript { font-size: 0.9rem; color: var(--c-muted); }
 </style>
+
+<script>
+  // Wiring del LeadForm: attribuzione UTM (da sessionStorage), validazione inline, submit fetch a
+  // ${PUBLIC_API_URL}/api/public/leads, redirect a /grazie (dove scatta l'evento di conversione).
+  const API = import.meta.env.PUBLIC_API_URL || '';
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  document.querySelectorAll('[data-lead-form]').forEach((form) => {
+    // Popola i campi nascosti da attribuzione (planivo_attribution, scritta da tracking.js) + fallback.
+    try {
+      const attr = JSON.parse(sessionStorage.getItem('planivo_attribution') || '{}');
+      const set = (name, val) => {
+        const el = form.querySelector(`[name="${name}"]`);
+        if (el && val) el.value = val;
+      };
+      ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].forEach((k) => set(k, attr[k]));
+      set('referrer', attr.referrer || document.referrer || '');
+      const lp = form.querySelector('[name="landing_path"]');
+      if (lp) lp.value = attr.landing_path || location.pathname + location.search;
+    } catch (_) {}
+
+    const statusEl = form.querySelector('[data-lead-status]');
+    const btn = form.querySelector('[data-lead-submit]');
+    const labelEl = form.querySelector('[data-submit-label]');
+    const origLabel = labelEl ? labelEl.textContent : '';
+
+    const showError = (name, msg) => {
+      const err = form.querySelector(`[data-error-for="${name}"]`);
+      const field = form.querySelector(`[name="${name}"]`)?.closest('.field');
+      if (err) { err.textContent = msg; err.hidden = false; }
+      if (field) field.classList.add('field--invalid');
+    };
+    const clearErrors = () => {
+      form.querySelectorAll('.field__error').forEach((e) => { e.hidden = true; e.textContent = ''; });
+      form.querySelectorAll('.field--invalid').forEach((f) => f.classList.remove('field--invalid'));
+      if (statusEl) { statusEl.hidden = true; statusEl.className = 'lead-form__status'; }
+    };
+    const get = (n) => (form.querySelector(`[name="${n}"]`)?.value || '').trim();
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearErrors();
+
+      const name = get('name'), email = get('email'), phone = get('phone');
+      const consent = form.querySelector('[name="privacy_consent"]')?.checked;
+
+      let valid = true;
+      if (name.length < 2) { showError('name', 'Inserisci nome e cognome.'); valid = false; }
+      if (!phone) { showError('phone', 'Inserisci un numero di telefono.'); valid = false; }
+      if (!EMAIL_RE.test(email)) { showError('email', 'Inserisci un indirizzo email valido.'); valid = false; }
+      if (!consent) { showError('privacy_consent', 'Devi accettare la privacy policy per continuare.'); valid = false; }
+      if (!valid) {
+        form.querySelector('.field--invalid input, .field--invalid textarea')?.focus();
+        return;
+      }
+
+      const payload = {
+        name, email, phone,
+        business_type: form.querySelector('[name="business_type"]:checked')?.value,
+        employees_range: form.querySelector('[name="employees_range"]:checked')?.value || null,
+        message: get('message') || undefined,
+        privacy_consent: true,
+        website: form.querySelector('[name="website"]')?.value || '', // honeypot
+        form_source: get('form_source'),
+        landing_path: get('landing_path'),
+        referrer: get('referrer') || undefined,
+        utm_source: get('utm_source') || undefined,
+        utm_medium: get('utm_medium') || undefined,
+        utm_campaign: get('utm_campaign') || undefined,
+        utm_content: get('utm_content') || undefined,
+        utm_term: get('utm_term') || undefined,
+      };
+
+      if (btn) btn.disabled = true;
+      if (labelEl) labelEl.textContent = 'Invio…';
+
+      try {
+        const res = await fetch(`${API}/api/public/leads`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Invio non riuscito. Riprova.');
+        window.location.assign('/grazie'); // successo → pagina di ringraziamento
+      } catch (err) {
+        if (statusEl) {
+          statusEl.textContent =
+            (err && err.message) || 'Qualcosa è andato storto. Riprova o scrivici direttamente.';
+          statusEl.classList.add('is-error');
+          statusEl.hidden = false;
+        }
+        if (btn) btn.disabled = false;
+        if (labelEl) labelEl.textContent = origLabel;
+      }
+    });
+  });
+</script>
