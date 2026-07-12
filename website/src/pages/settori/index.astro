@@ -1,0 +1,70 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import SectorCard from '../../components/SectorCard.astro';
+import CtaSection from '../../components/CtaSection.astro';
+import Icon from '../../components/Icon.astro';
+
+const sectors = (await getCollection('settori')).sort((a, b) => a.data.order - b.data.order);
+---
+
+<Base
+  title="Settori: turni su misura per la tua attività"
+  description="Planivo si adatta a ristoranti, bar, piscine e palestre — e a qualunque attività che lavora su turni. Scegli il tuo settore e scopri come."
+>
+  <section class="section page-hero">
+    <div class="container settori-head">
+      <p class="eyebrow">Settori</p>
+      <h1>Pensato per come lavori tu.</h1>
+      <p class="lead">
+        Gli stessi turni, problemi diversi. Scegli il tuo settore e scopri come Planivo copre le
+        assenze e tiene tutto sotto controllo, adattandosi al tuo modo di lavorare.
+      </p>
+    </div>
+  </section>
+
+  <section class="section-top">
+    <div class="container">
+      <div class="grid grid--4">
+        {
+          sectors.map((s) => (
+            <SectorCard title={s.data.title} hook={s.data.hook} href={`/settori/${s.id}`} icon={s.data.icon} />
+          ))
+        }
+      </div>
+
+      <div class="settori-more card">
+        <span class="settori-more__icon" aria-hidden="true"><Icon name="layers" size={24} /></span>
+        <div>
+          <h2>Il tuo settore non c’è?</h2>
+          <p>Planivo si adatta a qualunque attività che lavora su turni. Raccontaci la tua e ti mostriamo come.</p>
+        </div>
+        <a href="/demo" class="btn btn-primary" data-track="cta-demo">Prenota una demo</a>
+      </div>
+    </div>
+  </section>
+
+  <CtaSection />
+</Base>
+
+<style>
+  .page-hero h1 { margin: 0.75rem 0 1rem; }
+  .settori-head { max-width: 60ch; }
+  .section-top { padding-bottom: var(--space-section); }
+  .settori-more {
+    margin-top: 2.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+  }
+  .settori-more__icon {
+    flex: none;
+    width: 52px; height: 52px; border-radius: 14px;
+    background: var(--c-surface); color: var(--c-primary-dark);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .settori-more div { flex: 1; min-width: 260px; }
+  .settori-more h2 { font-size: 1.35rem; margin-bottom: 0.25rem; }
+  .settori-more p { color: var(--c-body); }
+</style>
