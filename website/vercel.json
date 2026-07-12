@@ -1,8 +1,8 @@
 {
-  "$comment": "Proxy verso il gestionale sotto /app + redirect legacy dei vecchi path. Sostituire TODO_HOST_GESTIONALE con l'alias di produzione STABILE del progetto frontend Vercel (es. nome-progetto.vercel.app). vercel.json NON interpola le env: il valore va scritto qui a mano. I redirect preservano la query string (necessario per i link email verifica-email/azione-email).",
+  "$comment": "Proxy verso il gestionale sotto /app (host di produzione del progetto frontend) + redirect legacy dei vecchi path. I redirect preservano la query string (necessario per i link email verifica-email/azione-email).",
   "rewrites": [
-    { "source": "/app", "destination": "https://TODO_HOST_GESTIONALE/app" },
-    { "source": "/app/:path*", "destination": "https://TODO_HOST_GESTIONALE/app/:path*" }
+    { "source": "/app", "destination": "https://gestione-turni-syra.vercel.app/app" },
+    { "source": "/app/:path*", "destination": "https://gestione-turni-syra.vercel.app/app/:path*" }
   ],
   "redirects": [
     { "source": "/login", "destination": "/app/login", "permanent": false },
