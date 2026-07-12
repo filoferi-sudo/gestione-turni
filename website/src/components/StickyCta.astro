@@ -1,0 +1,65 @@
+---
+// Barra CTA sticky su mobile (thumb-zone) — pattern che alza di più i lead da smartphone (§3.4).
+// Compare dopo che l'utente ha scrollato oltre l'hero. Azione primaria: prenota demo (verde).
+// Azione secondaria: telefonata diretta. Nascosta su desktop.
+import { telHref } from '../data/site.js';
+---
+<div class="sticky-cta" data-sticky-cta hidden>
+  <a href="/demo" class="btn btn-primary sticky-cta__main" data-track="cta-demo">Prenota demo gratuita</a>
+  <a href={telHref} class="sticky-cta__tel" aria-label="Chiamaci ora" data-track="click-tel">
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6.6 10.8a15.5 15.5 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.6c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1z" fill="currentColor"/>
+    </svg>
+  </a>
+</div>
+
+<style>
+  .sticky-cta {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 90;
+    display: none;
+    gap: 0.6rem;
+    padding: 0.6rem var(--gutter) calc(0.6rem + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--c-bg) 92%, transparent);
+    backdrop-filter: blur(8px);
+    border-top: 1px solid var(--c-border);
+    transform: translateY(110%);
+    transition: transform 200ms ease;
+  }
+  .sticky-cta.is-visible { transform: translateY(0); }
+  .sticky-cta__main { flex: 1; }
+  .sticky-cta__tel {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius);
+    border: 1.5px solid var(--c-primary);
+    color: var(--c-primary-dark);
+    text-decoration: none;
+  }
+  .sticky-cta__tel:hover { background: var(--c-primary-tint); }
+
+  @media (max-width: 900px) {
+    .sticky-cta { display: flex; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sticky-cta { transition: none; }
+  }
+</style>
+
+<script>
+  // Rivela la barra dopo lo scroll iniziale (l'hero ha già la sua CTA sopra la piega).
+  const bar = document.querySelector('[data-sticky-cta]');
+  if (bar) {
+    bar.hidden = false;
+    const onScroll = () => bar.classList.toggle('is-visible', window.scrollY > 520);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  }
+</script>

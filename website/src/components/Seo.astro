@@ -1,0 +1,58 @@
+---
+// Componente SEO centralizzato: title, description, canonical assoluto, Open Graph, Twitter card,
+// robots. Usato da Base.astro. I dati strutturati JSON-LD si passano via prop `jsonLd` (oggetto o
+// array di oggetti) e vengono arricchiti in Fase 5.
+import { site } from '../data/site.js';
+
+const {
+  title,
+  description = 'Planivo organizza turni e sostituzioni del personale per ristoranti, bar, piscine e palestre. Si impara in 5 minuti.',
+  // path canonico relativo (es. "/prezzi"); default = pagina corrente
+  canonicalPath,
+  ogImage = '/og-default.png',
+  ogType = 'website',
+  noindex = false,
+  jsonLd,
+} = Astro.props;
+
+// Pattern title: "{pageTitle} | Planivo" — la home passa un title completo senza suffisso.
+const fullTitle = title
+  ? title.includes('Planivo')
+    ? title
+    : `${title} | Planivo`
+  : `${site.name} — ${site.tagline}`;
+
+// URL assoluti costruiti su `site` (astro.config.mjs → https://planivo.it)
+const canonicalURL = new URL(canonicalPath ?? Astro.url.pathname, Astro.site);
+const ogImageURL = new URL(ogImage, Astro.site);
+
+const jsonLdBlocks = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
+---
+
+<title>{fullTitle}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonicalURL} />
+
+{noindex && <meta name="robots" content="noindex, nofollow" />}
+
+{/* Open Graph */}
+<meta property="og:type" content={ogType} />
+<meta property="og:site_name" content={site.name} />
+<meta property="og:locale" content="it_IT" />
+<meta property="og:title" content={fullTitle} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonicalURL} />
+<meta property="og:image" content={ogImageURL} />
+
+{/* Twitter */}
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={fullTitle} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={ogImageURL} />
+
+{/* Dati strutturati JSON-LD (uno <script> per blocco) */}
+{
+  jsonLdBlocks.map((block) => (
+    <script type="application/ld+json" set:html={JSON.stringify(block)} />
+  ))
+}

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Planivo">
+  <!-- Concept: una cella della griglia-turno che diventa verde "coperto". -->
+  <rect width="32" height="32" rx="8" fill="#2f6f4f"/>
+  <!-- accenni di griglia settimanale (linee tenui) -->
+  <g stroke="#ffffff" stroke-opacity="0.28" stroke-width="1.4">
+    <line x1="12.5" y1="6" x2="12.5" y2="26"/>
+    <line x1="19.5" y1="6" x2="19.5" y2="26"/>
+  </g>
+  <!-- la cella "coperta": check bianco -->
+  <path d="M9 16.6l4.6 4.6L23 11.4" fill="none" stroke="#ffffff" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

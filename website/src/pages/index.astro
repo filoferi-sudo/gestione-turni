@@ -1,0 +1,35 @@
+---
+// Home — versione minima di Fase 1 (scaffold): hero + CTA per verificare header/footer/layout.
+// Le sezioni complete (problema, come funziona, funzionalità, settori, prezzi, FAQ, CTA) arrivano
+// in Fase 2 con la signature ShiftGrid animata.
+import Base from '../layouts/Base.astro';
+import { site } from '../data/site.js';
+---
+
+<Base title={`${site.name} — ${site.tagline}`}>
+  <section class="section hero-min">
+    <div class="container">
+      <p class="eyebrow">Per ristoranti, bar, piscine, palestre</p>
+      <h1>Basta Excel e WhatsApp per i turni.</h1>
+      <p class="lead">
+        Planivo organizza turni e sostituzioni del tuo personale. Si impara in 5 minuti, si vede il
+        risultato dalla prima settimana.
+      </p>
+      <div class="cluster hero-min__cta">
+        <a href="/demo" class="btn btn-primary btn--lg" data-track="cta-demo">Prenota una demo gratuita</a>
+        <a href="/funzionalita" class="arrow-link">
+          Guarda come funziona
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M8 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+      </div>
+      <p class="trust-flag hero-min__trust">✓ Sviluppato insieme a strutture reali in {site.region}</p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .hero-min { padding-block: clamp(3rem, 8vw, 6rem); }
+  .hero-min h1 { margin: 0.75rem 0 1rem; max-width: 16ch; }
+  .hero-min__cta { margin-top: 2rem; }
+  .hero-min__trust { margin-top: 1.75rem; }
+</style>
