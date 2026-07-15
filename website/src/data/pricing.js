@@ -1,11 +1,8 @@
-// Modello prezzo: PER SEDE / mese, non per utente (leva anti-suite HR §1.3/§4.4).
-// La cifra è in validazione: `priceFrom` è un SEGNAPOSTO ben marcato (TODO_PREZZO). Non stampare
-// una cifra definitiva finché non confermata; niente prezzo nello schema JSON-LD finché è TODO.
+// Modello prezzo: nessuna cifra pubblica. Ogni struttura è diversa (numero di sedi, esigenze),
+// quindi il prezzo si dà a PREVENTIVO gratuito su misura. Resta il principio-valore: per sede,
+// non per dipendente (prevedibile anche con gli stagionali). Niente prezzo nei dati strutturati.
 export const pricing = {
-  priceFrom: 'XX', // TODO_PREZZO: cifra da validare col committente
-  unit: '€ / sede al mese',
-  note: 'TODO_PREZZO_DA_VALIDARE',
-  isPlaceholder: true, // se true, la UI mostra la cifra come segnaposto e nasconde il prezzo dai dati strutturati
+  model: 'Un prezzo per sede, non per dipendente',
 
   included: [
     'Utenti illimitati (anche stagionali)',
@@ -21,11 +18,15 @@ export const pricing = {
     text: 'Parti con un mese di pilota gratuito: configuriamo insieme la tua struttura, tu decidi solo alla fine.',
   },
 
-  // FAQ specifiche del prezzo (accordion su /prezzi)
+  // FAQ del prezzo (accordion su /prezzi)
   faq: [
     {
+      q: 'Quanto costa?',
+      a: 'Il prezzo è su misura sulla tua struttura (quante sedi, come lavori): per questo facciamo un preventivo gratuito e senza impegno. Il modello è per sede, non per dipendente.',
+    },
+    {
       q: 'Il prezzo cresce se assumo personale stagionale?',
-      a: 'No. Il canone è per sede, non per dipendente: puoi avere tutti gli account che ti servono, anche stagionali che ruotano, senza sorprese in bolletta.',
+      a: 'No. Il canone è per sede, non per dipendente: puoi avere tutti gli account che ti servono, anche stagionali che ruotano, senza sorprese.',
     },
     {
       q: 'Serve una carta di credito per iniziare?',
@@ -33,11 +34,7 @@ export const pricing = {
     },
     {
       q: 'Posso disdire quando voglio?',
-      a: 'Sì, nessun vincolo annuale.', // TODO: confermare i termini esatti col committente
-    },
-    {
-      q: 'Come funziona la fatturazione?',
-      a: 'Ti seguiamo direttamente per l’attivazione e la fatturazione. I dettagli operativi li vediamo insieme durante il pilota.', // TODO: dettagli fatturazione/pagamento
+      a: 'Sì, nessun vincolo annuale.',
     },
   ],
 };

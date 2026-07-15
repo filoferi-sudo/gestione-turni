@@ -6,35 +6,42 @@ import { site } from '../data/site.js';
 
 const values = [
   { icon: 'spark', title: 'Semplicità prima di tutto', text: 'Se serve un corso per usarlo, abbiamo sbagliato noi. Planivo si impara in cinque minuti.' },
-  { icon: 'users', title: 'A contatto con chi lo usa', text: 'Sviluppiamo dentro le strutture reali, ascoltando i responsabili e chi i turni li fa ogni giorno.' },
+  { icon: 'users', title: 'Nato sul campo', text: 'Non a tavolino: Planivo nasce dall’esperienza diretta dei turni, dove i problemi si vedono davvero.' },
   { icon: 'check-shield', title: 'Sviluppato in Italia', text: 'Software italiano, supporto in italiano, dati su server europei. Ci trovi quando ti servono risposte.' },
 ];
 ---
 
 <Base
   title="Chi siamo"
-  description="Planivo nasce dal problema visto da dentro le strutture: turni gestiti con Excel e WhatsApp. La nostra storia e i nostri valori."
+  description="Planivo nasce dall’esperienza diretta dei turni — a bordo vasca — dove i buchi di copertura sono un problema vero. La storia dietro Planivo."
 >
   <section class="section page-hero">
-    <div class="container chisiamo__hero">
-      <div>
-        <p class="eyebrow">Chi siamo</p>
-        <h1>Nato dal problema, non da una slide.</h1>
+    <div class="container chisiamo">
+      <p class="eyebrow">Chi siamo</p>
+      <h1>Nato a bordo vasca, non in un ufficio.</h1>
+
+      <div class="chisiamo__story">
         <p class="lead">
-          Planivo non è l’ennesimo gestionale pensato a tavolino. È nato osservando da vicino come si
-          gestiscono davvero i turni in ristoranti, bar, piscine e palestre: fogli Excel che nessuno
-          aggiorna, chat che si perdono, e responsabili che ci passano le serate.
+          Planivo non nasce in un ufficio, ma in piscina. Ho 18 anni, ho studiato all’istituto tecnico
+          economico e da qualche anno lavoro come <strong>nuotatore e bagnino</strong>.
         </p>
-        {/* TODO: storia del founder — perché nasce Planivo, il problema visto da dentro. */}
         <p>
-          Abbiamo pensato che ci volesse qualcosa di più semplice e più onesto: uno strumento che
-          fa una cosa e la fa bene — coprire i turni scoperti con le persone giuste, senza far
-          impazzire nessuno.
+          A bordo vasca ho visto con i miei occhi come funziona — male — la gestione dei turni: fogli
+          Excel che nessuno aggiorna, cambi decisi al volo su WhatsApp, e la sera in cui manca un
+          bagnino che diventa un problema serio, perché senza non si può nemmeno aprire. Mi sono
+          chiesto perché una cosa così importante venisse gestita in modo così fragile.
         </p>
-      </div>
-      <div class="chisiamo__photo" aria-hidden="true">
-        {/* TODO_FOTO_FOUNDER: sostituire con la foto reale del founder. */}
-        <div class="chisiamo__photo-ph"><Icon name="users" size={40} /><span>Foto del team</span></div>
+        <p>
+          Così, unendo quello che studiavo di economia e organizzazione all’esperienza diretta dei
+          turni, ho iniziato a costruire <strong>Planivo</strong>: uno strumento semplice che fa una
+          cosa e la fa bene — coprire i turni scoperti con le persone giuste, senza far impazzire
+          nessuno.
+        </p>
+        <p>
+          Oggi Planivo non serve solo le piscine: ristoranti, bar e palestre hanno lo stesso identico
+          problema. Ma l’idea di fondo è sempre quella di quel bordo vasca: i turni sono una cosa
+          seria e meritano uno strumento serio, alla portata di tutti.
+        </p>
       </div>
     </div>
   </section>
@@ -64,18 +71,11 @@ const values = [
 </Base>
 
 <style>
-  .chisiamo__hero { display: grid; gap: clamp(1.75rem, 4vw, 3rem); align-items: center; }
-  @media (min-width: 880px) { .chisiamo__hero { grid-template-columns: 1.3fr 0.7fr; } }
-  .chisiamo__hero h1 { margin: 0.75rem 0 1rem; }
-  .chisiamo__hero p + p { margin-top: 1rem; }
-  .chisiamo__photo-ph {
-    aspect-ratio: 4 / 5;
-    border-radius: var(--radius-lg);
-    background: var(--c-surface);
-    border: 1px dashed var(--c-border);
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;
-    color: var(--c-muted);
-  }
+  .chisiamo { max-width: 68ch; }
+  .chisiamo h1 { margin: 0.75rem 0 1.5rem; max-width: 20ch; }
+  .chisiamo__story { max-width: 64ch; }
+  .chisiamo__story p + p { margin-top: 1rem; }
+  .chisiamo__story .lead { margin-bottom: 1rem; }
   .chisiamo__vic {
     display: inline-flex; align-items: center; justify-content: center;
     width: 44px; height: 44px; border-radius: 12px;
