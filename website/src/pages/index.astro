@@ -155,18 +155,17 @@ const problems = [
       <div class="price-teaser__copy">
         <p class="eyebrow">Prezzi</p>
         <h2>Un prezzo per sede, non per dipendente.</h2>
-        <p class="lead">Con lo staff stagionale non hai sorprese: gli account sono illimitati e il canone resta lo stesso.</p>
-        <a href="/prezzi" class="btn btn-outline">Vedi i prezzi</a>
+        <p class="lead">Con lo staff stagionale non hai sorprese: gli account sono illimitati e il canone resta lo stesso. Ogni struttura è diversa, quindi il prezzo è su misura.</p>
+        <a href="/prezzi" class="btn btn-outline">Richiedi un preventivo</a>
       </div>
       <div class="price-teaser__card card">
-        <p class="price-teaser__from">da <span class="num price-teaser__amount">{pricing.priceFrom}</span></p>
-        <p class="price-teaser__unit">{pricing.unit}</p>
+        <p class="price-teaser__badge">Preventivo gratuito, su misura</p>
         <ul class="price-teaser__list">
           {pricing.included.slice(0, 4).map((i) => (
             <li><Icon name="check" size={17} /> {i}</li>
           ))}
         </ul>
-        <a href="/demo" class="btn btn-primary btn--block" data-track="cta-demo">Inizia il pilota gratuito</a>
+        <a href="/prezzi" class="btn btn-primary btn--block" data-track="cta-demo">Richiedi il preventivo gratuito</a>
       </div>
     </div>
   </section>
@@ -263,9 +262,16 @@ const problems = [
     align-items: center;
   }
   @media (min-width: 860px) { .price-teaser { grid-template-columns: 1fr 0.8fr; } }
-  .price-teaser__from { font-size: 1rem; color: var(--c-muted); }
-  .price-teaser__amount { font-size: 2.6rem; font-weight: 700; color: var(--c-ink); font-family: var(--font-display); }
-  .price-teaser__unit { color: var(--c-muted); margin-bottom: 1.25rem; }
+  .price-teaser__badge {
+    display: inline-block;
+    font-family: var(--font-display);
+    font-weight: 700;
+    color: var(--c-primary-dark);
+    background: var(--c-primary-tint);
+    padding: 0.35rem 0.8rem;
+    border-radius: var(--radius-pill);
+    margin-bottom: 1.25rem;
+  }
   .price-teaser__list { list-style: none; margin: 0 0 1.5rem; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
   .price-teaser__list li { display: flex; align-items: center; gap: 0.5rem; color: var(--c-body); }
   .price-teaser__list svg { color: var(--c-primary); flex: none; }

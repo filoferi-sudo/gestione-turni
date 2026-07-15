@@ -1,55 +1,56 @@
 ---
 import Base from '../layouts/Base.astro';
+import LeadForm from '../components/LeadForm.astro';
 import FaqList from '../components/FaqList.astro';
 import CtaSection from '../components/CtaSection.astro';
 import Icon from '../components/Icon.astro';
 import { pricing } from '../data/pricing.js';
 
-// Nota di prodotto: oggi esiste UN SOLO modello di prezzo (per sede). Piani multipli sono previsti
-// dalla roadmap abbonamenti — quando arriveranno, questa pagina diventerà un comparatore.
+// Nessuna cifra pubblica: prezzo a preventivo su misura. Il modello (per sede, non per dipendente)
+// resta la leva di valore. Un solo modello oggi; piani multipli sono nella roadmap abbonamenti.
 ---
 
 <Base
-  title="Prezzi di Planivo: un canone per sede, non per dipendente"
-  description="Planivo ha un prezzo per sede al mese, con utenti illimitati anche stagionali. Nessun costo a dipendente. Parti da un pilota gratuito di un mese."
+  title="Prezzi di Planivo: un preventivo su misura, gratuito"
+  description="Ogni struttura è diversa: Planivo ti fa un preventivo gratuito su misura. Un prezzo per sede, non per dipendente — prevedibile anche con lo staff stagionale."
 >
   <section class="section page-hero text-center">
     <div class="container price-head">
       <p class="eyebrow">Prezzi</p>
-      <h1>Un prezzo per sede, non per dipendente.</h1>
-      <p class="lead">Prevedibile anche quando lo staff stagionale entra ed esce: gli account sono illimitati, il canone resta lo stesso.</p>
+      <h1>Un preventivo su misura, gratuito.</h1>
+      <p class="lead">
+        Ogni struttura è diversa: numero di sedi, aree, modo di lavorare. Per questo non trovi un
+        listino rigido — ti facciamo un <strong>preventivo gratuito e senza impegno</strong>, sulla
+        tua situazione reale. Il principio resta uno: <strong>si paga per sede, non per dipendente</strong>,
+        così è prevedibile anche con gli stagionali.
+      </p>
     </div>
   </section>
 
   <section class="section-top">
     <div class="container price-layout">
-      <!-- Card piano unica -->
-      <div class="card price-card">
-        <p class="price-card__label">Piano Planivo</p>
-        <p class="price-card__amount">
-          da <span class="num">{pricing.priceFrom}</span> <span class="price-card__unit">{pricing.unit}</span>
-        </p>
-        {pricing.isPlaceholder && <p class="price-card__todo">Prezzo in validazione — cifra indicativa. <!-- TODO_PREZZO --></p>}
-        <p class="price-card__inc-title">Tutto incluso:</p>
-        <ul class="price-card__list">
-          {pricing.included.map((i) => (
-            <li><Icon name="check" size={18} /> <span>{i}</span></li>
-          ))}
-        </ul>
-        <a href="/demo" class="btn btn-primary btn--lg btn--block" data-track="cta-demo">Inizia il pilota gratuito</a>
-        <p class="price-card__note">Nessuna carta di credito · nessun vincolo annuale</p>
+      <!-- Cosa è incluso + pilota -->
+      <div class="price-side">
+        <div class="card price-inc">
+          <p class="price-inc__title">Tutto incluso, senza costi nascosti:</p>
+          <ul class="price-inc__list">
+            {pricing.included.map((i) => (
+              <li><Icon name="check" size={18} /> <span>{i}</span></li>
+            ))}
+          </ul>
+        </div>
+        <aside class="price-pilot">
+          <span class="price-pilot__badge"><Icon name="spark" size={18} /> {pricing.pilot.title}</span>
+          <p>{pricing.pilot.text}</p>
+        </aside>
       </div>
 
-      <!-- Pilota gratuito -->
-      <aside class="price-pilot">
-        <span class="price-pilot__badge"><Icon name="spark" size={18} /> {pricing.pilot.title}</span>
-        <p>{pricing.pilot.text}</p>
-        <ul class="price-pilot__steps">
-          <li><Icon name="check-circle" size={18} /> Configuriamo insieme sedi, aree e staff</li>
-          <li><Icon name="check-circle" size={18} /> Provi Planivo sui tuoi turni reali per un mese</li>
-          <li><Icon name="check-circle" size={18} /> Decidi solo alla fine, senza impegno</li>
-        </ul>
-      </aside>
+      <!-- Form preventivo -->
+      <div class="card price-form">
+        <h2>Richiedi il tuo preventivo</h2>
+        <p class="price-form__sub">Raccontaci la tua struttura in 30 secondi: ti ricontattiamo con una proposta su misura, entro 24 ore.</p>
+        <LeadForm source="preventivo" submitLabel="Richiedi il preventivo gratuito" />
+      </div>
     </div>
   </section>
 
@@ -64,15 +65,15 @@ import { pricing } from '../data/pricing.js';
   </section>
 
   <CtaSection
-    title="Parti dal pilota gratuito."
-    text="Un mese per capire se Planivo fa per te. Configurazione inclusa."
-    cta="Inizia il pilota gratuito"
+    title="Non sei sicuro? Parti dal pilota gratuito."
+    text="Un mese per capire se Planivo fa per te, configurazione inclusa. Poi decidi."
+    cta="Prenota una demo"
   />
 </Base>
 
 <style>
   .page-hero h1 { margin: 0.75rem 0 1rem; }
-  .price-head { max-width: 60ch; margin-inline: auto; }
+  .price-head { max-width: 64ch; margin-inline: auto; }
 
   .section-top { padding-bottom: var(--space-section); }
   .price-layout {
@@ -80,39 +81,30 @@ import { pricing } from '../data/pricing.js';
     gap: clamp(1.5rem, 4vw, 2.5rem);
     align-items: start;
   }
-  @media (min-width: 860px) { .price-layout { grid-template-columns: 1.1fr 0.9fr; } }
+  @media (min-width: 880px) { .price-layout { grid-template-columns: 0.9fr 1.1fr; } }
 
-  .price-card { border: 2px solid var(--c-primary); }
-  .price-card__label { font-family: var(--font-display); font-weight: 600; color: var(--c-primary-dark); }
-  .price-card__amount { font-size: 1.1rem; color: var(--c-muted); margin: 0.5rem 0 0.25rem; }
-  .price-card__amount .num { font-size: 3rem; font-weight: 700; color: var(--c-ink); font-family: var(--font-display); }
-  .price-card__unit { font-size: 1rem; }
-  .price-card__todo { font-size: 0.82rem; color: var(--c-gap-ink); background: var(--c-gap-tint); display: inline-block; padding: 0.15rem 0.5rem; border-radius: 6px; margin-bottom: 1rem; }
-  .price-card__inc-title { font-weight: 600; color: var(--c-ink); margin: 1rem 0 0.75rem; }
-  .price-card__list { list-style: none; margin: 0 0 1.5rem; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
-  .price-card__list li { display: flex; align-items: flex-start; gap: 0.6rem; color: var(--c-body); }
-  .price-card__list svg { color: var(--c-primary); flex: none; margin-top: 3px; }
-  .price-card__note { text-align: center; font-size: 0.88rem; color: var(--c-muted); margin-top: 0.75rem; }
+  .price-side { display: flex; flex-direction: column; gap: 1.25rem; }
+  .price-inc__title { font-weight: 600; color: var(--c-ink); margin-bottom: 0.75rem; }
+  .price-inc__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+  .price-inc__list li { display: flex; align-items: flex-start; gap: 0.6rem; color: var(--c-body); }
+  .price-inc__list svg { color: var(--c-primary); flex: none; margin-top: 3px; }
 
   .price-pilot {
     background: var(--c-surface);
     border: 1px solid var(--c-border);
     border-radius: var(--radius-lg);
-    padding: clamp(1.5rem, 4vw, 2rem);
+    padding: clamp(1.25rem, 3vw, 1.5rem);
   }
   .price-pilot__badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-family: var(--font-display);
-    font-weight: 700;
-    color: var(--c-primary-dark);
-    margin-bottom: 0.75rem;
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    font-family: var(--font-display); font-weight: 700; color: var(--c-primary-dark);
+    margin-bottom: 0.5rem;
   }
   .price-pilot > p { color: var(--c-body); }
-  .price-pilot__steps { list-style: none; margin: 1.25rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
-  .price-pilot__steps li { display: flex; align-items: flex-start; gap: 0.6rem; color: var(--c-body); }
-  .price-pilot__steps svg { color: var(--c-primary); flex: none; margin-top: 3px; }
+
+  .price-form { border: 2px solid var(--c-primary); }
+  .price-form h2 { font-size: 1.4rem; }
+  .price-form__sub { color: var(--c-muted); margin-bottom: 1.25rem; }
 
   .price-faq { max-width: 800px; }
 </style>
