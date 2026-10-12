@@ -1113,6 +1113,8 @@ interne alle società).
 ## Funzionalità già completate
 
 - Autenticazione JWT con primo accesso via codice iniziale + impostazione password personale.
+  Onboarding del primo dirigente dal pannello Super Admin con riepilogo credenziali e recupero
+  ("Dirigenti → Gestisci → Nuovo codice", `GET/POST /api/companies/:id/dirigenti...`).
 - Gestione utenti gerarchica con permessi differenziati per ruolo (`canManageTargetRole`).
 - **Aggiornamenti quasi in tempo reale** su calendario turni/corsi, Sostituzioni/Corsi disponibili,
   Fabbisogno e richieste di cancellazione: polling leggero (`hooks/usePolling.js`) con pausa su tab
@@ -1653,6 +1655,38 @@ nessuna decisione HR (disclaimer esplicito in UI: "la valutazione finale spetta 
 ## Changelog / aggiornamenti
 
 Ogni voce: data, cosa è cambiato, file principali toccati, nuove decisioni, cosa ricordare.
+
+- **2026-10-12** — **Fix onboarding del primo dirigente (credenziali iniziali perse/irrecuperabili)**.
+  - **Causa reale**: il backend generava già correttamente account + codice iniziale (`POST
+    /api/companies/:id/dirigente`, verificato end-to-end), ma il frontend Super Admin mostrava il codice
+    **solo in una riga di notifica** in cima alla pagina, facile da non vedere, che spariva alla prima
+    azione/navigazione; e **non esisteva alcun modo** per il Super Admin di rivederlo o rigenerarlo
+    (`/api/users/:id/regenerate-code` è scoped alla società del manager). Codice perso ⇒ dirigente
+    bloccato per sempre, e ricrearlo dava 409. Inoltre username/email non venivano trimmati: uno
+    spazio finale creava un account con cui il login (match esatto) non riusciva mai.
+  - **Backend** (`companyController.js`, `routes/companies.js`): trim di username/email/telefono;
+    23505 in corsa (doppio invio) ⇒ 409 invece di 500; risposta con `user.status`
+    (`pending_first_access`|`active`) e `company {id,name,isActive}`. **Nuovi endpoint Super Admin**:
+    `GET /api/companies/:id/dirigenti` (stato attivazione + `locked`, mai codici/hash) e
+    `POST /api/companies/:id/dirigenti/:userId/regenerate-code` (stessa semantica di
+    `users/:id/regenerate-code` + **sblocco lockout**; 404 se l'utente non è un dirigente di quella
+    società). Trim anche in `userController.createUser` (stesso difetto per il responsabile).
+  - **Frontend** (`SocietaPage.jsx`, `api/client.js`, `Login.jsx`): dopo "Nuova società" si apre subito
+    il form "Primo dirigente" ("Più tardi" lascia la società intatta, si riprende da "+ Dirigente");
+    dopo la creazione si apre un **riepilogo credenziali** (società, username, email, stato, URL di
+    login, codice, istruzioni, "Copia istruzioni") che **non si chiude con ESC/clic fuori**, solo col
+    pulsante esplicito; dichiara che **nessuna email è stata inviata**. Colonna Dirigenti →
+    "N · Gestisci": elenco con stato e "Nuovo codice". Guardia `useRef` anti doppio invio.
+  - **Decisioni**: si mantiene il meccanismo esistente (codice iniziale monouso + password personale
+    obbligatoria), **nessun secondo sistema di auth, nessuna modifica schema**. Niente invio email delle
+    credenziali: non esiste un template invito e il codice in chiaro via email è stato evitato
+    (possibile evoluzione: link di attivazione con token, riusando `authTokenService`).
+  - **Test**: nuovo `npm run test:onboarding` (`scripts/testDirigenteOnboarding.js`, 35 asserzioni:
+    flusso completo fino al responsabile, duplicati, doppio invio concorrente, lockout+rigenerazione,
+    isolamento cross-società). `test:isolation`/`test:saas`/`test:billing` invariati e verdi.
+  - **Da ricordare**: `initial_code` resta in chiaro a DB come prima (preesistente, già esposto da
+    `listUsers` ai manager): eventuale hashing è un lavoro a parte. Le società create dal Super Admin
+    non ricevono un piano (colonna Piano "—"): entitlements permissivi ⇒ nessun blocco, ma va valutato.
 
 - **2026-07-12** — **Sito marketing pubblico Planivo (`website/`, planivo.it) + endpoint lead —
   additivo, gestionale servito sotto `/app`**. Nuovo **terzo progetto** del monorepo: sito

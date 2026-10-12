@@ -70,7 +70,11 @@ function sameCompany(req, target) {
 // Solo il dirigente può creare account con ruolo 'admin' (responsabile); il ruolo 'dirigente'
 // non è creabile da API (esiste un solo account dirigente, creato via seed).
 async function createUser(req, res) {
-  const { username, email, phone, role, areaIds } = req.body;
+  const { role, areaIds } = req.body;
+  // Trim: con uno spazio finale nell'username l'account non sarebbe mai accessibile (login esatto).
+  const username = typeof req.body.username === 'string' ? req.body.username.trim() : '';
+  const email = typeof req.body.email === 'string' ? req.body.email.trim() : '';
+  const phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : '';
   const targetRole = role || 'user';
 
   if (!username || !email || !phone) {

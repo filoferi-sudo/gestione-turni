@@ -119,11 +119,32 @@ async function updateCompany(req, res) {
   return res.json({ company: toSafeCompany(rows[0]) });
 }
 
+// Vista "sicura" di un dirigente per il Super Admin: mai hash né codice iniziale (il codice viene
+// restituito una sola volta, nella risposta di creazione/rigenerazione). `status` dice se l'account
+// è già stato attivato con una password personale o è ancora in attesa del primo accesso.
+function toSafeDirigente(row) {
+  return {
+    id: row.id,
+    username: row.username,
+    email: row.email,
+    phone: row.phone,
+    role: row.role,
+    companyId: row.company_id,
+    status: row.must_change_password ? 'pending_first_access' : 'active',
+    locked: !!row.locked_until && new Date(row.locked_until).getTime() > Date.now(),
+    createdAt: row.created_at,
+  };
+}
+
 // POST /api/companies/:id/dirigente (super admin) - crea il primo dirigente di una società
 // (o un dirigente aggiuntivo/sostitutivo in seguito: l'endpoint resta utilizzabile più volte).
 async function createCompanyDirigente(req, res) {
   const { id } = req.params;
-  const { username, email, phone } = req.body;
+  // Trim: uno spazio finale nell'username (copia-incolla, autocompletamento) creerebbe un account
+  // con cui il dirigente non riesce mai ad accedere, perché il login confronta l'username esatto.
+  const username = typeof req.body.username === 'string' ? req.body.username.trim() : '';
+  const email = typeof req.body.email === 'string' ? req.body.email.trim() : '';
+  const phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : '';
 
   if (!username || !email || !phone) {
     return res.status(400).json({ error: 'Username, email e telefono sono obbligatori' });
@@ -142,24 +163,79 @@ async function createCompanyDirigente(req, res) {
 
   const initialCode = generateInitialCode();
 
-  const { rows } = await pool.query(
-    `INSERT INTO users (username, email, phone, initial_code, role, company_id, must_change_password)
-     VALUES ($1, $2, $3, $4, 'dirigente', $5, TRUE)
-     RETURNING *`,
-    [username, email, phone, initialCode, id]
-  );
+  let rows;
+  try {
+    ({ rows } = await pool.query(
+      `INSERT INTO users (username, email, phone, initial_code, role, company_id, must_change_password)
+       VALUES ($1, $2, $3, $4, 'dirigente', $5, TRUE)
+       RETURNING *`,
+      [username, email, phone, initialCode, id]
+    ));
+  } catch (err) {
+    // Doppio invio concorrente: il secondo INSERT viola il vincolo UNIQUE (username/email). Il primo
+    // account è già stato creato una sola volta; qui si risponde con lo stesso 409 del controllo sopra.
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Username o email già in uso' });
+    }
+    throw err;
+  }
 
   await audit.logAction({ companyId: Number(id), actorUserId: req.user.id, action: 'company.dirigente_create', entityType: 'user', entityId: rows[0].id, metadata: { username }, ip: audit.ipFromReq(req) });
 
   return res.status(201).json({
-    user: {
-      id: rows[0].id,
-      username: rows[0].username,
-      email: rows[0].email,
-      phone: rows[0].phone,
-      role: rows[0].role,
-      companyId: rows[0].company_id,
-    },
+    user: toSafeDirigente(rows[0]),
+    company: { id: company.id, name: company.name, isActive: company.is_active },
+    initialCode,
+  });
+}
+
+// GET /api/companies/:id/dirigenti (super admin) - elenco dei dirigenti di una società con lo stato
+// di attivazione. Serve a recuperare l'onboarding: se il codice iniziale è andato perso, il Super
+// Admin vede chi è ancora "in attesa del primo accesso" e può generarne uno nuovo (sotto).
+async function listCompanyDirigenti(req, res) {
+  const { id } = req.params;
+  const { rows: companyRows } = await pool.query('SELECT id FROM companies WHERE id = $1', [id]);
+  if (!companyRows[0]) {
+    return res.status(404).json({ error: 'Società non trovata' });
+  }
+  const { rows } = await pool.query(
+    `SELECT * FROM users WHERE company_id = $1 AND role = 'dirigente' ORDER BY created_at, id`,
+    [id]
+  );
+  return res.json({ dirigenti: rows.map(toSafeDirigente) });
+}
+
+// POST /api/companies/:id/dirigenti/:userId/regenerate-code (super admin) - nuovo codice di primo
+// accesso per un dirigente della società. Stessa semantica di POST /api/users/:id/regenerate-code
+// (invalida l'eventuale password e obbliga un nuovo primo accesso), più lo sblocco dell'account:
+// un dirigente che ha esaurito i tentativi provando un codice errato deve poter usare subito il nuovo.
+// Scoped: l'utente deve essere un dirigente DI QUELLA società, altrimenti 404.
+async function regenerateDirigenteCode(req, res) {
+  const { id, userId } = req.params;
+  const { rows: targetRows } = await pool.query(
+    `SELECT * FROM users WHERE id = $1 AND company_id = $2 AND role = 'dirigente'`,
+    [userId, id]
+  );
+  if (!targetRows[0]) {
+    return res.status(404).json({ error: 'Dirigente non trovato' });
+  }
+
+  const initialCode = generateInitialCode();
+  const { rows } = await pool.query(
+    `UPDATE users
+        SET initial_code = $1, password_hash = NULL, must_change_password = TRUE,
+            failed_login_attempts = 0, locked_until = NULL
+      WHERE id = $2
+      RETURNING *`,
+    [initialCode, userId]
+  );
+  const { rows: companyRows } = await pool.query('SELECT id, name, is_active FROM companies WHERE id = $1', [id]);
+
+  await audit.logAction({ companyId: Number(id), actorUserId: req.user.id, action: 'user.regenerate_code', entityType: 'user', entityId: Number(userId), metadata: { by: 'superadmin' }, ip: audit.ipFromReq(req) });
+
+  return res.json({
+    user: toSafeDirigente(rows[0]),
+    company: { id: companyRows[0].id, name: companyRows[0].name, isActive: companyRows[0].is_active },
     initialCode,
   });
 }
@@ -195,4 +271,12 @@ async function getPlatformStats(req, res) {
   });
 }
 
-module.exports = { listCompanies, createCompany, updateCompany, createCompanyDirigente, getPlatformStats };
+module.exports = {
+  listCompanies,
+  createCompany,
+  updateCompany,
+  createCompanyDirigente,
+  listCompanyDirigenti,
+  regenerateDirigenteCode,
+  getPlatformStats,
+};
