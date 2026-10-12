@@ -2239,3 +2239,24 @@ console.
 `CORS_ORIGIN=https://planivo.it` sul backend (**bloccante al go-live**, stringa singola, solo host);
 `TODO_HOST_GESTIONALE`; env Vercel website; **migrazione `leads` in produzione su conferma esplicita**;
 `TODO_PREZZO`, P.IVA/ragione sociale, font woff2, video/foto founder, testimonianze, revisione legale.
+
+---
+
+# Fix: onboarding del primo dirigente ✅ (2026-10-12)
+
+> Bug critico: dopo aver creato società + primo dirigente, il dirigente non riusciva a fare il primo
+> accesso. Dettaglio completo nel changelog di `PROJECT_CONTEXT.md` (voce 2026-10-12).
+
+- **Causa**: codice iniziale generato correttamente ma mostrato solo in una notifica effimera e **non
+  recuperabile** dal Super Admin; username con spazi finali non trimmati ⇒ login impossibile.
+- **Fatto**: riepilogo credenziali esplicito (non chiudibile per sbaglio), flusso società → primo
+  dirigente concatenato, elenco dirigenti con stato + "Nuovo codice" (sblocca anche il lockout), trim
+  input, 409 sui doppi invii concorrenti.
+- **Verifica (locale)**: `npm run test:onboarding` 35/35; `test:isolation` 25/25, `test:saas` 28/28,
+  `test:billing` 15/15; percorso UI completo nel browser (nuova società → primo dirigente → riepilogo →
+  rigenerazione codice → login col vecchio codice rifiutato → primo accesso col nuovo → password →
+  dashboard dirigente → creazione responsabile), build frontend pulita.
+- **In sospeso**: verifica di Filippo in locale, poi commit/deploy. Opzionale: invito via email con link
+  di attivazione (oggi nessun template invito); hashing di `initial_code`; piano di default alle nuove
+  società.
+

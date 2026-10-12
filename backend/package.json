@@ -21,6 +21,7 @@
     "test:isolation": "node scripts/testTenantIsolation.js",
     "test:saas": "node scripts/testSaasLayer.js",
     "test:billing": "node scripts/testBilling.js",
+    "test:onboarding": "node scripts/testDirigenteOnboarding.js",
     "setup": "npm run migrate && npm run db:reset && npm run seed:dirigente && npm run seed:superadmin"
   },
   "dependencies": {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import Modal from '../../components/common/Modal';
@@ -15,6 +15,9 @@ export default function SocietaPage() {
   const [companyModal, setCompanyModal] = useState(null); // { company } | null
   const [dirigenteModal, setDirigenteModal] = useState(null); // { company } | null
   const [subscriptionModal, setSubscriptionModal] = useState(null); // { company } | null
+  const [dirigentiModal, setDirigentiModal] = useState(null); // { company } | null
+  // Esito di creazione dirigente / rigenerazione codice: { user, company, initialCode, regenerated }
+  const [credentials, setCredentials] = useState(null);
 
   function load() {
     api.listCompanies(token).then(({ companies }) => setCompanies(companies)).catch((err) => setError(err.message));
@@ -25,10 +28,15 @@ export default function SocietaPage() {
   async function handleSaveCompany(payload) {
     if (companyModal.company) {
       await api.updateCompany(companyModal.company.id, payload, token);
+      setCompanyModal(null);
     } else {
-      await api.createCompany(payload, token);
+      // Società nuova: si prosegue subito con il primo dirigente, così l'onboarding non resta a metà.
+      // Se lo si rimanda (o fallisce), la società resta creata una sola volta e si riprende da
+      // "+ Dirigente" sulla sua riga, senza ricrearla.
+      const { company } = await api.createCompany(payload, token);
+      setCompanyModal(null);
+      setDirigenteModal({ company, afterCompanyCreate: true });
     }
-    setCompanyModal(null);
     load();
   }
 
@@ -44,13 +52,19 @@ export default function SocietaPage() {
     }
   }
 
+  // Prima il codice iniziale finiva in una riga di notifica in cima alla pagina, facile da perdere
+  // e non più recuperabile: ora apre un riepilogo dedicato che va chiuso esplicitamente.
   async function handleCreateDirigente(payload) {
     const result = await api.createCompanyDirigente(dirigenteModal.company.id, payload, token);
     setDirigenteModal(null);
-    setNotice(
-      `Dirigente "${result.user.username}" creato per "${dirigenteModal.company.name}". ` +
-        `Codice iniziale: ${result.initialCode}`
-    );
+    setNotice('');
+    setCredentials({ ...result, regenerated: false });
+    load();
+  }
+
+  function handleRegenerated(result) {
+    setDirigentiModal(null);
+    setCredentials({ ...result, regenerated: true });
     load();
   }
 
@@ -99,7 +113,19 @@ export default function SocietaPage() {
                   </span>
                 </td>
                 <td>{c.planName || <span className="hint">—</span>}</td>
-                <td>{c.dirigentiCount}</td>
+                <td>
+                  {c.dirigentiCount > 0 ? (
+                    <button
+                      className="table-action"
+                      title="Stato di accesso dei dirigenti e nuovo codice di primo accesso"
+                      onClick={() => setDirigentiModal({ company: c })}
+                    >
+                      {c.dirigentiCount} · Gestisci
+                    </button>
+                  ) : (
+                    <span className="hint">Nessuno</span>
+                  )}
+                </td>
                 <td>{c.usersCount}</td>
                 <td className="actions-cell">
                   <button className="table-action" onClick={() => setCompanyModal({ company: c })}>
@@ -142,10 +168,22 @@ export default function SocietaPage() {
       {dirigenteModal && (
         <DirigenteFormModal
           company={dirigenteModal.company}
+          afterCompanyCreate={dirigenteModal.afterCompanyCreate}
           onSave={handleCreateDirigente}
           onClose={() => setDirigenteModal(null)}
         />
       )}
+
+      {dirigentiModal && (
+        <DirigentiModal
+          company={dirigentiModal.company}
+          token={token}
+          onRegenerated={handleRegenerated}
+          onClose={() => setDirigentiModal(null)}
+        />
+      )}
+
+      {credentials && <CredentialsModal result={credentials} onClose={() => setCredentials(null)} />}
 
       {subscriptionModal && (
         <SubscriptionModal
@@ -375,10 +413,12 @@ function CompanyFormModal({ company, onSave, onClose }) {
   );
 }
 
-function DirigenteFormModal({ company, onSave, onClose }) {
+function DirigenteFormModal({ company, afterCompanyCreate, onSave, onClose }) {
   const [form, setForm] = useState({ username: '', email: '', phone: '' });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Guardia sincrona contro il doppio invio (doppio clic/Invio prima che `submitting` sia renderizzato).
+  const inFlight = useRef(false);
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -386,13 +426,16 @@ function DirigenteFormModal({ company, onSave, onClose }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true;
     setError('');
     setSubmitting(true);
     try {
-      await onSave(form);
+      await onSave({ username: form.username.trim(), email: form.email.trim(), phone: form.phone.trim() });
     } catch (err) {
       setError(err.message);
     } finally {
+      inFlight.current = false;
       setSubmitting(false);
     }
   }
@@ -400,7 +443,12 @@ function DirigenteFormModal({ company, onSave, onClose }) {
   return (
     <Modal onClose={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
-        <h2>Nuovo dirigente per "{company.name}"</h2>
+        <h2>{afterCompanyCreate ? 'Primo dirigente' : 'Nuovo dirigente'} per "{company.name}"</h2>
+        {afterCompanyCreate && (
+          <p className="notice">
+            Società creata. Ora crea il suo primo dirigente: riceverai il codice di primo accesso da consegnargli.
+          </p>
+        )}
 
         <label htmlFor="dirigente-username">Username</label>
         <input
@@ -424,9 +472,13 @@ function DirigenteFormModal({ company, onSave, onClose }) {
 
         {error && <div className="error">{error}</div>}
 
+        {afterCompanyCreate && (
+          <p className="hint">Puoi farlo anche più tardi con "+ Dirigente" sulla riga della società.</p>
+        )}
+
         <div className="modal-actions">
           <button type="button" className="button-secondary" onClick={onClose}>
-            Annulla
+            {afterCompanyCreate ? 'Più tardi' : 'Annulla'}
           </button>
           <button type="submit" disabled={submitting}>
             {submitting ? 'Creazione...' : 'Crea dirigente'}
@@ -436,3 +488,185 @@ function DirigenteFormModal({ company, onSave, onClose }) {
     </Modal>
   );
 }
+
+const DIRIGENTE_STATUS = {
+  pending_first_access: { label: 'In attesa del primo accesso', className: 'request-status-pending' },
+  active: { label: 'Attivo', className: 'request-status-approved' },
+};
+
+// Elenco dei dirigenti di una società con lo stato di attivazione. È il punto di recupero
+// dell'onboarding: se il codice iniziale è andato perso (o il dirigente ha bloccato l'account con
+// troppi tentativi) il Super Admin genera un nuovo codice, senza creare un secondo account.
+function DirigentiModal({ company, token, onRegenerated, onClose }) {
+  const [dirigenti, setDirigenti] = useState(null);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState(null);
+
+  useEffect(() => {
+    api
+      .listCompanyDirigenti(company.id, token)
+      .then(({ dirigenti }) => setDirigenti(dirigenti))
+      .catch((err) => setError(err.message));
+  }, [company.id, token]);
+
+  async function handleRegenerate(d) {
+    const message =
+      d.status === 'active'
+        ? `"${d.username}" ha già una password personale. Generando un nuovo codice la password attuale ` +
+          'verrà invalidata e dovrà rifare il primo accesso. Continuare?'
+        : `Generare un nuovo codice di primo accesso per "${d.username}"? Il codice precedente non sarà più valido.`;
+    if (!window.confirm(message)) return;
+    setError('');
+    setBusyId(d.id);
+    try {
+      const result = await api.regenerateDirigenteCode(company.id, d.id, token);
+      onRegenerated(result);
+    } catch (err) {
+      setError(err.message);
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="modal-card modal-card-wide" onClick={(e) => e.stopPropagation()}>
+        <h2>Dirigenti di "{company.name}"</h2>
+
+        {error && <div className="error">{error}</div>}
+        {!dirigenti && !error && <p className="hint">Caricamento…</p>}
+
+        {dirigenti && (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Stato</th>
+                <th>Azioni</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dirigenti.map((d) => {
+                const status = DIRIGENTE_STATUS[d.status];
+                return (
+                  <tr key={d.id}>
+                    <td>{d.username}</td>
+                    <td>{d.email}</td>
+                    <td>
+                      <span className={`request-status ${status.className}`}>{status.label}</span>
+                      {d.locked && (
+                        <span className="request-status request-status-rejected" title="Troppi tentativi falliti">
+                          Bloccato
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <button className="table-action" disabled={busyId !== null} onClick={() => handleRegenerate(d)}>
+                        {busyId === d.id ? 'Generazione...' : 'Nuovo codice'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+
+        <div className="modal-actions">
+          <button type="button" className="button-secondary" onClick={onClose}>
+            Chiudi
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function loginUrl() {
+  return `${window.location.origin}${import.meta.env.BASE_URL}login`;
+}
+
+// Riepilogo delle credenziali di primo accesso del dirigente. Il codice è mostrato solo qui, una
+// volta: il modale non si chiude con un clic fuori o con ESC (perderlo per sbaglio era proprio il
+// problema), ma solo con il pulsante esplicito. Nessuna email viene inviata: lo si dice chiaramente.
+function CredentialsModal({ result, onClose }) {
+  const { user, company, initialCode, regenerated } = result;
+  const [copied, setCopied] = useState(false);
+
+  const instructions =
+    `Accesso a Planivo per ${company.name}\n` +
+    `Indirizzo: ${loginUrl()}\n` +
+    `Username: ${user.username}\n` +
+    `Codice di primo accesso: ${initialCode}\n\n` +
+    'Al primo accesso inserisci lo username e, nel campo password, il codice qui sopra: ' +
+    'ti verrà chiesto di scegliere la tua password personale. Il codice vale una sola volta.';
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(instructions);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <Modal onClose={KEEP_OPEN}>
+      <div className="modal-card modal-card-wide" onClick={(e) => e.stopPropagation()}>
+        <h2>{regenerated ? 'Nuovo codice generato' : 'Dirigente creato'}</h2>
+        <p>
+          Consegna queste credenziali a <strong>{user.username}</strong> per il primo accesso a{' '}
+          <strong>{company.name}</strong>.
+        </p>
+
+        <table className="table">
+          <tbody>
+            <tr><th>Società</th><td>{company.name}</td></tr>
+            <tr><th>Username di accesso</th><td>{user.username}</td></tr>
+            <tr><th>Email</th><td>{user.email}</td></tr>
+            <tr>
+              <th>Stato account</th>
+              <td>
+                <span className="request-status request-status-pending">In attesa del primo accesso</span>
+              </td>
+            </tr>
+            <tr><th>Indirizzo di accesso</th><td>{loginUrl()}</td></tr>
+          </tbody>
+        </table>
+
+        <label>Codice di primo accesso</label>
+        <p className="code" data-testid="initial-code">{initialCode}</p>
+
+        <ol className="hint">
+          <li>Il dirigente apre l'indirizzo di accesso.</li>
+          <li>Inserisce lo username e, nel campo password, il codice qui sopra.</li>
+          <li>Sceglie la propria password personale: da quel momento il codice non vale più.</li>
+        </ol>
+
+        {company.isActive === false && (
+          <div className="error">
+            La società è disattivata: il dirigente non potrà accedere finché non la riattivi.
+          </div>
+        )}
+
+        <p className="hint">
+          Nessuna email è stata inviata: consegna tu queste credenziali tramite un canale sicuro. Il codice non
+          sarà più mostrato dopo la chiusura di questa finestra; se va perso, generane uno nuovo da
+          "Dirigenti → Gestisci".
+        </p>
+
+        <div className="modal-actions">
+          <button type="button" className="button-secondary" onClick={handleCopy}>
+            {copied ? 'Copiato!' : 'Copia istruzioni'}
+          </button>
+          <button type="button" onClick={onClose}>
+            Fatto, credenziali consegnate
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// Callback stabile (il Modal ri-esegue il proprio effetto se onClose cambia identità).
+function KEEP_OPEN() {}

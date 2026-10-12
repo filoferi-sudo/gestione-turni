@@ -171,6 +171,9 @@ export const api = {
   updateCompany: (id, payload, token) => request(`/companies/${id}`, { method: 'PUT', body: payload, token }),
   createCompanyDirigente: (companyId, payload, token) =>
     request(`/companies/${companyId}/dirigente`, { method: 'POST', body: payload, token }),
+  listCompanyDirigenti: (companyId, token) => request(`/companies/${companyId}/dirigenti`, { token }),
+  regenerateDirigenteCode: (companyId, userId, token) =>
+    request(`/companies/${companyId}/dirigenti/${userId}/regenerate-code`, { method: 'POST', token }),
   getPlatformStats: (token) => request('/companies/stats', { token }),
 
   // Layer SaaS — piani (Super Admin). Il catalogo espone le chiavi limite/feature configurabili.

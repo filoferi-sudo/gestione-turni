@@ -76,7 +76,7 @@ export default function Login() {
         </button>
 
         <p className="hint">
-          Al primo accesso usa il codice iniziale ricevuto dal responsabile al posto della password.
+          Al primo accesso usa il codice iniziale che ti è stato consegnato al posto della password.
         </p>
 
         {demo && demo.enabled && demo.scenarios.length > 0 && (
